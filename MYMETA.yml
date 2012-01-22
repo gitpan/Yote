@@ -1,0 +1,66 @@
+---
+abstract: 'a placeholder class for the packages below Yote.'
+author:
+  - 'Eric Wolf (coyocanid@gmail.com)'
+build_requires:
+  Test::More: 0
+dynamic_config: 0
+generated_by: 'Module::Build version 0.3613'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: Yote
+provides:
+  Yote::AppRoot:
+    file: lib/Yote/AppRoot.pm
+    version: 0.01
+  Yote::Array:
+    file: lib/Yote/Array.pm
+    version: 0.01
+  Yote::ClientObj:
+    file: lib/Yote/ClientObj.pm
+    version: 0.01
+  Yote::Hash:
+    file: lib/Yote/Hash.pm
+    version: 0.01
+  Yote::MysqlIO:
+    file: lib/Yote/MysqlIO.pm
+    version: 0.01
+  Yote::Obj:
+    file: lib/Yote/Obj.pm
+    version: 0.01
+  Yote::ObjProvider:
+    file: lib/Yote/ObjProvider.pm
+    version: 0.01
+  Yote::SQLiteIO:
+    file: lib/Yote/SQLiteIO.pm
+    version: 0.01
+  Yote::Test::Hello:
+    file: lib/Yote/Test/Hello.pm
+    version: 0.01
+  Yote::Test::TestAppNeedsLogin:
+    file: lib/Yote/Test/TestAppNeedsLogin.pm
+    version: 0.01
+  Yote::Test::TestAppNoLogin:
+    file: lib/Yote/Test/TestAppNoLogin.pm
+    version: 0.01
+  Yote::WebAppServer:
+    file: lib/Yote/WebAppServer.pm
+    version: 0.01
+requires:
+  App::Options: 1.12
+  Config::Simple: 4.58
+  DBD::SQLite: 1.35
+  DBD::mysql: 4.014
+  HTTP::Request::Params: 1.01
+  IO::Socket: 1.31
+  JSON: 2.22
+  MIME::Base64: 3.08
+  Net::Server::Fork: 0.99
+  Test::Simple: 0.44
+  WeakRef: 0.01
+  forks: 0
+resources:
+  license: http://dev.perl.org/licenses/
+version: 0.02
