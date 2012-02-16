@@ -29,11 +29,37 @@ sub new {
     return $obj;
 } #new
 
+#
+# Takes the entire key/value pairs of data as field/value pairs attached to this.
+#
+sub absorb {
+    my $self = shift;
+    my $data = ref( $_[0] ) ? $_[0] : { @_ };
+    for my $fld (%$data) {
+        my $inval = Yote::ObjProvider::xform_in( $data->{$fld} );
+        Yote::ObjProvider::dirty( $self, $self->{ID} ) if $self->{DATA}{$fld} ne $inval;
+        $self->{DATA}{$fld} = $inval;
+    } #each field
+    print STDERR Data::Dumper->Dump( [$data,$self] );
+    return undef;
+} #absorb
+
+
 # returns true if the object passsed in is the same as this one.
 sub is {
     my( $self, $obj ) = @_;
     return ref( $obj ) && $obj->isa( 'Yote::Obj' ) && $obj->{ID} == $self->{ID};
 }
+
+# shallow clones this object
+sub clone {
+    my $self = shift;
+    my $class = ref( $self );
+    my $clone = $class->new;
+    for my $field (keys %{$self->{DATA}}) {
+	
+    }
+} #clone
 
 sub init {}
 

@@ -21,8 +21,8 @@ sub init {
     $self->get_yote_obj()->set_name( "INITY" );
 }
 
-sub allows {
-    my( $self, $data, $acct ) = @_;
+sub _allows {
+    my( $self, $command, $data, $acct ) = @_;
     return defined($acct);
 }
 
@@ -52,7 +52,6 @@ sub obj_text {
 
 sub give_obj {
     my( $self, $data, $acct_root, $acct ) = @_;
-    print STDERR Data::Dumper->Dump( ["Give OBJ",$data] );
     $self->set_obj( $data );
     return '';
 }

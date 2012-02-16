@@ -18,7 +18,7 @@
 $.yote = {
     token:null,
     err:null,
-    url:'/CGIPATH/yote.cgi',
+    url:'/cgi-bin/yote/yote.cgi',
     objs:{},
 
     init:function(url) {
@@ -39,6 +39,7 @@ $.yote = {
 		        _app:an,
 		        _d:{},
 		        id:x.id,
+                _stage:{},
 		        reload:function(){},
 		        length:function() {
 		            var cnt = 0;
@@ -58,6 +59,7 @@ $.yote = {
 			            return function( params, passhandler, failhandler ) {
 				            var ret = root.message( {
 				                app:o._app,
+                                id:o.id,
 				                cmd:key,
 				                data:params,
 				                wait:true,
@@ -65,6 +67,18 @@ $.yote = {
 				                failhandler:failhandler,
 				                passhandler:passhandler
 				            } ); //sending message
+
+                            //dirty objects that may need a refresh
+                            if( typeof ret.d === 'object' ) {
+                                for( var i=0; i<ret.d.length; ++i ) {
+                                    var oid = ret.d[i];
+                                    if( root.objs[oid] != null
+                                        && typeof root.objs[oid] !== 'undefined' ) {
+                                        root.objs[oid].reload();
+                                    }
+                                }
+                            }
+
 				            if( typeof ret.r === 'object' ) {
 				                return root.create_obj( ret.r, o._app );
 				            } else {
@@ -105,23 +119,75 @@ $.yote = {
 		        return val.substring(1);
 	        }
 
+            // stages functions for updates
+            o.stage = (function(ob)  {
+                return function( key, val ) {
+                    ob._stage[key] = root.translate_data( val );
+                } 
+            })(o);
+
+            // sends data structure as an update, or uses staged values if no data
+            o.send_update = (function(ob) {
+                return function(data,failhandler,passhandler) {
+                    if( typeof data === 'undefined' ) {
+                        var to_send = ob._stage;
+                    } else {
+                        var to_send = {};
+                        for( var key in data ) {
+                            to_send[key] = root.translate_data( data[key] );
+                        }
+                    }
+                    var needs = 0;
+                    for( var key in to_send ) { 
+                        needs = 1;
+                    }
+                    if( needs == 0 ) { return; }
+
+                    root.message( {
+                        app:ob._app,
+                        cmd:'update',
+                        data:{ id:ob.id, 
+                               d:to_send },
+                        wait:true,
+                        async:false,
+                        failhandler:function() {
+                            if( typeof failhandler === 'function' ) {
+                                failhandler();
+                            }
+                        },
+                        passhandler:(function(td) {
+                            return function() {
+                                for( var key in td ) {
+                                    ob._d[key] = td[key];
+                                }
+                                ob._stage = {};
+                                if( typeof passhandler === 'function' ) {
+                                    passhandler();
+                                }
+                            }
+                        } )(to_send)
+                    } );
+                }
+            })(o);
+
 	        if( (0 + x.id ) > 0 ) {
 		        root.objs[x.id] = o;
-		        o.reload = (function(thid,tapp) {
+		        o.reload = (function(thid,tapp,ob) {
 		            return function() {
-			            root.objs[thid] = null;
+                        root.objs[thid] = null;
 			            var replace = root.fetch_obj( thid, tapp );
-			            this._d = replace._d;
-			            return this;
+			            ob._d = replace._d;
+			            root.objs[thid] = ob;
+			            return ob;
 		            }
-		        } )(x.id,an);
+		        } )(x.id,an,o);
 	        }
 	        return o;
         })(data,appname);
     }, //create_obj
 
     fetch_obj:function(id,app) {
-	    if( typeof this.objs[id] === 'object' ) {
+	    if( typeof this.objs[id] === 'object' && this.objs[id] != null ) {
 	        return this.objs[id];
 	    }
 	    return this.create_obj( this.message( {
@@ -328,7 +394,7 @@ $.yote = {
 		                    t:root.token,
 		                    w:wait
 		                }) );
-                    } //error case. no handler defined alert ("Dunno : " + typeof params.failhandler ) }
+                    } //error case. no handler defined 
                 } else {
                     console.dir( "Success reported but no response data received" );
                 }
