@@ -102,6 +102,9 @@ sub _process_command {
         elsif( $command eq 'fetch' ) {
             return _fetch( $app, { id => $data->{id} }, $acct );
         }
+        elsif( $command eq 'multi_fetch' ) {
+            return _multi_fetch( $app, { ids => $data->{ids} }, $acct );
+        }
         elsif( $command eq 'update' ) {
             my $obj = Yote::ObjProvider::fetch( $data->{id} );
             if( $obj && $app->_stow_permitted( $data->{d} ) ) {
@@ -123,6 +126,12 @@ sub _process_command {
         return { err => "'$cmd->{c}' not found for app '$appstr'" };
     }
 } #_process_command
+
+# this makes the account root visible to javascript, which will have easier access to its methods.
+sub fetch_account_root {
+    my( $self, $data, $acct_root, $acct ) = @_;
+    return  { r => $acct_root };
+}
 
 sub _translate_data {
     my $val = shift;
@@ -353,8 +362,32 @@ sub _fetch {
             return { r => $app->_obj_to_response( $obj ) };
         }
     }
-    return { err => "Unable to fetch $data->{ID}" };
+    return { err => "Unable to fetch $data->{id}" };
 } #_fetch
+
+
+#
+# Returns a list of data structure with the following fields :
+#   m - names of methods
+#   d - key value data, where value can be a referece (is a number) or a scalar (is prepended with 'v' )
+#
+sub _multi_fetch {
+    my( $app, $data, $acct ) = @_;
+    if( $data->{ids} ) {
+        my %ret;
+        for my $id (values %{$data->{ids}}) {
+            my $obj = Yote::ObjProvider::fetch( $id );
+            if( $obj &&
+                Yote::ObjProvider::a_child_of_b( $obj, $app ) &&
+                $app->_fetch_permitted( $obj, $data ) )
+            {
+                $ret{$id} = $app->_obj_to_response( $obj );
+            }
+        }
+        return { r => \%ret };
+    } #if ids given
+    return { err => "Unable to fetch $data->{ids}" };
+} #_multi_fetch
 
 #
 # Transforms data structure but does not assign ids to non tied references.
@@ -417,7 +450,7 @@ sub _obj_to_response {
             return $use_id if $xform_out;
             $d = $to_convert->{DATA};
             no strict 'refs';
-            $m = [ grep { $_ !~ /^(_.*|[A-Z].*|set_.*|get_.*|clone|can|fetch_root|import|init|isa|new|save|absorb)$/ } keys %{"${ref}\::"} ];
+            $m = [ grep { $_ !~ /^(_.*|[A-Z].*|set_.*|is|clone|can|fetch_root|import|init|isa|new|save|absorb)$/ } keys %{"${ref}\::"} ];
             use strict 'refs';
         }
         return { a => ref( $self ), c => $ref, id => $use_id, d => $d, 'm' => $m };

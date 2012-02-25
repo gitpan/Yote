@@ -1,7 +1,9 @@
 package Yote::Obj;
 
 #
-# A Yote object, mostly just syntactic sugar
+# A Yote object, mostly just syntactic sugar.
+# method names are capitolized to indicate that they are not meant
+# as target methods for yote javascript objects.
 #
 
 use strict;
@@ -29,18 +31,21 @@ sub new {
     return $obj;
 } #new
 
+sub size {
+    return scalar keys %{shift->{DATA}};
+} #size
+
 #
 # Takes the entire key/value pairs of data as field/value pairs attached to this.
 #
 sub absorb {
     my $self = shift;
     my $data = ref( $_[0] ) ? $_[0] : { @_ };
-    for my $fld (%$data) {
+    for my $fld (keys %$data) {
         my $inval = Yote::ObjProvider::xform_in( $data->{$fld} );
         Yote::ObjProvider::dirty( $self, $self->{ID} ) if $self->{DATA}{$fld} ne $inval;
         $self->{DATA}{$fld} = $inval;
     } #each field
-    print STDERR Data::Dumper->Dump( [$data,$self] );
     return undef;
 } #absorb
 
@@ -57,8 +62,9 @@ sub clone {
     my $class = ref( $self );
     my $clone = $class->new;
     for my $field (keys %{$self->{DATA}}) {
-	
+        $clone->{DATA}{$field} = $self->{DATA}{$field};
     }
+    return $clone;
 } #clone
 
 sub init {}
@@ -122,7 +128,7 @@ sub AUTOLOAD {
             my( $self, $val ) = @_;
             my $inval = Yote::ObjProvider::xform_in( $val );
             Yote::ObjProvider::dirty( $self, $self->{ID} ) if $self->{DATA}{$fld} ne $inval;
-            $self->{DATA}{$fld} = $inval
+            $self->{DATA}{$fld} = $inval;
         };
         goto &$AUTOLOAD;
     }
