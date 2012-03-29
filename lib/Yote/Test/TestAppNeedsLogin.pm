@@ -21,10 +21,19 @@ sub init {
     $self->get_yote_obj()->set_name( "INITY" );
 }
 
+sub _allows {
+    my( $app, $command, $data, $acct, $obj ) = @_;
+    return defined( $acct );
+}
+
+sub _stow_permitted {
+    return 1;
+}
+
 #
 # need subs to return : scalars, lists, hashes, g-objects
 #
-sub get_scalar {
+sub scalar {
     my( $self, $data, $acct_root, $acct ) = @_;
     return "ZEEP";
 }
@@ -51,12 +60,12 @@ sub give_obj {
     return '';
 }
 
-sub get_nologin_obj {
+sub nologin_obj {
     my( $self, $data, $acct_root, $acct ) = @_;
     return $self->get_yote_obj();
 }
 
-sub get_array {
+sub array {
     my( $self, $data, $acct_root, $acct ) = @_;
     return [ 'A', { inner => [ 'Juan', { peanut => 'Butter', ego => $self->get_yote_obj() }] }, $self->get_yote_obj()  ];
 }
@@ -64,6 +73,12 @@ sub get_array {
 sub get_hash {
     my( $self, $data, $acct_root, $acct ) = @_;
     return { hash => "is something like", wid => $self->get_yote_obj() };
+}
+
+sub reset {
+    my $self = shift;
+    $self->set_obj( undef );
+    $self->set_made([]);
 }
 
 1;

@@ -8,25 +8,27 @@ use strict;
 use forks;
 use forks::shared;
 
-use HTTP::Request::Params;
-use Net::Server::Fork;
+use CGI;
+use Net::Server::HTTP;
 use MIME::Base64;
 use JSON;
 use CGI;
 use Data::Dumper;
 
 use Yote::AppRoot;
+use Yote::ObjProvider;
 
-use base qw(Net::Server::Fork);
+use base qw(Net::Server::HTTP);
 use vars qw($VERSION);
 
 $VERSION = '0.081';
 
 
-my( @commands, %prid2wait, %prid2result, $singleton );
+my( @commands, %prid2wait, %prid2result, $singleton, $cron_id );
 share( @commands );
 share( %prid2wait );
 share( %prid2result );
+share( $cron_id );
 
 sub new {
     my $pkg = shift;
@@ -38,17 +40,25 @@ sub new {
 sub start_server {
     my( $self, @args ) = @_;
     my $args = scalar(@args) == 1 ? $args[0] : { @args };
+    $self->{args} = $args;
+    $self->{args}{webroot} ||= '/usr/local/yote/html';
 
     Yote::ObjProvider::init( %$args );
 
-    # fork out for two starting threads
-    #   - one a multi forking server and the other an event loop.
-    my $thread = threads->new( sub { $self->run( %$args ); } );
-    $self->{thread} = $thread;
+    # fork out for three starting threads
+    #   - one a multi forking server (parent class)
+    #   - and the parent thread an event loop.
+
+    # server thread
+    my $server_thread = threads->new( sub { $self->run( %$args ); } );
+    $self->{server_thread} = $server_thread;
+
+    # cron thread
+#    my $cron_thread = threads->new( sub { $self->loop_cron(); } );
 
     _poll_commands();
 
-    $thread->join;
+    $server_thread->join;
 } #start_server
 
 sub shutdown {
@@ -56,9 +66,28 @@ sub shutdown {
     print STDERR "Shutting down yote server \n";
     &Yote::ObjProvider::stow_all();
     print STDERR "Killing threads \n";
-    $self->{thread}->detach();
+    $self->{server_thread}->detach();
     print STDERR "Shut down server thread.\n";
 } #shutdown
+
+#
+# Checks every minute to see if any commands were put in the root's cron area.
+#
+sub loop_cron {
+    my $self = shift;
+    
+    while(1) {
+        sleep(60);
+        {
+            lock( @commands );
+            my $rnd = int( 10000 * rand() );
+            $cron_id = $rnd;
+            push( @commands, [ { c => 'check_cron', cron_id => $rnd },$$] );
+            print STDERR Data::Dumper->Dump(["Adding Cron Check command"]);
+        }
+    }
+
+} #loop_cron
 
 #
 # Sets up Initial database server and tables.
@@ -83,45 +112,150 @@ sub init_server {
 #
 # This ads a command to the list of commands. If
 #
-sub process_request {
+#sub process_request {
+sub process_http_request {
     my $self = shift;
 
-    print STDERR ")START---------------- PROC REQ $$ ------------------(\n";
+    #
+    # Define here what the paths mean :
+    #   GET  /y/i/<app>/<id>?token                   <---- object by id
+    #   GET  /y/o/<app>/path/to/obj?token            <---- object by xpath 
+    #   GET  /y/r/<app>?token                        <---- app object by app name
+    #   GET  anything else, assume a web page
+    #
+    #   PUT /y/i/<app>/id/method?token,data          <---- run method with posted parameters
+    #   PUT /y/o/<app>/path/to/obj/method?token,data <---- run method with posted parameters
+    #   PUT /y/r/method                              <---- root method, needs no token
+    #
+    #   POST  /y/i/<app>/<id>?token                  <---- update object by id
+    #   POST  /y/o/<app>/path/to/obj?token           <---- update object by xpath 
+    #
+    # For POST commands, the following data is included :
+    #   m => (base64 encded) {
+    #      d:data (ref vs value yote encoded)
+    # 
+    #
+    # 
+    #
+    my $CGI = new CGI;
 
-    my $reqstr = <STDIN>;
-    my $params = {map { split(/\=/, $_ ) } split( /\&/, $reqstr )};
+    my $command = $CGI->Vars();
 
-    
-    my $command;
-    eval {
-        $command = from_json( MIME::Base64::decode($params->{m}) );
-    };
-    if( $@ ) {
-        print "{\"err\":\"$@\"}";        
-        print STDERR "Got error $@\n";
-        print STDERR "<END---------------- PROC REQ $$ ------------------>\n";
-        return;
-    }
-    print STDERR Data::Dumper->Dump( [$command,'Inputted Command'] );
+    my( $uri, $remote_ip, $verb ) = @ENV{'PATH_INFO','REMOTE_ADDR','REQUEST_METHOD'};
 
-    $command->{oi} = $params->{oi};
+    print STDERR ")START pid $$ : $verb $uri\n";
+
+    my( @path ) = grep { $_ ne '' && $_ ne '..' } split( /\//, $uri );    
+    if( $path[0] eq '_' ) {
+
+        # find app or root
+        my $app_name = $path[1] eq 'r' ? undef : $path[2];
+        
+        if( $verb eq 'GET' ) {
+            if( $path[1] eq 'h' ) { #get the human html set up for the app if any
+                my $app = Yote::ObjProvider::fetch( "/apps/$app_name" );
+                my $html = $app->get_html();
+                if( $html ) {
+                    print "Content-Type: text/html\n\n$html";
+                } else {
+                    do404();
+                }
+                return;
+            }
+            my $cmd = $path[1] eq 'r' ? 'fetch_app' : 'fetch';
+            my $id = $path[1] eq 'i' ? $path[3] : '/' . join( '/', @path[3..$#path] );
+            if( $path[1] eq 'r' ) {
+                $id = '/apps/' . join( '/', @path[2..$#path] );
+                $app_name = $path[2];
+            }
+            #
+            # For invoking methods the following is needed :
+            #  * id or xpath of object
+            #  * app (contained before id or is the first part of the xpath after apps)
+            #
+            $command = {
+                a  => $app_name,
+                c  => $cmd,
+                id => $id,
+                t  => $command->{t},
+                w  => 1,
+            };
+        } # GET
+        elsif( $verb eq 'PUT' ) {
+            #
+            # For invoking methods the following is needed :
+            #  * token - to id the account
+            #  * command
+            #  * id or xpath of object
+            #  * app (contained before id or is the first part of the xpath after apps)
+            #
+            eval {
+                $command = from_json( MIME::Base64::decode($command->{m}) );
+            };
+            if( $@ ) {
+                print "{\"err\":\"$@\"}";        
+                print STDERR "Got error $@\n";
+                print STDERR "<END---------------- PROC REQ $$ ------------------>\n";
+                return;
+            }
+            my $cmd = pop @path;
+            my $id = $path[1] eq 'i' ? $path[2] : '/' . join( '/', @path[3..$#path] );
+	    if( $path[1] eq 'r' ) {
+		$id = undef;
+	    }
+
+            if( $path[1] ne 'r' ) {
+                $command->{a}  = $app_name;
+            }
+            $command->{c}  = $cmd;
+            $command->{id} = $id;
+        } # PUT
+        elsif( $verb eq 'POST' ) {
+            my $id = $path[1] eq 'i' ? $path[3] : '/' . join( '/', @path[3..$#path] );
+            my $data = from_json( MIME::Base64::decode($command->{m}) );
+            $command = {
+                a  => $app_name,
+                c  => 'update',
+                data  => $data->{data},
+                id => $id,
+                t  => $command->{t},
+                w  => 1,
+            };
+        } # POST
+        $command->{oi} = $remote_ip;
+    } 
+    else { #serve html
+	    my $root = $self->{args}{webroot};
+	    my $dest = join('/',@path);
+	    if( open( IN, "<$root/$dest" ) ) {
+		if( $dest =~ /^yote\/js/ ) {
+		    print "Content-Type: text/javascript\n\n";
+		}
+		else {
+		    print "Content-Type: text/html\n\n";
+		}
+            while(<IN>) {
+                print $_;
+            }
+            close( IN );
+	    } else {
+		    do404();
+	    }
+	    return;
+    } #serve html
 
     my $wait = $command->{w};
     my $procid = $$;
-    {
-        print STDERR Data::Dumper->Dump(["Lock prid2wait"]);
+    if( $wait ) {
         lock( %prid2wait );
         $prid2wait{$procid} = $wait;
-        print STDERR Data::Dumper->Dump(["Locked prid2wait"]);
     }
 
     #
     # Queue up the command for processing in a separate thread.
     #
     {
-        print STDERR Data::Dumper->Dump(["Lock commands"]);
         lock( @commands );
-        print STDERR Data::Dumper->Dump(["Locked commands"]);
         push( @commands, [$command, $procid] );
         cond_broadcast( @commands );
     }
@@ -131,38 +265,33 @@ sub process_request {
         while( 1 ) {
             my $wait;
             {
-                print STDERR "process request lock prid2wait\n";
                 lock( %prid2wait );
                 $wait = $prid2wait{$procid};
-                print STDERR "process request locked prid2wait. got wait '$wait'\n";
             }
             if( $wait ) {
-                print STDERR "process request lock prid2wait for wait\n";
                 lock( %prid2wait );
-                print STDERR "process request cond wait prid2wait for wait\n";
                 if( $prid2wait{$procid} ) {
                     cond_wait( %prid2wait );
                 }
-                print STDERR "process request cond wait done prid2wait for wait. procid ($procid)\n";
-                print STDERR  Data::Dumper->Dump([\%prid2wait]);
                 last unless $prid2wait{$procid};
             } else {
                 last;
             }
         }
         my $result;
-        {
+        if( $wait ) {
             lock( %prid2result );
             $result = $prid2result{$procid};
             delete $prid2result{$procid};
         }
-        print STDERR Data::Dumper->Dump([$result,"Result to Send"]);
+        print STDERR "Sending result $result\n";
+        print "Content-Type: text/json\n\n";
         print "$result";
     } else {
         print "{\"msg\":\"Added command\"}";
     }
     print STDERR "<END---------------- PROC REQ $$ ------------------>\n";
-
+    return;
 } #process_request
 
 #
@@ -172,22 +301,15 @@ sub _poll_commands {
     while(1) {
         my $cmd;
         {
-            print STDERR "Extracting Command\n";
             lock( @commands );
             $cmd = shift @commands;
-            print STDERR "Got Command\n";
         }
         if( $cmd ) {
-            print STDERR ">===================== START Processing command (poll $$) ============<\n";
             _process_command( $cmd );
-            print STDERR ">===================== DONE Processing command (poll $$) ============<\n";
         }
         unless( @commands ) {
-            print STDERR "Locking commands\n";
             lock( @commands );
-            print STDERR "Waiting for commands\n";
             cond_wait( @commands );
-            print STDERR "Got Command\n";
         }
     }
 
@@ -197,39 +319,41 @@ sub _process_command {
     my $req = shift;
     my( $command, $procid ) = @$req;
 
+    my $wait = $command->{w};
+
     Yote::ObjProvider::connect();
 
     my $resp;
 
     eval {
-        my $root = Yote::AppRoot::fetch_root();
+        my $root = Yote::AppRoot::_fetch_root();
         my $ret  = $root->_process_command( $command );
-        print STDERR Data::Dumper->Dump(["Process command response : ",$ret]);
-        $resp = to_json($ret);
+        $resp = $ret;
         Yote::ObjProvider::stow_all();
     };
-    $resp ||= to_json({ err => $@ });
+    $resp ||= { err => $@ };
+    $resp->{r} ||= '';
+    $resp = to_json( $resp );
 
     #
     # Send return value back to the caller if its waiting for it.
     #
-    print STDERR " _process_command Lock prid2wait\n";
-    lock( %prid2wait );
-    print STDERR " _process_command Locked prid2wait\n";
-    {
-        lock( %prid2result );
-        $prid2result{$procid} = $resp;
+    if( $wait ) {
+        lock( %prid2wait );
+        {
+            lock( %prid2result );
+            $prid2result{$procid} = $resp;
+        }
+        delete $prid2wait{$procid};
+        cond_broadcast( %prid2wait );
     }
-    print STDERR Data::Dumper->Dump(["IN process, freeing prid2wait for process ($procid)",$resp,\%prid2wait]);
 
-    delete $prid2wait{$procid};
-    print STDERR " _process_command Broadcast prid2wait (deleted $procid)\n";
-    cond_broadcast( %prid2wait );
-    print STDERR " _process_command Broadcasted prid2wait\n";
-
-    Yote::ObjProvider::commit();
     Yote::ObjProvider::disconnect();
 } #_process_command
+
+sub do404 {
+    print "Content-Type: text/html\n\nERROR : 404\n";
+}
 
 1;
 
@@ -245,16 +369,7 @@ use Yote::WebAppServer;
 
 my $server = new Yote::WebAppServer();
 
-$server->start_server( port =E<gt> 8008,
-
-=over 32
-
-		       datastore => 'Yote::MysqlIO',
-		       db => 'yote_db',
-		       uname => 'yote_db_user',
-		       pword => 'yote_db-password' );
-
-=back
+$server->start_server();
 
 =head1 DESCRIPTION
 

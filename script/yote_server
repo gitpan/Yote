@@ -17,6 +17,7 @@ use Yote::SQLiteIO;
 
 use lib "$Bin/../lib";
 
+push( @INC, "/usr/local/yote/lib" );
 
 $SIG{ __DIE__ } = sub { Carp::confess( @_ ) };
 
@@ -37,13 +38,14 @@ $SIG{TERM} = sub {
 #
 # The order of the config is @ARGV, %ENV, ~/.yoterc || ~/.yote/yote.conf || /etc/yote.conf, 
 #
-my $sqlitefile = "/usr/local/yote/SQLite.yote.db";
+my $sqlitefile = "/usr/local/yote/data/SQLite.yote.db";
 unless( -e $sqlitefile ) {
     my $sqlite = new Yote::SQLiteIO( sqlitefile => $sqlitefile );
-    $sqlite->init_datastore();
+    $sqlite->ensure_datastore();
 }
 my( %config ) = ( port       => 8008, 
 		  datastore  => 'Yote::SQLiteIO', 
+		  root       => '/usr/local/yote/html',
 		  sqlitefile => $sqlitefile );
 
 while( @ARGV ) {
