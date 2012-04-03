@@ -1,0 +1,92 @@
+---
+abstract: 'Web App Server w/ autopersistant objects'
+author:
+  - 'Eric Wolf (coyocanid@gmail.com)'
+dynamic_config: 0
+generated_by: 'Module::Build version 0.3613'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: Yote
+provides:
+  Yote:
+    file: './lib/Yote.pm'
+    version: 0.083
+  Yote::Account:
+    file: './lib/Yote/Account.pm'
+  Yote::AccountRoot:
+    file: './lib/Yote/AccountRoot.pm'
+  Yote::AppRoot:
+    file: './lib/Yote/AppRoot.pm'
+    version: 0.01
+  Yote::Array:
+    file: './lib/Yote/Array.pm'
+    version: 0.01
+  Yote::Cache:
+    file: './lib/Yote/Cache.pm'
+  Yote::Census:
+    file: './lib/Yote/Census.pm'
+  Yote::ClientObj:
+    file: './lib/Yote/ClientObj.pm'
+    version: 0.01
+  Yote::Cron:
+    file: './lib/Yote/Cron.pm'
+  Yote::Hash:
+    file: './lib/Yote/Hash.pm'
+    version: 0.01
+  Yote::MysqlIO:
+    file: './lib/Yote/MysqlIO.pm'
+    version: 0.01
+  Yote::Obj:
+    file: './lib/Yote/Obj.pm'
+    version: 0.01
+  Yote::ObjProvider:
+    file: './lib/Yote/ObjProvider.pm'
+    version: 0.01
+  Yote::SQLiteIO:
+    file: './lib/Yote/SQLiteIO.pm'
+    version: 0.01
+  Yote::Sample::SecretCollect:
+    file: './lib/Yote/Sample/SecretCollect.pm'
+  Yote::SystemObj:
+    file: './lib/Yote/SystemObj.pm'
+  Yote::Test::DummyCache:
+    file: './lib/Yote/Test/DummyCache.pm'
+  Yote::Test::Hello:
+    file: './lib/Yote/Test/Hello.pm'
+    version: 0.01
+  Yote::Test::TestAppNeedsLogin:
+    file: './lib/Yote/Test/TestAppNeedsLogin.pm'
+    version: 0.01
+  Yote::Test::TestAppNoLogin:
+    file: './lib/Yote/Test/TestAppNoLogin.pm'
+    version: 0.01
+  Yote::Test::TestDeepCloner:
+    file: './lib/Yote/Test/TestDeepCloner.pm'
+  Yote::Test::TestNoDeepCloner:
+    file: './lib/Yote/Test/TestNoDeepCloner.pm'
+  Yote::WebAppServer:
+    file: './lib/Yote/WebAppServer.pm'
+    version: 0.081
+  Yote::YoteRoot:
+    file: './lib/Yote/YoteRoot.pm'
+requires:
+  Config::Simple: 4.58
+  Crypt::Passwd: 0
+  DBD::SQLite: 1.35
+  DBI: 0
+  Email::Valid: 0
+  File::Copy: 2.18
+  File::Path: 2.08_01
+  File::chmod: 0.32
+  JSON: 2.22
+  MIME::Base64: 0
+  MIME::Lite: 0
+  Net::Server::HTTP: 0.99
+  Test::Simple: 0.44
+  WeakRef: 0.01
+  forks: 0.34
+resources:
+  license: http://dev.perl.org/licenses/
+version: 0.083
