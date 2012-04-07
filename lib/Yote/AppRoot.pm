@@ -14,19 +14,32 @@ use MIME::Base64;
 
 use base 'Yote::Obj';
 
+use vars qw($VERSION);
+$VERSION = '0.085';
+
 #
 # Available to all apps. Used for verification and for cookie login.
 #
 sub token_login {
     my( $self, $data ) = @_;
-    my( $t, $ip ) = ( $data->{t}, $data->{ip} );
+    my( $t, $ip ) = ( $data->{t}, $data->{_ip} );
     if( $t =~ /(.+)\+(.+)/ ) {
         my( $uid, $token ) = ( $1, $2 );
         my $login = Yote::ObjProvider::fetch( $uid );
-        return $login && $login->get_token() eq "${token}x$ip" ? { l => $login, t => $token } : undef;
+        if( $login && $login->get_token() eq "${token}x$ip" ) {
+	    return $login;
+	}
     }
-    return undef;
+    return 0;
 } #token_login
+
+#
+# Return the account object for this app.
+#
+sub account {
+    my( $self, $data, $account ) = @_;
+    return $account;
+} #account
 
 #
 # Returns the account root attached to this AppRoot for the given account.
@@ -40,10 +53,16 @@ sub _get_account {
         $acct->set__allowed_access({});
         $acct->set_login( $login );
         $accts->{$login->{ID}} = $acct;
+	$self->_init_account( $acct );
     }
     return $acct;
 
 } #_get_account
+
+#
+# Intializes the account object passed in.
+#
+sub _init_account {}
 
 #
 # Returns true if the object was given to the account via the API, as opposed to a random object id

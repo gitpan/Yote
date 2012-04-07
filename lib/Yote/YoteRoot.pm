@@ -26,6 +26,10 @@ sub fetch_app_by_class {
     return $app;
 } #fetch_app_by_class
 
+sub number_of_accounts {
+    return Yote::ObjProvider::xpath_count( "/_handles" );
+} #number_of_accounts
+
 #
 # Returns this root object.
 #
@@ -66,8 +70,10 @@ sub login {
 
 sub logout {
     my( $self, $data, $acct ) = @_;
-    my $login = $acct->get_login();
-    $login->set_token();
+    if( $acct ) {
+	my $login = $acct->get_login();
+	$login->set_token();
+    }
 } #logout
 
 #
