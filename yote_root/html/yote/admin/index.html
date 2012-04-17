@@ -1,0 +1,84 @@
+<html>
+  <head>
+<title>Yote Admin</title>
+
+<script src="/yote/js/jquery-latest.js"></script>
+<script src="/yote/js/jquery.cookie.js"></script>
+<script src="/yote/js/jquery.dumper.js"></script>
+<script src="/yote/js/jquery.base64.min.js"></script>
+<script src="/yote/js/json2.js"></script>
+<script src="/yote/js/yote.js"></script>
+<script src="/yote/js/yote.util.js"></script>
+
+<script>
+$().ready(function(){
+    var root = $.yote.fetch_root();
+    function show_fields( attachpoint, obj, path ) {
+	$( attachpoint ).empty();
+	$( attachpoint ).append( '<table id=ft border=1></table>' );
+	for( var fld in obj._d ) {
+	    var val = obj._d[fld];
+	    var fldbox = '<input type=text id=f_'+obj.id+'_'+fld+' value="' + val + '">';
+	    if( val * 1 > 0 ) {
+		$( '#ft' ).append( '<tr><th>' + fld + '</th><td>' + "<a href='#' id='" + val + "'>" + val + "</a></td></tr>" );
+
+		$( '#' + val ).click( (function(pth) {
+		    return function() {
+			show_path( pth );
+		    }  }) ( path + '/' + fld ) );
+
+	    } else {
+		$( '#ft' ).append( '<tr><th>' + fld + '</th><td>' + document.createTextNode(val.substring(1)) + '</td></tr>' );
+	    }
+	}
+    }
+    function show_path( path ) {
+	console.dir( 'show path ' + path );
+	var path_obj = path == '/' ? root : root.fetch( path );
+	$('#pathdiv').empty();
+
+        var paths = path.substr(1).split( /\// );
+	console.dir( paths );
+	$('#pathdiv').append('Path : ' + '<a href="#" id=rootpath>_</a>' );
+	$('#rootpath').click( function() {
+	    show_path( '/' );
+	} );
+	var pp = '';
+	for( var i=0; i<paths.length; ++i ) {
+	    pp = pp + '/' + paths[i];
+	    if( i == (paths.length - 1) ) {
+		$('#pathdiv').append( ' / ' + paths[i] );
+	    } else {
+		$('#pathdiv').append( ' / <a href="#" id="pp_' + i + '">' + paths[i] + '</a> ' );
+		$('#pp_' + i ).click( (function(pth) {
+		    return function() {
+			console.dir( "Got path click to " + pth );
+			show_path( pth );
+		    } } ) ( pp ) );
+	    }
+	}
+	$('#pathdiv').append( '<br/><br/><h3>Fields</h3><blockquote id=fields></blockquote' );
+
+	show_fields( '#fields', path_obj, path );
+    } //show_path
+    show_path( '/' );
+});
+</script>
+
+</head>
+
+<body>
+
+<h1>Yote Admin</h1>
+
+<div id=pathdiv>
+</div>
+<!--
+  This takes a path, then presents that object for editing.
+  It starts at /
+-->
+
+
+
+</body>
+</html>

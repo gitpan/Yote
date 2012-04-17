@@ -1,0 +1,23 @@
+do{ my $x = {
+       'build_requires' => {},
+       'conflicts' => {},
+       'requires' => {
+                       'WeakRef' => '0.01',
+                       'File::Copy' => '2.18',
+                       'Config::Simple' => '4.58',
+                       'Email::Valid' => 0,
+                       'DBD::SQLite' => '1.35',
+                       'Test::Simple' => '0.44',
+                       'Net::Server::HTTP' => '0.99',
+                       'forks' => '0.34',
+                       'MIME::Base64' => 0,
+                       'File::Path' => '2.08_01',
+                       'MIME::Lite' => 0,
+                       'JSON' => '2.22',
+                       'File::chmod' => '0.32',
+                       'Crypt::Passwd' => 0,
+                       'DBI' => 0
+                     },
+       'recommends' => {}
+     };
+$x; }

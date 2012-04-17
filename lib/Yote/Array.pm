@@ -1,21 +1,12 @@
 package Yote::Array;
 
-############################################################################################################
-# This module is used transparently by Yote to link arrays into its graph structure. This is not meant to  #
-# be called explicitly or modified.									   #
-############################################################################################################
-
 use strict;
-use warnings;
 
-no warnings 'uninitialized';
 use Tie::Array;
-
-use Yote::ObjProvider;
 
 use vars qw($VERSION);
 
-$VERSION = '0.02';
+$VERSION = '0.01';
 
 sub TIEARRAY {
     my( $class, $id, @list ) = @_;
@@ -99,15 +90,12 @@ Yote::Array - All arrays in the Yote system get tied to this class.
 
 =head1 DESCRIPTION
 
-This module is essentially a private module and its methods will not be called directly by programs.
 Yote::Array extends Tie::Array and is used by the Yote system for array persistance.
-This is used transparently and this can be considered a private class.
+
 
 =head1 AUTHOR
 
 Eric Wolf
-coyocanid@gmail.com
-http://madyote.com
 
 =head1 LICENSE AND COPYRIGHT
 

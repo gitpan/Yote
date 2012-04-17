@@ -1,14 +1,6 @@
 package Yote::Hash;
 
-############################################################################################################
-# This module is used transparently by Yote to link hashes into its graph structure. This is not meant to  #
-# be called explicitly or modified.									   #
-############################################################################################################
-
 use strict;
-use warnings;
-
-no warnings 'uninitialized';
 
 use Tie::Hash;
 
@@ -16,16 +8,22 @@ use Yote::ObjProvider;
 
 use vars qw($VERSION);
 
-$VERSION = '0.02';
+$VERSION = '0.01';
 
 sub TIEHASH {
     my( $class, $id, %hash ) = @_;
     my $storage = {};
     my $obj = bless [ $id, $storage ], $class;
+
     for my $key (keys %hash) {
         $storage->{$key} = $hash{$key};
     }
     return $obj;
+}
+
+sub keycount {
+    my $self = shift;
+    return scalar keys %{$self->[1]};
 }
 
 sub STORE {
@@ -64,6 +62,9 @@ sub CLEAR {
     my $self = shift;
     Yote::ObjProvider::dirty( $self->[2], $self->[0] );
     %{$self->[1]} = ();
+#    for my $key (%{$self->[1]}) {
+#        delete $self->[1]{$key};
+#    }
 }
 
 1;
@@ -76,15 +77,11 @@ Yote::Hash - All hashes in the Yote system get tied to this class.
 
 =head1 DESCRIPTION
 
-This module is essentially a private module and its methods will not be called directly by programs.
 Yote::Hash extends Tie::Hash and is used by the Yote for hash persistance.
-This is used transparently and this can be considered a private class.
 
 =head1 AUTHOR
 
 Eric Wolf
-coyocanid@gmail.com
-http://madyote.com
 
 =head1 LICENSE AND COPYRIGHT
 

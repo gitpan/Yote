@@ -1,262 +1,289 @@
-/*
- * LICENSE AND COPYRIGHT
- *
- * Copyright (C) 2012 Eric Wolf
- * This module is free software; it can be used under the terms of the artistic license
- *
- * Version 0.027
- */
-if( ! $.yote ) { $.yote = {}; }
 $.yote.util = {
-
-    // general useful utility functions go here.
-
-    url_params:function() {
-	    if( window.location.href.indexOf('?') == -1 ) {
-	        return {};
-	    }
-        var parts  = window.location.href.split('?');
-        var params = parts[1].split('&');
-        var ret = {};
-        for( var i=0; i<params.length; ++i ) {
-            var pair = params[i].split('=');
-	        ret[ pair[0] ] = pair[1];
-        }
-	    return ret;
-    }, //url_params
-
-    format_date: function( date, format ) {
-	    if( format ) {
-	        var buf = '';
-	        for( var i=0; i<format.length; i++) {
-		        var chara = format.charAt( i );
-		        if( chara == 'Y' ) buf += date.getUTCFullYear();
-		        else if( chara == 'M' ) buf += (1 + date.getUTCMonth()) > 9 ? 1 + date.getUTCMonth() : '0' + ( 1 + date.getUTCMonth() );
-		        else if( chara == 'D' ) buf += date.getUTCDate()    > 9 ? date.getUTCDate()    : '0' + date.getUTCDate();
-		        else if( chara == 's' ) buf += date.getUTCSeconds() > 9 ? date.getUTCSeconds() : '0' + date.getUTCSeconds();
-		        else if( chara == 'h' ) buf += date.getUTCHours()   > 9 ? date.getUTCHours()   : '0' + date.getUTCHours();
-		        else if( chara == 'm' ) buf += date.getUTCMinutes() > 9 ? date.getUTCMinutes() : '0' + date.getUTCMinutes();
-		        else buf += chara;
-	        }
-	        return buf;
-	    }
-	    return date.toUTCString();
-    }, //format_date
-
-    //
-    // Makes sure all things that match the selector have the
-    // same width.
-    // 
-    match_widths: function( selector, buff ) {
-	    var max_width = 0;
-	    $( selector ).each( function() {
-	        var w = $( this ).width();
-	        max_width = max_width > w ? max_width : w;
-	    } );
-	    if( buff > 0 ) max_width += buff;
-	    $( selector ).each( function() {
-	        $( this ).width( max_width );
-	    } );
-    }, //match_widths
-
-    list_paginator : function( list ) {
-        return {
-            _list : list,
-            _pag_size : 0,
-            _start : 0,
-            real_size : function() { return list.length; },
-            pagination_size: function(val) { 
-                if( typeof val === 'undefined' ) return this._pag_size;
-                this._pag_size = val;
-                return this;
-            },
-            start: function( val ) {
-                if( typeof val === 'undefined' ) return this._start;
-                this._start = val;
-                return this;
+    ids:0,
+    next_id:function() {
+        return 'yidx_'+this.ids++;
+    },
+    stage_text_field:function(attachpoint,yoteobj,fieldname) {
+        var val = yoteobj.get(fieldname);
+        var idname = this.next_id();
+        attachpoint.append( '<input type=text id=' + idname + '>' );
+        $( '#'+idname ).val( val );
+        $( '#'+idname ).keyup( (function (o,k,id,initial) {
+            return function(e) {
+                var newval = $(id).val();
+                o.stage(k,newval);
+                if( initial != newval || o.is_dirty(k)) {
+                    $(id).css('background-color','lightyellow' );
+                } else {
+                    $(id).css('background-color','white' );
+                }
             }
-        };
-    }, //list paginator
+        } )(yoteobj,fieldname,'#'+idname,val) );
+        return $( '#' + idname );
+    }, //stage_text_field
 
-    button_actions:function( args ) {
-	    var cue = {};
-	    if( args.cleanup_exempt ) {
-	        for( var i=0; i < args.cleanup_exempt.length; i++ ) {
-		        cue[ args.cleanup_exempt[ i ] ] = true;
-	        }
-	    }
-	    var ba = {
-	        but         : args.button,
-	        action      : args.action || function(){},
-	        on_escape   : args.on_escape || function(){},
-	        texts       : args.texts || [],
-	        t_values    : args.texts.map( function(it,idx){ return $( it ).val(); } ),
-	        req_texts   : args.required,
-	        req_indexes : args.required_by_index,
-	        req_fun     : args.required_by_function,
-	        exempt      : cue,
-	        extra_check : args.extra_check || function() { return true; },
+    stage_textarea:function(args) {
+        var attachpoint = args['attachpoint'];
+        var yoteobj   = args['yoteobj'];
+        var fieldname = args['fieldname'];
+        var cols      = args['cols'];
+        var rows      = args['rows'];
+        var as_list   = args['as_list'];
 
-	        check_ready : function() {
-		        var me = this;
-		        var ecval = me.extra_check();
-		        var t = me.req_texts || me.texts;
-		        if( typeof me.req_fun === 'function' ) {
-		            if( me.req_fun( me.texts ) != true ) {
-			            $( me.but ).attr( 'disabled', 'disabled' );
-			            return false;
-		            }
-		        }
-		        else if( typeof me.req_indexes !== 'undefined' ) {
-		            for( var i=0; i<me.req_indexes.length; ++i ) {
-			            if( $( me.texts[ me.req_indexes[ i ] ] ).val() == me.t_values[ i ] ) {
-	    		            $( me.but ).attr( 'disabled', 'disabled' );
-			                return false;
-			            }
-		            }
-		        }
-		        else {
-		            for( var i=0; i<t.length; ++i ) {
-			            if( $( t[ i ] ).val() == me.t_values[ i ] ) {
-	    		            $( me.but ).attr( 'disabled', 'disabled' );
-			                return false;
-			            }
-		            }
-		        }
-		        $( me.but ).attr( 'disabled', ! ecval );
-		        return ecval;
-	        }, //check_ready
+        var idname    = this.next_id();
+        attachpoint.append( '<textarea cols='+cols+' rows='+rows+' id=' + idname + '></textarea>' );
+        var val;
+        if( as_list == true ) {
+            var a = Array();
+            for( var i=0; i < yoteobj.length(); ++i ) {
+                a.push( yoteobj.get( i ) );
+            }
+            val = a.join( '\n' );
+            $( '#'+idname ).attr( 'value', val );
+        } else {
+            val = yoteobj.get(fieldname);
+            $( '#'+idname ).attr( 'value', val );
+        }
+        $( '#'+idname ).keyup( (function (o,k,id,initial) {
+            return function(e) {
+                var newval = $(id).attr('value');
 
-	        init:function() {
-		        var me = this;
-		        for( var i=0; i<me.texts.length - 1; ++i ) {
-		            if( $( me.texts[i] ).prop('type') == 'checkbox' ) {
-			            $( me.texts[i] ).click( function() { me.check_ready(); return true; } );
-		            }
-		            else {
-			            $( me.texts[i] ).keyup( function() { me.check_ready(); return true; } );
-			            $( me.texts[i] ).keypress( (function(box,oe) {
-			                return function( e ) {
-				                if( e.which == 13 ) {
-				                    $( box ).focus();
-				                } else if( e.which == 27 ) {
-				                    oe();
-				                }
-			                } } )( me.texts[i+1], me.on_escape ) );
-		            }
-		        }
-		        $( me.texts[me.texts.length - 1] ).keyup( function() { me.check_ready(); return true; } );
-		        $( me.texts[me.texts.length - 1] ).keypress( function( e ) {
-		            if( e.which == 13 ) {
-			            me.act();
-		            } else if( e.which == 27 ) {
-			            me.on_escape();
-		            }
-		        } );
-		        $( me.but ).click( function() { me.act() } );
-		        me.check_ready();
-	        }, //init
+                if( initial != newval || o.is_dirty(k)) {
+                    $(id).css('background-color','lightyellow' );
+                } else {
+                    $(id).css('background-color','white' );
+                }
 
-	        act : function() {
-		        var me = this;
-		        if( me.check_ready() ) {
-		            me.action();
-		            for( var i=0; i<me.texts.length; ++i ) {
-			            if( ! me.exempt[ me.texts[i] ] ) {
-			                $( me.texts[i] ).val( '' );
-			            }
-		            }
-		            me.t_values    = me.texts.map( function(it,idx){ return $( it ).val(); } );
-		        }
-	        } //act
-	    } // ba
+                if( as_list == true ) {
+                    newval = newval.split( /\r\n|\r|\n/ );
+                    for( var nk in newval ) {
+                        o.stage( nk, newval[nk] );
+                    }
+                }
+                else {
+                    o.stage(k,newval);
+                }
+            }
+        } )(yoteobj,fieldname,'#'+idname,val) );
+        return $( '#' + idname );
+    }, //stage_textarea
 
-	    ba.init();
+    /*
+      yote_obj/yote_fieldname 
+      - object and field to set an example from the list
+      list_fieldname - field in the list objects to get the item name for.
+    */
+    stage_object_select:function(args) {
+        var attachpoint    = args['attachpoint'];
+        var yote_obj       = args['yote_obj'];
+        var yote_fieldname = args['yote_fieldname'];
+        var yote_list      = args['yote_list'];
+        var list_fieldname = args['list_fieldname'];
+        var include_none   = args['include_none'];
+        var current        = yote_obj.get( yote_fieldname );
 
-	    return ba;
+        var current_id = typeof current === 'undefined' ? undefined : current.id;
+	var idname = this.next_id();
+        attachpoint.append( '<SELECT id='+idname+'>' + (include_none == true ? '<option value="">None</option>' : '' ) + '</select>' );
+        for( var i=0; i<yote_list.length(); ++i ) {
+            var obj = yote_list.get( i );
+            var val = obj.get( list_fieldname );
+            $( '#' + idname ).append( '<option value="' + obj.id + '" ' 
+                                      + (obj.id==current_id ? 'selected' :'') + '>' + val + '</option>' );
+            $( '#' + idname ).click(
+                ( function(o,k,id,initial) {
+                    return function() {
+                        var newid = $(id).val();
+                        if( 0 + newid > 0 ) {
+                            o.stage(k,fetch_obj(newid,obj._app));
+                        } else {
+                            o.stage(k,undefined);
+                        }
+                        if( initial != newid || o.is_dirty(k) ) {
+                            $(id).css('background-color','lightyellow' );
+                        } else {
+                            $(id).css('background-color','white' );
+                        }
+                    }
+                } )(yote_obj,yote_fieldname,'#'+idname,current_id)
+            );
+        }
+    }, //stage_object_select
 
-    }, //button_actions
+    make_select:function(attachpoint,list,list_fieldname) {
+	var idname = this.next_id();
+        attachpoint.append( '<select id='+idname+'></select>' );
+	for( var i in list ) {
+	    var item = list[i];
+	    $( '#'+idname ).append( '<option value='+item.id+'>'+item.get(list_fieldname)+'</option>' );
+	}
+	return $( '#' + idname );
+    },
+    make_login_box:function(args) {
+	var target = args['target'];
+	var logged_in_f = args['on_login']   || args['on_in'];
+	var created_f = args['on_register']  || args['on_in'];
+	var recover_f = args['on_recover']   || args['on_in'];
+	var logged_out_f = args['on_logout'];
 
-    make_table:function( classes ) {
-	    var xtr = classes ? 'class="' + classes.join( ' ' ) + '"' : '';
-	    return {
-	        html:'<table ' + xtr + '>',
-	        next_row_class:'even-row',
-	        add_header_row : function( arry, row_classes, header_classes ) {
-		        row_classes = row_classes ? row_classes : [];
-		        row_classes.push( this.next_row_class );
-		        header_classes = header_classes ? header_classes : [];
+	$(target).empty();
+	$(target).append( "<span id=login_msg_outerspan style=display:none><span id=login_msg_span class=warning></span><BR></span>" +
 
-		        this.html = this.html + '<tr class="' + row_classes.join( ' ' ) + '">';
-		        if( this.next_row_class == 'even-row' ) {
-		            this.next_row_class = 'odd-row';
-		        } else {
-		            this.next_row_class = 'even-row';
-		        }
+			  // do login
+			  "<div style=display:none id=y_login_div>" +
+			  "<table><tr><td>Handle</td><td><input class=login id=login type=text></td>" +
+			  "</tr><tr><td>Password</td><td><input class=login id=password type=password>" +
+			  "</td></tr></table><br>" +
+			  "<input class=login id=login_submit type=submit value=Login>" +
+			  " <a href='#' id=register_link>Register</a>" +
+			  " <a href='#' id=forgot_link>Forgot</a>" +
+			  "</div>" +
 
-		        var cls = 'even-col';
-		        for( var i=0; i<arry.length; i++ ) {
-		            var colname = typeof arry[i] === 'function' ? arry[i]() : arry[i];
-		            this.html = this.html + '<th class="' + cls + ' ' + header_classes.join( ' ' ) + '">' + colname + '</th>';
-		            if( cls == 'even-col' ) {
-			            cls = 'odd-col';
-		            } else {
-			            cls = 'even-col';
-		            }
-		        }
-		        this.html = this.html + '</tr>';
-		        return this;
-	        },
-	        add_row : function( arry, row_classes, cell_classes ) {
-		        row_classes = row_classes ? row_classes : [];
-		        cell_classes = cell_classes ? cell_classes : [];
+			  // not logged in
+			  "<div style=display:none id=y_not_loggedin>" +
+			  "Not logged in. <a href='#' id=login_link>Login</a> &nbsp;" +
+			  "<a href='#' id=register_link>Register</a>" +
+			  "</div>" +
 
-		        this.html = this.html + '<tr class="' + this.next_row_class + ' ' + row_classes.join( ' ' ) + '">';
-		        if( this.next_row_class == 'even-row' ) {
-		            this.next_row_class = 'odd-row';
-		        } else {
-		            this.next_row_class = 'even-row';
-		        }
+			  // register account
+			  "<div style=display:none id=y_register_account>" +
+			  "<table><tr><td>Handle</td><td><input class=register id=login type=text></td>" +
+			  "</tr><tr><td>Email</td><td><input class=register id=email type=text>" +
+			  "</tr><tr><td>Password</td><td><input class=register id=password type=password>" +
+			  "</td></tr></table>" + 
+			  "<input id=register_submit type=submit value=Register> " +
+			  "  <div id=register_login_link_div><a href='#' id=login_link>Login</a></div>" +
+			  "</div>" +
 
-		        var cls = 'even-col';
-		        for( var i=0; i<arry.length; i++ ) {
-		            this.html = this.html + '<td class="' + cls + ' ' + cell_classes.join( ' ' ) + '">' + arry[i] + '</td>';
-		            if( cls == 'even-col' ) {
-			            cls = 'odd-col';
-		            } else {
-			            cls = 'even-col';
-		            }
-		        }
-		        this.html = this.html + '</tr>';
-		        return this;
-	        },
-	        add_param_row : function( arry, row_classes, header_classes, cell_classes ) {
-		        row_classes = row_classes ? row_classes : [];
-		        cell_classes = cell_classes ? cell_classes : [];
+			  // recover
+			  "<div style=display:none id=y_recover_account>" +
+			  "Email <input class=recover id=email> " +
+			  "<input id=recover_submit type=submit value=Recover>" +
+                          "<a href='#' id=login_link>Login</a>" + 
+			  "</div>" +
 
-		        this.html = this.html + '<tr class="' + this.next_row_class + ' ' + row_classes.join(' ') +  '">';
-		        if( this.next_row_class == 'even-row' ) {
-		            this.next_row_class = 'odd-row';
-		        } else {
-		            this.next_row_class = 'even-row';
-		        }
-		        if( arry.length > 0 ) {
-		            this.html = this.html + '<th class="even-col ' + header_classes.join(' ') + '">' + arry[0] + '</th>';
-		        }
-		        var cls = 'odd-col';
-		        for( var i=1; i<arry.length; i++ ) {
-		            this.html = this.html + '<td class="' + cls + ' ' + cell_classes.join( ' ' ) + '">' +  arry[i] + '</td>';
-		            if( cls == 'even-col' ) {
-			            cls = 'odd-col';
-		            } else {
-			            cls = 'even-col';
-		            }
-		        }
-		        this.html = this.html + '</tr>';
-		        return this;
-	        },
-	        get_html : function() { return this.html + '</table>'; }
-	    }
-    }, //make_table
+			  // logged in
+			  "<div style=display:none id=y_logged_in>" +
+			  "Logged in as <span class=logged_in id=handle></span><BR> [<a id=logout_link href='#'>logout</a>]" +
+			  "</div>"
+			);
+	var message = function( msg ) {
+            if( typeof msg === 'string' ) {
+	        $( target + ' #login_msg_span').empty()
+	        $( target + ' #login_msg_span').append( msg )
+	        $( target + ' #login_msg_outerspan').show()	    
+	    } else {
+	        $( target + ' #login_msg_span').empty()
+	        $( target + ' #login_msg_outerspan').hide()
+            }
+	}
+	var install_function = function( f ) { return function() { f(); } }
+	var on_enter = function(f) { return function(e) { if(e.which == 13 ) { f(); } } }
+	var to_login = function(msg) {
+	    message( msg );
+	    $( target + ' > div ' ).hide();
+	    $( target + ' > div#y_login_div' ).show();
+	}
+	var to_recover = function() {
+	    $( target + ' > div ' ).hide();
+	    $( target + ' > div#y_recover_account' ).show();
+	}
+	var to_register = function(msg) {
+	    message( msg );
+	    $( target + ' > div ' ).hide();
+	    $( target + ' > div#y_register_account' ).show();
+	}
+	var to_logged_in = function(name,msg) {
+            message(msg);
+	    $( target + ' > div ' ).hide();
+	    $( target + ' .logged_in#handle' ).empty();
+	    $( target + ' .logged_in#handle' ).append(name);
+	    $( target + ' > div#y_logged_in' ).show();                
+	    logged_in_f();
+	}
+	var do_login = function() {
+	    $.yote.login( $( target + " .login#login").val(), $(target + " .login#password").val(),
+			  function(data) { //pass
+			      to_logged_in($.yote.login_obj.get('handle'));
+			      // note the following line will work but is not closure safe yet.
+			      if( typeof logged_in_f === 'function' ) { logged_in_f(); }
+			  },
+			  function(data) { //fail
+			      to_login(data);
+			  }
+			);
+	}
+	var do_register = function() {
+
+            if( $( target + " .register#password").val().length > 2 ) {
+	        $.yote.create_login( $( target + " .register#login").val(),
+				     $( target + " .register#password").val(),
+				     $( target + " .register#email").val(),
+				     function(data) { //pass
+					 to_logged_in($.yote.login_obj.get('handle'),"Created Account");
+					 if( typeof created_f === 'function' ) { created_f(); }
+				     },
+				     
+				     function(data) { //fail
+					 to_register(data);
+				          }
+				   );     
+            } else {
+                to_register("password too short");
+            }           
+	}
+	var do_recover = function() {
+	    $.yote.root.recover_password( { e:$( target + ' .recover#email' ).val(), 
+					    u:window.location.href,
+					    t:window.location.href.replace(/[^\/]$/, 'reset.html' )
+					  },
+					  function(d) {
+					      to_login( "sent recovery email" );
+					  },
+					  function(d) {
+					      message(d);
+					  }
+					);
+	    if( typeof recover_f === 'function' ) { recover_f(); }
+	}
+	var logout = function() {
+	    $( target + ' > div ' ).hide();
+            var rootapp = $.yote.fetch_root();
+
+            if( rootapp.number_of_accounts() > 0 ) {
+		$( target + ' > div#y_not_loggedin' ).show();
+		$( target + ' #register_login_link_div' ).show();
+            } else {
+                $( target + ' > div#y_register_account' ).show();
+		$( target + ' #register_login_link_div' ).hide();
+                message( "Create Initial Root Account" );
+            }
+	    $( target + ' #password' ).val('');
+	    $.yote.fetch_root().logout();
+	    if( typeof logged_out_f === 'function' ) { logged_out_f(); }
+	}
+
+	//link actions
+        var nada = function() {};
+
+	$( target + ' #login_link').click( install_function(to_login || nada ) );
+	$( target + ' #register_link').click( install_function(to_register || nada) );
+	$( target + ' #logout_link').click( install_function(logout || nada) );
+	$( target + ' #forgot_link').click( install_function(to_recover || nada) );
+
+	//button actions
+	$( target + ' #login_submit').click( install_function(do_login || nada) );
+	$( target + ' .login#login,' + target + ' .login#password' ).keypress( on_enter(do_login) );
+	$( target + ' #register_submit').click( install_function(do_register || nada) );
+	$( target + ' .register#login,' + target + ' .register#password,' + target + ' .register#email' ).keypress( on_enter(do_register) );
+	$( target + ' .recover#email' ).keypress( on_enter(do_recover) );
+	$( target + ' #recover_submit' ).click( install_function(do_recover || nada) );
+	if( $.yote.is_logged_in() ) {
+            to_logged_in( $.yote.get_login().get_handle() );
+	} else {
+	    logout();
+	}
+
+    } //make_login_box
 
 }//$.yote.util
