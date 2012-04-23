@@ -6,8 +6,8 @@ use File::chmod qw( symchmod lschmod );
 
 my $builder = Module::Build->current;
 
-my $base = $builder->args( 'install_base' ) || '/usr/local/yote';
-my $port = $builder->args( 'port' ) || 8008;
+my $base = $builder->args( 'install_base' ) || $ENV{YOTE_INSTALL_BASE} || '/usr/local/yote';
+my $port = $builder->args( 'port' ) || $ENV{YOTE_PORT} || 8008;
 
 mkpath( $base );
 
