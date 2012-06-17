@@ -11,6 +11,7 @@ use Crypt::Passwd;
 use Email::Valid;
 use MIME::Lite;
 use MIME::Base64;
+use Yote::Messenger;
 
 use base 'Yote::Obj';
 
@@ -23,10 +24,10 @@ $VERSION = '0.085';
 sub token_login {
     my( $self, $data ) = @_;
     my( $t, $ip ) = ( $data->{t}, $data->{_ip} );
-    if( $t =~ /(.+)\+(.+)/ ) {
+    if( $t =~ /(.+)\-(.+)/ ) {
         my( $uid, $token ) = ( $1, $2 );
         my $login = Yote::ObjProvider::fetch( $uid );
-        if( $login && $login->get_token() eq "${token}x$ip" ) {
+        if( $login && $login->get__token() eq "${token}x$ip" ) {
 	    return $login;
 	}
     }
@@ -42,6 +43,40 @@ sub account {
 } #account
 
 #
+# Returns the direct descendents of the object passed in.
+#
+sub multi_fetch {
+    my( $self, $obj, $account ) = @_;
+
+    my( @ret );
+
+    my $ref = ref( $obj );
+    if( $ref eq 'ARRAY' ) {
+	for my $item (@$obj) {
+	    if( ref( $item ) ) {
+		push( @ret, Yote::ObjProvider::xform_out( $item ) );
+	    }
+	}
+    } 
+    elsif( $ref eq 'HASH' ) {
+	for my $item (values %$obj) {
+	    if( ref( $item ) ) {
+		push( @ret, Yote::ObjProvider::xform_out( $item ) );
+	    }
+	}
+    }
+    elsif( $ref ) {
+	for my $item (map { $obj->{DATA}{$_} } grep { $_ !~ /^_/ } keys %{$obj->{DATA}}) {
+	    if( ref( $item ) ) {
+		push( @ret, Yote::ObjProvider::xform_out( $item ) );
+	    }
+	}
+    }
+
+    return \@ret;
+} #multi_fetch
+
+#
 # Returns the account root attached to this AppRoot for the given account.
 #
 sub _get_account {
@@ -49,9 +84,10 @@ sub _get_account {
     my $accts = $self->get__account_roots({});
     my $acct = $accts->{$login->{ID}};
     unless( $acct ) {
-        $acct = new Yote::Obj();
+        $acct = new Yote::Messenger();
         $acct->set__allowed_access({});
         $acct->set_login( $login );
+	$acct->set_handle( $login->get_handle() );
         $accts->{$login->{ID}} = $acct;
 	$self->_init_account( $acct );
     }

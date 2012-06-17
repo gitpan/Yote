@@ -1,17 +1,21 @@
 package Yote::YoteRoot;
 
+use Yote::Cron;
 use Yote::Login;
 
 use base 'Yote::AppRoot';
+
+our $HANDLE_CACHE = {};
+our $EMAIL_CACHE = {};
 
 use strict;
 
 sub init {
     my $self = shift;
     $self->set_apps({});
-    $self->set_app_alias({});
     $self->set__handles({});
     $self->set__emails({});
+    $self->set__crond( new Yote::Cron() );
 } #init
 
 sub fetch_app_by_class {
@@ -26,6 +30,25 @@ sub fetch_app_by_class {
     return $app;
 } #fetch_app_by_class
 
+#
+# Used to wipe and reset a whole app's data. Use with caution
+# and can only be used by the superuser.
+#
+sub purge_app {
+    my( $self, $data, $account ) = @_;
+    if( $account->get__is_root() ) {
+	$self->_purge_app( $data );
+	return "Purged '$data'";
+    }
+    die "Permissions Error";
+} #purge_app
+
+sub _purge_app {
+    my( $self, $app ) = @_;
+    my $apps = $self->get_apps();
+    return delete $apps->{$app};
+} #_purge_app
+
 sub number_of_accounts {
     return Yote::ObjProvider::xpath_count( "/_handles" );
 } #number_of_accounts
@@ -34,7 +57,11 @@ sub number_of_accounts {
 # Returns this root object.
 #
 sub fetch_root {
-    return Yote::ObjProvider::fetch( 1 );
+    my $root = Yote::ObjProvider::fetch( 1 );
+    unless( $root ) {
+	$root = new Yote::YoteRoot();
+    }
+    return $root;
 }
 
 #
@@ -49,6 +76,7 @@ sub fetch {
     die "Access Error";
 } #fetch
 
+
 #
 # Validates that the given credentials are given
 #   (client side) use : login({h:'handle',p:'password'});
@@ -58,7 +86,6 @@ sub login {
     my( $self, $data ) = @_;
 
     my $ip = $data->{_ip};
-
     if( $data->{h} ) {
         my $login = Yote::ObjProvider::xpath("/_handles/$data->{h}");
         if( $login && ($login->get__password() eq $self->_encrypt_pass( $data->{p}, $login) ) ) {
@@ -72,9 +99,15 @@ sub logout {
     my( $self, $data, $acct ) = @_;
     if( $acct ) {
 	my $login = $acct->get_login();
-	$login->set_token();
+	$login->set__token();
     }
 } #logout
+
+sub flush_credential_cache {
+    $EMAIL_CACHE = {};
+    $HANDLE_CACHE = {};
+} #flush_credential_cache
+
 
 #
 # Creates a login with credentials provided
@@ -91,11 +124,11 @@ sub create_login {
     #
     my( $handle, $email, $password ) = ( $args->{h}, $args->{e}, $args->{p} );
     if( $handle ) {
-        if( Yote::ObjProvider::xpath("/_handles/$handle") ) {
+        if( $HANDLE_CACHE->{$handle} || Yote::ObjProvider::xpath("/_handles/$handle") ) {
             die "handle already taken";
         }
         if( $email ) {
-            if( Yote::ObjProvider::xpath("/_emails/$email") ) {
+            if( $EMAIL_CACHE->{$email} || Yote::ObjProvider::xpath("/_emails/$email") ) {
                 die "email already taken";
             }
             unless( Email::Valid->address( $email ) ) {
@@ -105,6 +138,10 @@ sub create_login {
         unless( $password ) {
             die "password required";
         }
+
+	$EMAIL_CACHE->{$email}   = 1;
+	$HANDLE_CACHE->{$handle} = 1;
+
         my $new_login = new Yote::Login();
 
         #
@@ -129,7 +166,7 @@ sub create_login {
         $logins->{ $handle } = $new_login;
         my $emails = $self->get__emails();
         $emails->{ $email } = $new_login;
-
+	
         return { l => $new_login, t => $self->_create_token( $new_login, $ip ) };
     } #if handle
 
@@ -157,7 +194,9 @@ sub remove_login {
     {
         delete $self->get__handles()->{$args->{h}};
         delete $self->get__emails()->{$args->{e}};
-        $self->add_to_removed_logins( $login );
+	delete $HANDLE_CACHE->{$args->{h}};
+	delete $EMAIL_CACHE->{$args->{e}};
+        $self->add_to__removed_logins( $login );
         return "deleted account";
     } 
     die "unable to remove account";
@@ -246,8 +285,8 @@ sub reset_password {
 sub _create_token {
     my( $self, $login, $ip ) = @_;
     my $token = int( rand 9 x 10 );
-    $login->set_token( $token."x$ip" );
-    return $login->{ID}.'+'.$token;
+    $login->set__token( $token."x$ip" );
+    return $login->{ID}.'-'.$token;
 }
 
 1;

@@ -1,5 +1,0 @@
-package Yote::YoteRoot;
-
-use base 'Yote::AppRoot';
-
-1;

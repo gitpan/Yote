@@ -24,10 +24,11 @@ use vars qw($VERSION);
 $VERSION = '0.081';
 
 
-my( @commands, %prid2wait, %prid2result, $singleton );
+my( @commands, %prid2wait, %prid2result, $singleton, @saves );
 share( @commands );
 share( %prid2wait );
 share( %prid2result );
+share( @saves );
 
 sub new {
     my $pkg = shift;
@@ -46,7 +47,14 @@ sub start_server {
 
     # fork out for three starting threads
     #   - one a multi forking server (parent class)
+    #   - one for a cron daemon inside of Yote.
     #   - and the parent thread an event loop.
+
+    # cron thread
+    my $root = Yote::YoteRoot::fetch_root();
+    my $cron = $root->get__crond();
+    my $cron_thread = threads->new( sub { $self->_crond( $cron->{ID} ); } );
+    $self->{cron_thread} = $cron_thread;
 
     # server thread
     my $server_thread = threads->new( sub { $self->run( %$args ); } );
@@ -56,16 +64,17 @@ sub start_server {
 
     $server_thread->join;
 
-    Yote::ObjProvider::disconnect();
+   Yote::ObjProvider::disconnect();
 
 } #start_server
 
 sub shutdown {
     my $self = shift;
     print STDERR "Shutting down yote server \n";
-    &Yote::ObjProvider::stow_all();
+    Yote::ObjProvider::stow_all();
     print STDERR "Killing threads \n";
     $self->{server_thread}->detach();
+    $self->{saving_thread}->detach();
     print STDERR "Shut down server thread.\n";
 } #shutdown
 
@@ -74,8 +83,9 @@ sub shutdown {
 #
 sub init_server {
     my( $self, @args ) = @_;
-    Yote::ObjProvider::init_datastore( @args );
+   Yote::ObjProvider::init_datastore( @args );
 } #init_server
+
 
 #
 # Called when a request is made. This does an initial parsing and
@@ -110,9 +120,9 @@ sub process_http_request {
 
     my( $uri, $remote_ip, $verb ) = @ENV{'PATH_INFO','REMOTE_ADDR','REQUEST_METHOD'};
 
-    print STDERR ")START pid $$ : $verb $uri\n";
-
-    my( @path ) = grep { $_ ne '' && $_ ne '..' } split( /\//, $uri );    
+    $uri =~ s/\s+HTTP\S+\s*$//;
+#    print STDERR ")STaRt pid $$ : $verb $uri : ";
+    my( @path ) = grep { $_ ne '' && $_ ne '..' } split( /\//, $uri );
     if( $path[0] eq '_' ) {
 
         my $action = pop( @path );
@@ -171,19 +181,23 @@ sub process_http_request {
                 $result = $prid2result{$procid};
                 delete $prid2result{$procid};
             }
-            print STDERR "Sending result $result\n";
+#            print STDERR "Sending result $result\n";
             print "Content-Type: text/json\n\n";
             print "$result";
-        } 
+        }
         else {  #not waiting for an answer, but give an acknowledgement
             print "{\"msg\":\"Added command\"}";
-        }        
+        }
 #        print STDERR "<END---------------- PROC REQ $$ ------------------>\n";
     } #if a command on an object
 
     else { #serve up a web page
 	my $root = $self->{args}{webroot};
 	my $dest = join('/',@path);
+	if( -d "<$root/$dest" ) {
+	    $dest .= '/index.html';
+	}
+#	print STDERR Data::Dumper->Dump(["$root/$dest","SERV"]);
 	if( open( IN, "<$root/$dest" ) ) {
 	    if( $dest =~ /^yote\/js/ ) {
 		print "Content-Type: text/javascript\n\n";
@@ -221,6 +235,11 @@ sub _poll_commands {
             lock( @commands );
             cond_wait( @commands );
         }
+	if( $cmd ) {
+	    Yote::ObjProvider::start_transaction();
+	    Yote::ObjProvider::stow_all();
+	    Yote::ObjProvider::commit_transaction();
+	}
     }
 
 } #_poll_commands
@@ -228,13 +247,11 @@ sub _poll_commands {
 sub _process_command {
     my $req = shift;
     my( $command, $procid ) = @$req;
-
+#    print STDERR Data::Dumper->Dump([$command,"CMD"]);
     my $wait = $command->{w};
 
     my $resp;
-    
-    Yote::ObjProvider::start_transaction();
-    
+
     eval {
         my $obj_id = $command->{oi};
         my $app_id = $command->{ai};
@@ -243,9 +260,10 @@ sub _process_command {
 
         my $data       = _translate_data( from_json( MIME::Base64::decode( $command->{d} ) )->{d} );
         my $login = $app->token_login( { t => $command->{t}, _ip => $command->{p} } );
-	print STDERR Data::Dumper->Dump(["DATA",$command,  MIME::Base64::decode( $command->{d} ), $data ]);
+	print STDERR Data::Dumper->Dump(["INCOMMING",$data,$command,$login]);
 
-        my $app_object = Yote::ObjProvider::fetch( $obj_id );
+
+        my $app_object =Yote::ObjProvider::fetch( $obj_id );
         my $action     = $command->{a};
         my $account;
 
@@ -261,18 +279,14 @@ sub _process_command {
                 die "Access Error";
             }
         }
+	Yote::ObjProvider::reset_changed();
 
-        #
-        # dirty delta is a list of ids that have changed by this action. It tells the 
-        #    client to reload those objects.
-        #
-        my %before = map { $_ => 1 } (Yote::ObjProvider::dirty_ids());
-	print STDERR Data::Dumper->Dump(["doing $action on ", $app_object, 'with data',$data,"and account",$account,'and login',$account?$account->get_login():'none'] );
+#	print STDERR Data::Dumper->Dump(["doing $action on ", $app_object, 'with data',$data,"and account",$account,'and login',$account?$account->get_login():'none'] );
         my $ret = $app_object->$action( $data, $account );
 
-        my @dirty_delta = grep { ! $before{$_} } ( Yote::ObjProvider::dirty_ids() );
+	my $dirty_delta = Yote::ObjProvider::fetch_changed();
 
-        $resp = { r => $app_object->_obj_to_response( $ret, $account, 1 ), d => \@dirty_delta };
+        $resp = { r => $app_object->_obj_to_response( $ret, $account, 1 ), d => $dirty_delta };
     };
     if( $@ ) {
 	my $err = $@;
@@ -281,10 +295,8 @@ sub _process_command {
         $resp = { err => $err, r => '' };
     }
 
-    Yote::ObjProvider::stow_all();
-    Yote::ObjProvider::commit_transaction();
-
     $resp = to_json( $resp );
+    print STDERR Data::Dumper->Dump(["SEND BACK", $resp]);
 
     #
     # Send return value back to the caller if its waiting for it.
@@ -302,14 +314,36 @@ sub _process_command {
 
 } #_process_command
 
+sub _crond {
+    my( $self, $cron_id ) = @_;
+
+    while( 1 ) {
+	sleep( 60 );
+	{
+	    lock( @commands );
+	    push( @commands, [ { 
+		a  => 'check',	    
+		ai => 1,
+		d  => 'eyJkIjoxfQ==',
+		oi => $cron_id,
+		p  => undef,
+		t  => undef,
+		w  => 0,
+			       }, $$] );
+	    cond_broadcast( @commands );
+	}
+    } #infinite loop
+    
+} #_crond
+
 #
 # Translates from vValue and reference_id to values and references
 #
 sub _translate_data {
     my $val = shift;
 
-    if( ref( $val ) ) { #from javacript object, or hash. no fields with underscores accepted
-        return { map {  $_ => _translate_data( $val->{$_} ) } grep { index( $_, '_' ) == -1 } keys %$val };
+    if( ref( $val ) ) { #from javacript object, or hash. no fields starting with underscores accepted
+        return { map {  $_ => _translate_data( $val->{$_} ) } grep { index( $_, '_' ) != 0 } keys %$val };
     }
     return undef unless $val;
     return index($val,'v') == 0 ? substr( $val, 1 ) : Yote::ObjProvider::fetch( $val );

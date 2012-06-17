@@ -108,7 +108,7 @@ $.yote.util = {
                 } )(yote_obj,yote_fieldname,'#'+idname,current_id)
             );
         }
-    }, //stage_select
+    }, //stage_object_select
 
     make_select:function(attachpoint,list,list_fieldname) {
 	var idname = this.next_id();
@@ -180,7 +180,6 @@ $.yote.util = {
 	var install_function = function( f ) { return function() { f(); } }
 	var on_enter = function(f) { return function(e) { if(e.which == 13 ) { f(); } } }
 	var to_login = function(msg) {
-	    console.dir( msg );
 	    message( msg );
 	    $( target + ' > div ' ).hide();
 	    $( target + ' > div#y_login_div' ).show();
@@ -200,13 +199,11 @@ $.yote.util = {
 	    $( target + ' .logged_in#handle' ).empty();
 	    $( target + ' .logged_in#handle' ).append(name);
 	    $( target + ' > div#y_logged_in' ).show();                
+	    logged_in_f();
 	}
 	var do_login = function() {
-	    console.dir( $( target + ' .login#login' ) );
 	    $.yote.login( $( target + " .login#login").val(), $(target + " .login#password").val(),
 			  function(data) { //pass
-			      console.dir( $.yote.login_obj )
-			      
 			      to_logged_in($.yote.login_obj.get('handle'));
 			      // note the following line will work but is not closure safe yet.
 			      if( typeof logged_in_f === 'function' ) { logged_in_f(); }
@@ -281,13 +278,87 @@ $.yote.util = {
 	$( target + ' .register#login,' + target + ' .register#password,' + target + ' .register#email' ).keypress( on_enter(do_register) );
 	$( target + ' .recover#email' ).keypress( on_enter(do_recover) );
 	$( target + ' #recover_submit' ).click( install_function(do_recover || nada) );
-
 	if( $.yote.is_logged_in() ) {
             to_logged_in( $.yote.get_login().get_handle() );
 	} else {
 	    logout();
 	}
 
-    } //make_login_box
+    }, //make_login_box
+
+    make_table:function() {
+	return {
+	    html:'<table>',
+	    add_header_row : function( arry ) {
+		this.html = this.html + '<tr>';
+		for( var i=0; i<arry.length; i++ ) {
+		    this.html = this.html + '<th>' + arry[i] + '</th>';
+		}
+		this.html = this.html + '</tr>';
+		return this;
+	    },
+	    add_row : function( arry ) {
+		this.html = this.html + '<tr>';
+		for( var i=0; i<arry.length; i++ ) {
+		    this.html = this.html + '<td>' + arry[i] + '</td>';
+		}
+		this.html = this.html + '</tr>';		
+		return this;
+	    },
+	    get_html : function() { return this.html + '</table>'; }
+	}
+    }, //make_table
+
+	
+    button_actions:function( args ) {
+	var but     = args[ 'button' ];
+	var action  = args[ 'action' ];
+	var texts   = args[ 'texts'  ] || [];
+	var exempt  = args[ 'cleanup_exempt' ] || {};
+
+	function check_ready() {
+	    for( var i=0; i<texts.length; ++i ) {
+		if( ! $( texts[i] ).val().match( /\S/ ) ) {
+	    	    $( but ).attr( 'disabled', 'disabled' );
+		    return false;
+		}
+	    }
+
+	    $( but ).attr( 'disabled', false );
+	    return true;
+	} // check_ready
+
+	for( var i=0; i<texts.length - 1; ++i ) {
+	    $( texts[i] ).keyup( check_ready );
+	    $( texts[i] ).keypress( (function(box) {
+		return function( e ) {
+		    if( e.which == 13 ) {
+			$( box ).focus();
+		    }
+		} } )( texts[i+1] ) );
+	}
+
+	act = (function( c_r, a_f, txts ) { return function() {
+	    if( c_r() ) {
+		a_f();
+		for( var i=0; i<txts.length; ++i ) {
+		    if( ! exempt[ txts[i] ] ) {
+			$( txts[i] ).val( '' );
+		    }
+		}
+	    }
+	} } ) ( check_ready, action, texts );
+
+	$( texts[texts.length - 1] ).keyup( check_ready );
+	$( texts[texts.length - 1] ).keypress( (function(a) { return function( e ) {
+	    if( e.which == 13 ) {
+		a();
+	    } } } )(act) );
+
+	$( but ).click( act );
+
+	check_ready();
+
+    }, // button_actions
 
 }//$.yote.util
