@@ -10,7 +10,7 @@ $.yote = {
     token:null,
     err:null,
     objs:{},
-    debug:false,
+    debug:true,
 
     init:function() {
 	var root = this.fetch_root();
@@ -143,7 +143,7 @@ $.yote = {
 
     _create_obj:function(data,app_id) {
 	var root = this;
-	return (function(x,an,ai) {
+	return (function(x,ai) {
 	    var o = {
 		_app_id:ai,
                 _dirty:false,
@@ -160,6 +160,11 @@ $.yote = {
 		    return cnt;
 		}
 	    };
+	    if( o.class == 'HASH' ) {
+		o.to_hash = function() {
+		    return this._d;
+		};
+	    }
 
 	    /*
 	      assign methods
@@ -170,11 +175,11 @@ $.yote = {
 			return function( params, passhandler, failhandler ) {
 			    var ret = root.message( {
 				async:false,
-				app_id:o._app_id,
+				app_id:this._app_id,
 				cmd:key,
 				data:params,
 				failhandler:failhandler,
-                                obj_id:o.id,
+                                obj_id:this.id,
 				passhandler:passhandler,
 				wait:true,
 				t:root.token,
@@ -191,7 +196,7 @@ $.yote = {
                                 }
 			    }
 			    if( typeof ret.r === 'object' ) {
-				return root._create_obj( ret.r, o._app_id );
+				return root._create_obj( ret.r, this._app_id );
 			    } else {
                                 if( typeof ret.r === 'undefined' ) {
 				    if( typeof failhandler === 'function' ) {
@@ -229,7 +234,7 @@ $.yote = {
 		for( fld in x.d ) {
 		    var val = x.d[fld];
 		    if( typeof val === 'object' ) {
-			o._d[fld] = (function(xx) { return root._create_obj(xx); })(val);
+			o._d[fld] = (function(xx) { return root._create_obj( xx, o._app_id ); })(val);
 			
 		    } else {
 			o._d[fld] = (function(xx) { return xx; })(val);
@@ -247,8 +252,12 @@ $.yote = {
             }
 
             // resets staged info
-            o.reset = function() {
-                this._stage = {};
+            o.reset = function( field ) {
+		if( field ) {
+		    delete this._stage[ field ];
+		} else {
+                    this._stage = {};
+		}
             }
 
             o.is_dirty = function(field) {
@@ -320,6 +329,7 @@ $.yote = {
 		    return function() {
 			root.objs[thid] = null;
 			var replace = $.yote.fetch_root().fetch( thid );
+			replace._app_id = tapp;
 			this._d = replace._d;
                         for( fld in this._d ) {
                             if( typeof this['get_' + fld] !== 'function' ) {
@@ -330,10 +340,10 @@ $.yote = {
 			root.objs[thid] = this;
 			return this;
 		    }
-		} )(x.id,an,app_id);
+		    } )(x.id,ai);
 	    }
 	    return o;
-        })(data,app_id);
+        } )(data,app_id);
     }, //_create_obj
 
     // generic server type error
@@ -343,6 +353,9 @@ $.yote = {
     },
     
     _translate_data:function(data) {
+        if( typeof data === 'undefined' || data == null ) {
+            return undefined;
+        }
         if( typeof data === 'object' ) {
             if( data.id + 0 > 0 && typeof data._d !== 'undefined' ) {
                 return data.id;
@@ -354,9 +367,6 @@ $.yote = {
                 ret[key] = this._translate_data( data[key] );
             }
             return ret;
-        }
-        if( typeof data === 'undefined' ) {
-            return undefined;
         }
         return 'v' + data;
     }, //_translate_data

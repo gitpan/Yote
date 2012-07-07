@@ -1,5 +1,6 @@
 package Yote::YoteRoot;
 
+use Yote::Cron;
 use Yote::Login;
 
 use base 'Yote::AppRoot';
@@ -14,6 +15,7 @@ sub init {
     $self->set_apps({});
     $self->set__handles({});
     $self->set__emails({});
+    $self->set__crond( new Yote::Cron() );
 } #init
 
 sub fetch_app_by_class {
@@ -27,6 +29,25 @@ sub fetch_app_by_class {
     }
     return $app;
 } #fetch_app_by_class
+
+#
+# Used to wipe and reset a whole app's data. Use with caution
+# and can only be used by the superuser.
+#
+sub purge_app {
+    my( $self, $data, $account ) = @_;
+    if( $account->get__is_root() ) {
+	$self->_purge_app( $data );
+	return "Purged '$data'";
+    }
+    die "Permissions Error";
+} #purge_app
+
+sub _purge_app {
+    my( $self, $app ) = @_;
+    my $apps = $self->get_apps();
+    return delete $apps->{$app};
+} #_purge_app
 
 sub number_of_accounts {
     return Yote::ObjProvider::xpath_count( "/_handles" );
@@ -65,7 +86,6 @@ sub login {
     my( $self, $data ) = @_;
 
     my $ip = $data->{_ip};
-
     if( $data->{h} ) {
         my $login = Yote::ObjProvider::xpath("/_handles/$data->{h}");
         if( $login && ($login->get__password() eq $self->_encrypt_pass( $data->{p}, $login) ) ) {
@@ -174,6 +194,8 @@ sub remove_login {
     {
         delete $self->get__handles()->{$args->{h}};
         delete $self->get__emails()->{$args->{e}};
+	delete $HANDLE_CACHE->{$args->{h}};
+	delete $EMAIL_CACHE->{$args->{e}};
         $self->add_to__removed_logins( $login );
         return "deleted account";
     } 
