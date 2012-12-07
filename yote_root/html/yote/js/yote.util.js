@@ -6,13 +6,13 @@ $.yote.util = {
     stage_text_field:function(attachpoint,yoteobj,fieldname) {
         var val = yoteobj.get(fieldname);
         var idname = this.next_id();
-        attachpoint.append( '<input type=text id=' + idname + '>' );
+        attachpoint.append( '<input type="text" id="' + idname + '">' );
         $( '#'+idname ).val( val );
         $( '#'+idname ).keyup( (function (o,k,id,initial) {
             return function(e) {
                 var newval = $(id).val();
-                o.stage(k,newval);
-                if( initial != newval || o.is_dirty(k)) {
+                o._stage(k,newval);
+                if( initial != newval || o._is_dirty(k)) {
                     $(id).css('background-color','lightyellow' );
                 } else {
                     $(id).css('background-color','white' );
@@ -31,7 +31,7 @@ $.yote.util = {
         var as_list   = args['as_list'];
 
         var idname    = this.next_id();
-        attachpoint.append( '<textarea cols='+cols+' rows='+rows+' id=' + idname + '></textarea>' );
+        attachpoint.append( '<textarea cols="'+cols+'" rows="'+rows+'" id="' + idname + '"></textarea>' );
         var val;
         if( as_list == true ) {
             var a = Array();
@@ -48,7 +48,7 @@ $.yote.util = {
             return function(e) {
                 var newval = $(id).attr('value');
 
-                if( initial != newval || o.is_dirty(k)) {
+                if( initial != newval || o._is_dirty(k)) {
                     $(id).css('background-color','lightyellow' );
                 } else {
                     $(id).css('background-color','white' );
@@ -57,11 +57,11 @@ $.yote.util = {
                 if( as_list == true ) {
                     newval = newval.split( /\r\n|\r|\n/ );
                     for( var nk in newval ) {
-                        o.stage( nk, newval[nk] );
+                        o._stage( nk, newval[nk] );
                     }
                 }
                 else {
-                    o.stage(k,newval);
+                    o._stage(k,newval);
                 }
             }
         } )(yoteobj,fieldname,'#'+idname,val) );
@@ -84,7 +84,7 @@ $.yote.util = {
 
         var current_id = typeof current === 'undefined' ? undefined : current.id;
 	var idname = this.next_id();
-        attachpoint.append( '<SELECT id='+idname+'>' + (include_none == true ? '<option value="">None</option>' : '' ) + '</select>' );
+        attachpoint.append( '<SELECT id="'+idname+'">' + (include_none == true ? '<option value="">None</option>' : '' ) + '</select>' );
         for( var i=0; i<yote_list.length(); ++i ) {
             var obj = yote_list.get( i );
             var val = obj.get( list_fieldname );
@@ -94,12 +94,8 @@ $.yote.util = {
                 ( function(o,k,id,initial) {
                     return function() {
                         var newid = $(id).val();
-                        if( 0 + newid > 0 ) {
-                            o.stage(k,fetch_obj(newid,obj._app));
-                        } else {
-                            o.stage(k,undefined);
-                        }
-                        if( initial != newid || o.is_dirty(k) ) {
+                        o._stage(k,undefined);
+                        if( initial != newid || o._is_dirty(k) ) {
                             $(id).css('background-color','lightyellow' );
                         } else {
                             $(id).css('background-color','white' );
@@ -112,180 +108,13 @@ $.yote.util = {
 
     make_select:function(attachpoint,list,list_fieldname) {
 	var idname = this.next_id();
-        attachpoint.append( '<select id='+idname+'></select>' );
+        attachpoint.append( '<select id="'+idname+'"></select>' );
 	for( var i in list ) {
 	    var item = list[i];
 	    $( '#'+idname ).append( '<option value='+item.id+'>'+item.get(list_fieldname)+'</option>' );
 	}
 	return $( '#' + idname );
     },
-    make_login_box:function(args) {
-	var target = args['target'];
-	var logged_in_f = args['on_login']   || args['on_in'];
-	var created_f = args['on_register']  || args['on_in'];
-	var recover_f = args['on_recover']   || args['on_in'];
-	var logged_out_f = args['on_logout'];
-
-	$(target).empty();
-	$(target).append( "<span id=login_msg_outerspan style=display:none><span id=login_msg_span class=warning></span><BR></span>" +
-
-			  // do login
-			  "<div style=display:none id=y_login_div>" +
-			  "<table><tr><td>Handle</td><td><input class=login id=login type=text></td>" +
-			  "</tr><tr><td>Password</td><td><input class=login id=password type=password>" +
-			  "</td></tr></table><br>" +
-			  "<input class=login id=login_submit type=submit value=Login>" +
-			  " <a href='#' id=register_link>Register</a>" +
-			  " <a href='#' id=forgot_link>Forgot</a>" +
-			  "</div>" +
-
-			  // not logged in
-			  "<div style=display:none id=y_not_loggedin>" +
-			  "Not logged in. <a href='#' id=login_link>Login</a> &nbsp;" +
-			  "<a href='#' id=register_link>Register</a>" +
-			  "</div>" +
-
-			  // register account
-			  "<div style=display:none id=y_register_account>" +
-			  "<table><tr><td>Handle</td><td><input class=register id=login type=text></td>" +
-			  "</tr><tr><td>Email</td><td><input class=register id=email type=text>" +
-			  "</tr><tr><td>Password</td><td><input class=register id=password type=password>" +
-			  "</td></tr></table>" + 
-			  "<input id=register_submit type=submit value=Register> " +
-			  "  <div id=register_login_link_div><a href='#' id=login_link>Login</a></div>" +
-			  "</div>" +
-
-			  // recover
-			  "<div style=display:none id=y_recover_account>" +
-			  "Email <input class=recover id=email> " +
-			  "<input id=recover_submit type=submit value=Recover>" +
-                          "<a href='#' id=login_link>Login</a>" + 
-			  "</div>" +
-
-			  // logged in
-			  "<div style=display:none id=y_logged_in>" +
-			  "Logged in as <span class=logged_in id=handle></span><BR> [<a id=logout_link href='#'>logout</a>]" +
-			  "</div>"
-			);
-	var message = function( msg ) {
-            if( typeof msg === 'string' ) {
-	        $( target + ' #login_msg_span').empty()
-	        $( target + ' #login_msg_span').append( msg )
-	        $( target + ' #login_msg_outerspan').show()	    
-	    } else {
-	        $( target + ' #login_msg_span').empty()
-	        $( target + ' #login_msg_outerspan').hide()
-            }
-	}
-	var install_function = function( f ) { return function() { f(); } }
-	var on_enter = function(f) { return function(e) { if(e.which == 13 ) { f(); } } }
-	var to_login = function(msg) {
-	    message( msg );
-	    $( target + ' > div ' ).hide();
-	    $( target + ' > div#y_login_div' ).show();
-	}
-	var to_recover = function() {
-	    $( target + ' > div ' ).hide();
-	    $( target + ' > div#y_recover_account' ).show();
-	}
-	var to_register = function(msg) {
-	    message( msg );
-	    $( target + ' > div ' ).hide();
-	    $( target + ' > div#y_register_account' ).show();
-	}
-	var to_logged_in = function(name,msg) {
-            message(msg);
-	    $( target + ' > div ' ).hide();
-	    $( target + ' .logged_in#handle' ).empty();
-	    $( target + ' .logged_in#handle' ).append(name);
-	    $( target + ' > div#y_logged_in' ).show();                
-	    logged_in_f();
-	}
-	var do_login = function() {
-	    $.yote.login( $( target + " .login#login").val(), $(target + " .login#password").val(),
-			  function(data) { //pass
-			      to_logged_in($.yote.login_obj.get('handle'));
-			      // note the following line will work but is not closure safe yet.
-			      if( typeof logged_in_f === 'function' ) { logged_in_f(); }
-			  },
-			  function(data) { //fail
-			      to_login(data);
-			  }
-			);
-	}
-	var do_register = function() {
-
-            if( $( target + " .register#password").val().length > 2 ) {
-	        $.yote.create_login( $( target + " .register#login").val(),
-				     $( target + " .register#password").val(),
-				     $( target + " .register#email").val(),
-				     function(data) { //pass
-					 to_logged_in($.yote.login_obj.get('handle'),"Created Account");
-					 if( typeof created_f === 'function' ) { created_f(); }
-				     },
-				     
-				     function(data) { //fail
-					 to_register(data);
-				          }
-				   );     
-            } else {
-                to_register("password too short");
-            }           
-	}
-	var do_recover = function() {
-	    $.yote.root.recover_password( { e:$( target + ' .recover#email' ).val(), 
-					    u:window.location.href,
-					    t:window.location.href.replace(/[^\/]$/, 'reset.html' )
-					  },
-					  function(d) {
-					      to_login( "sent recovery email" );
-					  },
-					  function(d) {
-					      message(d);
-					  }
-					);
-	    if( typeof recover_f === 'function' ) { recover_f(); }
-	}
-	var logout = function() {
-	    $( target + ' > div ' ).hide();
-            var rootapp = $.yote.fetch_root();
-
-            if( rootapp.number_of_accounts() > 0 ) {
-		$( target + ' > div#y_not_loggedin' ).show();
-		$( target + ' #register_login_link_div' ).show();
-            } else {
-                $( target + ' > div#y_register_account' ).show();
-		$( target + ' #register_login_link_div' ).hide();
-                message( "Create Initial Root Account" );
-            }
-	    $( target + ' #password' ).val('');
-	    $.yote.fetch_root().logout();
-	    if( typeof logged_out_f === 'function' ) { logged_out_f(); }
-	}
-
-	//link actions
-        var nada = function() {};
-
-	$( target + ' #login_link').click( install_function(to_login || nada ) );
-	$( target + ' #register_link').click( install_function(to_register || nada) );
-	$( target + ' #logout_link').click( install_function(logout || nada) );
-	$( target + ' #forgot_link').click( install_function(to_recover || nada) );
-
-	//button actions
-	$( target + ' #login_submit').click( install_function(do_login || nada) );
-	$( target + ' .login#login,' + target + ' .login#password' ).keypress( on_enter(do_login) );
-	$( target + ' #register_submit').click( install_function(do_register || nada) );
-	$( target + ' .register#login,' + target + ' .register#password,' + target + ' .register#email' ).keypress( on_enter(do_register) );
-	$( target + ' .recover#email' ).keypress( on_enter(do_recover) );
-	$( target + ' #recover_submit' ).click( install_function(do_recover || nada) );
-	if( $.yote.is_logged_in() ) {
-            to_logged_in( $.yote.get_login().get_handle() );
-	} else {
-	    logout();
-	}
-
-    }, //make_login_box
-
     make_table:function() {
 	return {
 	    html:'<table>',
@@ -305,37 +134,54 @@ $.yote.util = {
 		this.html = this.html + '</tr>';		
 		return this;
 	    },
+	    add_param_row : function( arry ) {
+		this.html = this.html + '<tr>';		
+		if( arry.length > 0 ) {
+		    this.html = this.html + '<th>' + arry[0] + '</th>';
+		}
+		for( var i=1; i<arry.length; i++ ) {
+		    this.html = this.html + '<td>' + arry[i] + '</td>';
+		}
+		this.html = this.html + '</tr>';		
+		return this;
+	    },
 	    get_html : function() { return this.html + '</table>'; }
 	}
     }, //make_table
 
-	
+    
     button_actions:function( args ) {
-	var but     = args[ 'button' ];
-	var action  = args[ 'action' ];
-	var texts   = args[ 'texts'  ] || [];
-	var exempt  = args[ 'cleanup_exempt' ] || {};
+	var but         = args[ 'button' ];
+	var action      = args[ 'action' ] || function(){};
+	var on_escape   = args[ 'on_escape' ] || function(){};
+	var texts       = args[ 'texts'  ] || [];
+	var req_texts   = args[ 'required' ];
+	var exempt      = args[ 'cleanup_exempt' ] || {};
+	var extra_check = args[ 'extra_check' ] || function() { return true; }
 
-	function check_ready() {
-	    for( var i=0; i<texts.length; ++i ) {
-		if( ! $( texts[i] ).val().match( /\S/ ) ) {
+	check_ready = (function(rt,te,ec) { return function() {
+	    var t = rt || te;
+	    var ecval = ec();
+	    for( var i=0; i<t.length; ++i ) {
+		if( ! $( t[i] ).val().match( /\S/ ) ) {
 	    	    $( but ).attr( 'disabled', 'disabled' );
 		    return false;
 		}
 	    }
-
-	    $( but ).attr( 'disabled', false );
-	    return true;
-	} // check_ready
+	    $( but ).attr( 'disabled', ! ecval );
+	    return ecval;
+	} } )( req_texts, texts, extra_check ) // check_ready
 
 	for( var i=0; i<texts.length - 1; ++i ) {
-	    $( texts[i] ).keyup( check_ready );
-	    $( texts[i] ).keypress( (function(box) {
+	    $( texts[i] ).keyup( function() { check_ready(); return true; } );
+	    $( texts[i] ).keypress( (function(box,oe) {
 		return function( e ) {
 		    if( e.which == 13 ) {
 			$( box ).focus();
-		    }
-		} } )( texts[i+1] ) );
+		    } else if( e.which == 27 ) {
+			oe();
+		    }		   
+		} } )( texts[i+1], on_escape ) );
 	}
 
 	act = (function( c_r, a_f, txts ) { return function() {
@@ -349,16 +195,455 @@ $.yote.util = {
 	    }
 	} } ) ( check_ready, action, texts );
 
-	$( texts[texts.length - 1] ).keyup( check_ready );
-	$( texts[texts.length - 1] ).keypress( (function(a) { return function( e ) {
+	$( texts[texts.length - 1] ).keyup( function() { check_ready(); return true; } );
+	$( texts[texts.length - 1] ).keypress( (function(a,oe) { return function( e ) {
 	    if( e.which == 13 ) {
 		a();
-	    } } } )(act) );
+	    } else if( e.which == 27 ) {
+		eo();
+	    } } } )(act,on_escape) );
 
 	$( but ).click( act );
 
 	check_ready();
 
+	return check_ready;
+
     }, // button_actions
+
+    make_button: function( id, value, classes, extra ) {
+	var ex = extra || '';
+	if( classes ) {
+	    return '<button ' + ex + ' type="button" id="' + id + '" class="' + classes + '">' + value + '</button>';
+	}
+	return '<button ' + ex + ' type="button" id="' + id + '">' + value + '</button>';
+    }, //make_button
+
+    make_text: function( id, arg ) {
+	var args = arg || {};
+	var val = args[ 'value' ] || '';
+	var cls = args[ 'classes' ] || '';
+	var type = args[ 'use_type' ] || 'text'
+	var extra = args[ 'extra' ] || '';
+	if( val ) {
+	    extra = extra + ' value="' + val.replace( '"', '&quot;' ) + '"';
+	}
+	if( cls ) {
+	    return '<input type="' + type + '" id="' + id + '" ' + extra + ' class="' + cls + '">';
+	} else {
+	    return '<input type="' + type + '" id="' + id + '" ' + extra + '>';
+	}
+    }, // make_text
+
+    info_div: function( root, text, classes ) {
+	if( ! classes ) {
+	    classes = 'alert alert-info';
+	}
+	$( root ).empty().append( '<div class="' + classes + '">' + text + '</div>' );
+    }, // info_div
+
+    container_div: function( rows, arg ) {
+	var args = arg || {};
+	var container_class = args[ 'class' ] ||  'container';
+	var div_id = args[ 'div_id' ] ? ' id="' + args[ 'div_id' ] + '"' : '';
+	var row_class = 'row';
+	if( container_class == 'container-fluid' ) {
+	    row_class = 'row-fluid';
+	}
+	
+	var txt = '<div class="' + container_class + '" ' + div_id + '>';
+	for( var i=0; i < rows.length; i++ ) {
+	    var row = rows[ i ];
+	    if( typeof row === 'object' ) {
+		txt += '<div class="' + row_class + '">';
+		for( var j=0; j < row.length; j++ ) {
+		    var col = row[ j ];
+		    var cls = 'span1';
+		    if( typeof col === 'object' ) {
+			cls = col[ 1 ];
+			col = col[ 0 ];
+		    }
+		    txt += '<div class="' + cls + '">' + col + '</div>';
+		}
+		txt += '</div>';
+	    } else {
+		txt += row;
+	    }
+	}
+	txt += '</div>';
+	return txt;
+    }, //container_div
+
+
+    modal_main_divs: {},
+
+    prep_modal_div: function( div_id, main_div_id ) {
+	if( $.yote.util.modal_main_divs[ main_div_id ] ) 
+	    return true;
+	$.yote.util.modal_main_divs[ main_div_id] = true;
+	$( div_id ).empty().append( '<div class="modal-header">' +
+				    ' <button type="button" class="close" id="_yote_close_modal_b" data-dismiss="modal" aria-hidden="true">&times;</button>' +
+				    '<h3 id="_yote_login_label"></h3>' +
+				    '</div>' +
+				    '<div class="modal-body" id="' + main_div_id + '"></div>' )
+	    .addClass( 'modal' ).addClass( 'hide' ).addClass( 'fade' )
+	    .attr( 'role', 'dialog' ).attr( 'aria-labelledby', "login_label" ).attr( 'aria-hidden', 'true' );
+	
+    }, //prep_modal_div
+
+
+    make_login_bar:function( args ) {
+	/*
+	  This builds a login bar with the simple ( so far ) format of a header bar like :   [ { brand icon/html }           { login menu } ]
+	*/
+
+	var cls_f = (function(arg) {
+	    return function( cls ) {
+		var brand_html             = arg[ 'brand_html' ];
+		var app                    = arg[ 'app' ];
+		var logged_in_function     = arg[ 'logged_in_function' ] || function( login ) {};
+		var not_logged_in_function = arg[ 'not_logged_in_function' ] || function() {};
+		var container_id           = arg[ 'container_id' ];
+		var modal_div              = args[ 'modal_div' ] || '#modal_div';
+
+		var my_login = $.yote.get_login();
+		var my_account = null;
+		if( app ) {
+		    my_account = app.account();
+		}
+		
+		var avatar_img = '';
+		var side_txt = '';
+		
+		var side_array = [];
+		
+		if( my_login ) {
+		    $( container_id ).empty().append( brand_html + 
+						      '<ul class="nav" role="navigation">' +
+						      // other navigation options go here
+						      '</ul>' +
+						      '<ul class="nav pull-right" role="navigation">' +
+						      '<li class="dropdown">' +
+						      '<a id="_yote_login-label" href="#" role="button" class="dropdown-toggle" data-toggle="dropdown">' +
+						      'logged in as <b>' + my_login.get_handle() + '</b>' +
+						      '<b class="caret"></b>' +
+						      '</a>' +
+						      '<ul class="dropdown-menu" role="menu" aria-labelledby="login-label">' +
+						      '<li><a id="_yote_accountsettings" tabindex="-1" href="#">Account Settings</a></li>' +
+						      '<li><a id="_yote_changelogin" tabindex="-1" href="#">Sign In as other user</a></li>' +
+						      '<li><a id="_yote_logout" tabindex="-1" href="#">Log Out</a></li>' +
+						      '</ul>'+
+						      '</li>' );
+		    $( '#_yote_accountsettings' ).click(function() { $.yote.util.edit_account( modal_div, app ); });
+
+		    var logout = function() {
+			$.yote.logout();
+			cls( cls );
+		    } //logout
+
+		    $( '#_yote_changelogin' ).click(function() {
+			logout();
+			$.yote.util.login( modal_div, cls );
+		    });
+		    $( '#_yote_logout' ).click(logout);
+		    
+		    logged_in_function( my_login, my_account );
+		}
+		else {
+		    $( container_id ).empty().append( '<a class="brand" href="./index.html">' + brand_html + '</a>' +
+						      '<ul class="nav" role="navigation">' +
+						      // other navigation options go here
+						      '</ul>' +
+						      '<ul class="nav pull-right" role="navigation">' +
+						      '<li class="dropdown">' +
+						      '<a id="_yote_login" href="#" role="button" class="dropdown-toggle" data-toggle="dropdown">' +
+						      'Log In' +
+						      '</a>' +
+						      '</li>' );
+		    $( '#_yote_login' ).click(function() {
+			$.yote.util.login( modal_div, cls );
+		    } );
+		    not_logged_in_function();
+		}
+	    } } )( args ); //cls_f
+
+	// invoke the call initially
+	(function(clsf){
+	    clsf( clsf );		
+	})( cls_f );
+	
+    }, //make_login_bar
+
+
+    forgot_password: function( modal_attach_point, login_function ) {
+	$.yote.util.prep_modal_div( modal_attach_point, 'modal_main_div' );
+	var input_div_txt = $.yote.util.container_div(
+	    [
+		[ [ '<div id="_yote_forgot_email_row_div">Email ' + $.yote.util.make_text( 'email_t' ) + '</div>', 'span3' ] ],
+		[ [ '<div id="_yote_forgot_msg"></div>', 'span3' ] ],
+		[ [ $.yote.util.make_button( '_yote_forgot_b', 'Recover' ), 'span2' ] ]
+	    ]
+	);
+	var  actions_panel_div = $.yote.util.container_div(
+	    [
+		[ [ $.yote.util.make_button( '_yote_login_b', 'Log In', 'btn btn-link' ), 'span2' ] ],
+		[ [ $.yote.util.make_button( '_yote_register_b', 'Create Account', 'btn btn-link' ), 'span2' ] ]
+	    ]
+	);
+	var div_txt = $.yote.util.container_div(
+	    [
+		[ [ input_div_txt, 'span4' ], [ actions_panel_div, 'span2' ] ]
+	    ]
+	);
+	$( '#modal_main_div' ).empty().append( div_txt );
+	$( '#modal_main_div' ).css( 'overflow', 'hidden' ); //disable scrolling within the modal
+	
+	$( '#_yote_login_label' ).empty().append( 'Recover Account' );
+	$( '#_yote_login_b' ).click( (function( attachpoint) { return function() { $.yote.util.login( attachpoint, login_function ); } })( modal_attach_point ) );
+	$( '#_yote_register_b' ).click( (function( attachpoint) { return function() { $.yote.util.register_account( attachpoint, login_function ); } })( modal_attach_point ) );
+	$( modal_attach_point ).on( 'shown', function() {
+	    $( '#_yote_email_t' ).focus();
+	} );
+	$( modal_attach_point ).modal();
+	$( '#_yote_email_t' ).focus();
+	$.yote.util.button_actions( { button : '#_yote_forgot_b',
+				      texts  : [ '#_yote_email_t' ],
+				      action : function() {
+					  $.yote.fetch_root().recover_password( { e : $( '#_yote_email_t' ).val(),
+										  u : window.location.href,
+										  t : location.protocol + '//' +
+										  location.hostname +
+										  (location.port ? ':'+location.port: '') + "/yote/reset.html"
+										},
+										function( data ) { //pass
+										    $.yote.util.info_div( '#_yote_forgot_msg', data );
+										    $( '#_yote_forgot_email_row_div' ).empty();
+										    $( '#_yote_forgot_b' ).empty().append( 'Close' );
+										    $( '#_yote_forgot_b' ).unbind( 'click' );
+										    $( '#_yote_forgot_b' ).click( function() {
+											$( modal_attach_point ).modal( 'toggle' );
+										    } );
+										},
+										function( data ) { //fail
+										    $.yote.util.info_div( '#_yote_forgot_msg', data );
+										}
+									      );
+				      },
+				      on_escape: function() {
+					  $( modal_attach_point ).modal( 'toggle' );
+				      }
+				    } );
+	
+    }, //forgot_password
+    
+    register_account:function( modal_attach_point, login_function ) {
+	$.yote.util.prep_modal_div( modal_attach_point, 'modal_main_div' );
+	var input_div_txt = $.yote.util.container_div(
+	    [
+		[ 'Handle', $.yote.util.make_text( '_yote_handle_t' ) ],
+		[ 'Email', $.yote.util.make_text( '_yote_email_t' ) ],
+		[ 'Password', $.yote.util.make_text( '_yote_pw_t', { use_type : 'password' } ) ],
+		[ 'Password (again)', [ $.yote.util.make_text( '_yote_pw2_t', { use_type : 'password' } ), 'span3' ], '<span id="_yote_pw2_msg"></span>' ],
+		[ [ '<div id="_yote_register_msg"></div>', 'span2' ] ],
+		[ [ $.yote.util.make_button( '_yote_register_b', 'Create Account', 'btn btn-primary' ), 'span2' ] ]
+	    ] );
+	var actions_panel_div = $.yote.util.container_div(
+	    [
+		[ [ $.yote.util.make_button( '_yote_login_b', 'Log In', 'btn btn-link' ), 'span2' ] ],
+		[ [ $.yote.util.make_button( '_yote_forgot_b', 'Forgot Password', 'btn btn-link' ), 'span2' ] ]
+	    ]
+	);
+	var div_txt = $.yote.util.container_div(
+	    [
+		[ [ input_div_txt, 'span4' ], [ actions_panel_div, 'span2' ] ]
+	    ]
+	);
+	$( '#modal_main_div' ).empty().append( div_txt );
+	$( '#modal_main_div' ).css( 'overflow', 'hidden' ); //disable scrolling within the modal
+	
+	/// for the login below, maybe move the create and forgot buttons to a new column on the right side?
+	$( '#_yote_login_label' ).empty().append( 'Create Account' );
+	$( '#_yote_login_b' ).click( (function( attachpoint) { return function() { $.yote.util.login( attachpoint, login_function ); } })( modal_attach_point ) );
+	$( '#_yote_forgot_b' ).click( (function( attachpoint) { return function() { $.yote.util.forgot_password( attachpoint, login_function ); } })( modal_attach_point ) );
+	$( modal_attach_point ).on( 'shown', function() {
+	    $( '#_yote_handle_t' ).focus();
+	} );
+	$( modal_attach_point ).modal();
+	$( '#_yote_handle_t' ).focus();
+	
+	$.yote.util.button_actions( { button : '#_yote_register_b',
+				      texts  : [ '#_yote_handle_t', '#_yote_email_t', '#_yote_pw_t', '#_yote_pw2_t' ],
+				      action : function() {
+					  $.yote.create_login( $( '#_yote_handle_t' ).val(),
+							       $( '#_yote_pw_t' ).val(),
+							       $( '#_yote_email_t' ).val(),
+							       function( data ) { //pass
+								   $( modal_attach_point ).modal( 'toggle' );
+								   login_function();
+							       },
+							       function( data ) { //fail
+								   $.yote.util.info_div( '#_yote_register_msg', data );
+							       }
+							     ) },
+				      extra_check : function() {
+					  var ans = $( '#_yote_pw_t' ).val() == $( '#_yote_pw2_t' ).val();
+					  if( ans ) {
+					      $( '#_yote_register_msg' ).empty();
+					      $( '#_yote_pw2_msg' ).empty();
+					  } else {
+					      $( '#_yote_pw2_msg' ).empty().append( 'Passwords do not match' );
+					  }
+					  return ans;
+				      },
+				      on_escape : function() { $( modal_attach_point ).modal( 'toggle' ); }
+				    } );
+	
+    }, //register_account
+
+    login: function( modal_attach_point, login_function ) {
+	$.yote.util.prep_modal_div( modal_attach_point, 'modal_main_div' );
+	var input_div_txt = $.yote.util.container_div(
+	    [
+		[ 'Handle', $.yote.util.make_text( '_yote_login_t' ) ],
+		[ 'Password', $.yote.util.make_text( '_yote_pw_t', { use_type : 'password' } ) ],
+		[ [ '<div id="_yote_login_msg"></div>', 'span2' ] ],
+		[ [ $.yote.util.make_button( '_yote_login_b', 'Log In', 'btn btn-primary' ), 'span2' ] ]
+	    ] );
+	var actions_panel_div = $.yote.util.container_div(
+	    [
+		[ [ $.yote.util.make_button( '_yote_register_b', 'Create Account', 'btn btn-link' ), 'span2' ] ],
+		[ [ $.yote.util.make_button( '_yote_forgot_b', 'Forgot Password', 'btn btn-link' ), 'span2' ] ]
+	    ]
+	);
+	var div_txt = $.yote.util.container_div(
+	    [
+		[ [ input_div_txt, 'span4' ], [ actions_panel_div, 'span2' ] ]
+	    ]
+	);
+	$( '#modal_main_div' ).empty().append( div_txt );
+	$( '#modal_main_div' ).css( 'overflow', 'hidden' ); //disable scrolling within the modal
+	
+	// set title of modal
+	$( '#_yote_login_label' ).empty().append( 'Log In' );
+	
+	// when opened, put the focus on the handle input
+ 	$( modal_attach_point ).on( 'shown', function() {
+	    $( '#_yote_login_t' ).focus();
+	} );
+	
+	// turn on the modal, put the focus on the handle input
+	$( modal_attach_point ).modal();
+	$( '#_yote_login_t' ).focus();
+	
+	// set up button actions
+	$( '#_yote_forgot_b' ).click( (function( attachpoint) { return function() { $.yote.util.forgot_password( attachpoint, login_function ); } })( modal_attach_point ) );
+	$( '#_yote_register_b' ).click( (function( attachpoint) { return function() { $.yote.util.register_account( attachpoint, login_function ); } })( modal_attach_point ) );
+	$.yote.util.button_actions( { button : '#_yote_login_b',
+				      texts  : [ '#_yote_login_t', '#_yote_pw_t' ],
+				      action : function() {
+					  $.yote.login( $( '#_yote_login_t' ).val(), $( '#_yote_pw_t' ).val(),
+							function( data ) { //pass
+							    $( modal_attach_point ).modal( 'toggle' );
+							    login_function( login_function );
+							},
+							function( data ) { //fail
+							    $.yote.util.info_div( '#_yote_login_msg', data, 'alert alert-warning' );
+							}
+						      ) }
+				    } );
+    }, //login
+    
+    edit_account: function( modal_attach_point, app ) {
+	$.yote.util.prep_modal_div( modal_attach_point, 'modal_main_div' );
+	// function to use when the file is selected. it both resets the file selector and shows the avatar image
+	function file_change_func() {
+	    account.upload_avatar( { avatar_file : $.yote.upload( '#_yote__yote_fileup' ),
+				     p : $( '#_yote_cur_pw_t ' ).val()
+				   },
+				   function( data ) { //success
+				       $( '#_yote_ch_ava_div' ).empty()
+					   .append( '<img src=' + account.get_avatar().Url() + '>' );
+				       $( '#_yote_ava_div' ).empty().append( '<img height=70 width=70 src="' + account.get_avatar().Url() + '">' )
+				       $.yote.util.info_div( '#_yote_change_msg_div', data, 'alert alert-success well' );
+				   },
+				   function( data ) { //fail
+				       $.yote.util.info_div( '#_yote_change_msg_div', data, 'alert alert-error well' );
+				   }
+				 );
+	    $( '#_yote_ch_file_div' ).empty().append( '<input type="file" id="_yote_fileup" name="file">' );
+	    $( '#_yote_fileup' ).change( file_change_func );
+	} //edit_account -> file_change_func
+	
+	// find avatar image if any
+	var account, ava_img = 'Upload Avatar';
+	if( app ) {
+	    account = app.account();
+	    console.log( [ 'acct', account, app ] );
+	    if( account.get( 'avatar' ) ) {
+		ava_img = '<img height=70 width=70 src="' + account.get_avatar().Url() + '">';
+	    }
+	} else {
+	    var login = $.yote.get_login();
+	    if( login ) {
+		if( login.get( 'avatar' ) ) {
+		    ava_img = '<img height=70 width=70 src="' + login.get_avatar().Url() + '">';
+		}
+	    }
+	}
+	
+	// basic layout of modal container
+	div_txt = $.yote.util.container_div(
+	    [
+		[ 'Current Password', $.yote.util.make_text( '_yote_cur_pw_t', { use_type : 'password' } ) ],
+		'<hr>',
+		[ 'New Password', $.yote.util.make_text( '_yote_new_pw_t', { use_type : 'password' } ) ],
+		[ 'New Password (again)', [ $.yote.util.make_text( '_yote_new_pw2_t', { use_type : 'password' } ), 'span3' ],
+		  $.yote.util.make_button( '_yote_update_pw_b', 'Update Password' )  ],
+		'<hr>',
+		[ 'Email', [ $.yote.util.make_text( '_yote_new_email_t' ), 'span3' ], $.yote.util.make_button( '_yote_update_em_b', 'Update' ) ],
+		'<hr>',
+		[ '<div id="ch_ava_div">' + ava_img + '</div>',
+		  '<div id="ch_file_div"><input type="file" id="_yote_fileup" name="file"></div>' ],
+		[ [ '<div id="change_msg_div"></div>', 'span3' ] ]
+	    ] );
+	$( '#modal_main_div' ).empty().append( div_txt );
+	
+	// set the title of the modal
+	$( '#_yote_login_label' ).empty().append( 'Edit Account' );
+	
+	// actions
+	$( '#_yote_fileup' ).change( file_change_func );
+	$.yote.util.button_actions( '#_yote_update_pw_b', [ '#_yote_cur_pw_t', '#_yote_new_pw_t', '#_yote_new_pw2_t' ], function() {
+	    $.yote.login_obj.reset_password( { op : $( '#_yote_cur_pw_t' ).val(),
+					       p  : $( '#_yote_new_pw_t' ).val(),
+					       p2 : $( '#_yote_new_pw2_t' ).val() },
+					     function (succmsg) {
+						 $.yote.util.info_div( '#_yote_change_msg_div', succmsg, 'alert alert-success well' );
+					     },
+					     function (failmsg) {
+						 $.yote.util.info_div( '#_yote_change_msg_div', failmsg, 'alert alert-error well' );
+					     }
+					   );
+	} ); //update_pw_b
+	$.yote.util.button_actions( '#_yote_update_em_b', [ '#_yote_cur_pw_t', '#_yote_new_email_t' ], function() {
+	    $.yote.login_obj.reset_email( { pw    : $( '#_yote_cur_pw_t' ).val(),
+					    email : $( '#_yote_new_email_t' ).val() },
+					  function (succmsg) {
+					      $.yote.util.info_div( '#_yote_change_msg_div', succmsg, 'alert alert-success well' );
+					  },
+					  function (failmsg) {
+					      $.yote.util.info_div( '#_yote_change_msg_div', failmsg, 'alert alert-error well' );
+					  }
+					);
+	} ); //update_email_b
+	
+	// show the modal and focus the default input
+	$( modal_attach_point ).on( 'shown', function() {
+	    $( '#_yote_cur_pw_t' ).focus();
+	    $( '#_yote_close_modal_b' ).attr( 'disabled', false );
+	} );
+	$( modal_attach_point ).modal();
+	$( '#_yote_cur_pw_t' ).focus();
+    } //edit_account
 
 }//$.yote.util

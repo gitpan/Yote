@@ -15,10 +15,15 @@ use vars qw($VERSION);
 
 $VERSION = '0.01';
 
-sub init {
+sub _init {
     my $self = shift;
     $self->set_yote_obj( new Yote::Test::TestAppNoLogin() );
     $self->get_yote_obj()->set_name( "INITY" );
+}
+
+sub _extra_fetch {
+    my $self = shift;
+    return [$self->get_yote_obj()];	
 }
 
 sub _allows {
@@ -70,9 +75,13 @@ sub nologin_obj {
 sub array {
     my( $self, $data, $acct ) = @_;
     die "Need account" unless $acct;
-    return [ 'A', { inner => [ 'Juan', { peanut => 'Butter', ego => $self->get_yote_obj() }] }, $self->get_yote_obj()  ];
+    return [ 'A', { inner => [ 'Juan', { peanut => 'Butter', ego => $self->get_yote_obj() }] }, $self->get_yote_obj(),
+	     [ qw/ b a d e f c / ]
+	];
 }
 
+
+# @TODO - should not have a sub starting with get_. refactor test
 sub get_hash {
     my( $self, $data, $acct_root, $acct ) = @_;
     die "Need account" unless $acct;

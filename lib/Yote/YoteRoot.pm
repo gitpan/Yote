@@ -1,7 +1,7 @@
 package Yote::YoteRoot;
 
-use Yote::Cron;
 use Yote::Login;
+use MIME::Lite;
 
 use base 'Yote::AppRoot';
 
@@ -10,103 +10,22 @@ our $EMAIL_CACHE = {};
 
 use strict;
 
-sub init {
+
+# ------------------------------------------------------------------------------------------
+#      * INIT METHODS *
+# ------------------------------------------------------------------------------------------
+sub _init {
     my $self = shift;
     $self->set_apps({});
     $self->set__handles({});
     $self->set__emails({});
-    $self->set__crond( new Yote::Cron() );
-} #init
-
-sub fetch_app_by_class {
-    my( $self, $data ) = @_;
-    my $app = $self->get_apps()->{$data};
-    unless( $app ) {
-        eval("use $data");
-        die $@ if $@;
-        $app = $data->new();
-        $self->get_apps()->{$data} = $app;
-    }
-    return $app;
-} #fetch_app_by_class
-
-#
-# Used to wipe and reset a whole app's data. Use with caution
-# and can only be used by the superuser.
-#
-sub purge_app {
-    my( $self, $data, $account ) = @_;
-    if( $account->get__is_root() ) {
-	$self->_purge_app( $data );
-	return "Purged '$data'";
-    }
-    die "Permissions Error";
-} #purge_app
-
-sub _purge_app {
-    my( $self, $app ) = @_;
-    my $apps = $self->get_apps();
-    return delete $apps->{$app};
-} #_purge_app
-
-sub number_of_accounts {
-    return Yote::ObjProvider::xpath_count( "/_handles" );
-} #number_of_accounts
-
-#
-# Returns this root object.
-#
-sub fetch_root {
-    my $root = Yote::ObjProvider::fetch( 1 );
-    unless( $root ) {
-	$root = new Yote::YoteRoot();
-    }
-    return $root;
-}
-
-#
-# Fetches object by id
-#
-sub fetch {
-    my( $self, $data, $account ) = @_;
-    my $obj = Yote::ObjProvider::fetch( $data );
-    if( $self->_account_can_access( $account, $obj ) ) {
-        return $obj;
-    }
-    die "Access Error";
-} #fetch
+    $self->set__application_lib_directories( [] );
+} #_init
 
 
-#
-# Validates that the given credentials are given
-#   (client side) use : login({h:'handle',p:'password'});
-#             returns : { l => login object, t => token }
-#
-sub login {
-    my( $self, $data ) = @_;
-
-    my $ip = $data->{_ip};
-    if( $data->{h} ) {
-        my $login = Yote::ObjProvider::xpath("/_handles/$data->{h}");
-        if( $login && ($login->get__password() eq $self->_encrypt_pass( $data->{p}, $login) ) ) {
-            return { l => $login, t => $self->_create_token( $login, $ip ) };
-        }
-    }
-    die "incorrect login";
-} #login
-
-sub logout {
-    my( $self, $data, $acct ) = @_;
-    if( $acct ) {
-	my $login = $acct->get_login();
-	$login->set__token();
-    }
-} #logout
-
-sub flush_credential_cache {
-    $EMAIL_CACHE = {};
-    $HANDLE_CACHE = {};
-} #flush_credential_cache
+# ------------------------------------------------------------------------------------------
+#      * PUBLIC METHODS *
+# ------------------------------------------------------------------------------------------
 
 
 #
@@ -115,9 +34,7 @@ sub flush_credential_cache {
 #             returns : { l => login object, t => token }
 #
 sub create_login {
-    my( $self, $args ) = @_;
-
-    my $ip = $args->{_ip};
+    my( $self, $args, $dummy, $ip ) = @_;
 
     #
     # validate login args. Needs handle (,email at some point)
@@ -160,12 +77,10 @@ sub create_login {
 
         $new_login->set__time_created( time() );
 
-        $new_login->set__password( $self->_encrypt_pass($password, $new_login) );
+        $new_login->set__password( Yote::ObjProvider::encrypt_pass($password, $new_login) );
 
-        my $logins = $self->get__handles();
-        $logins->{ $handle } = $new_login;
-        my $emails = $self->get__emails();
-        $emails->{ $email } = $new_login;
+	Yote::ObjProvider::xpath_insert( "/_emails/$email", $new_login );
+	Yote::ObjProvider::xpath_insert( "/_handles/$handle", $new_login );
 	
         return { l => $new_login, t => $self->_create_token( $new_login, $ip ) };
     } #if handle
@@ -173,6 +88,181 @@ sub create_login {
     die "no handle given";
 
 } #create_login
+#
+# Fetches object by id
+#
+sub fetch {
+    my( $self, $data, $account ) = @_;
+    die "Access Error" unless $account;
+
+    if( ref( $data ) eq 'ARRAY' ) {
+	my $login = $account->get_login();
+	return [ map { Yote::ObjProvider::fetch( $_ ) } grep { $Yote::ObjProvider::LOGIN_OBJECTS->{ $login->{ID} }{ $_ } } @$data ];
+    } 
+    return [ Yote::ObjProvider::fetch( $data ) ];
+
+} #fetch
+#
+# Returns a list starting with the app object, followed by objects that the app wants to bring with
+#
+sub fetch_app_by_class {
+    my( $self, $data ) = @_;
+    my $app = $self->get_apps()->{$data};
+    unless( $app ) {
+        eval("use $data");
+        die $@ if $@;
+        $app = $data->new();
+        $self->get_apps()->{$data} = $app;
+    }
+    return [$app,@{$app->_extra_fetch()}];
+} #fetch_app_by_class
+
+
+#
+# Returns this root object.
+#
+sub fetch_root {
+    my $root = Yote::ObjProvider::fetch( 1 );
+    unless( $root ) {
+	$root = new Yote::YoteRoot();
+    }
+    return $root;
+}
+
+sub flush_credential_cache {
+    $EMAIL_CACHE = {};
+    $HANDLE_CACHE = {};
+} #flush_credential_cache
+
+#
+# Returns a token for non-logging in use.
+#
+sub guest_token {
+    my $ip = shift;
+    my $token = int( rand 9 x 10 );
+    $Yote::ObjProvider::IP_TO_GUEST_TOKEN->{$ip} = {$token => time()}; # @TODO - make sure this and the LOGIN_OBJECTS cache is purged regularly. cron maybe?
+    $Yote::ObjProvider::GUEST_TOKEN_OBJECTS->{$token} = {};  #memory leak? @todo - test this
+
+    # @TODO write a Cache class to hold onto objects, with an interface like fetch( obj_id, login, guest_token )
+
+    return $token;
+} #guest_token
+
+#
+# Validates that the given credentials are given
+#   (client side) use : login({h:'handle',p:'password'});
+#             returns : { l => login object, t => token }
+#
+sub login {
+    my( $self, $data, $dummy, $ip ) = @_;
+
+    if( $data->{h} ) {
+        my $login = Yote::ObjProvider::xpath("/_handles/$data->{h}");
+        if( $login && ($login->get__password() eq Yote::ObjProvider::encrypt_pass( $data->{p}, $login) ) ) {
+            return { l => $login, t => $self->_create_token( $login, $ip ) };
+        }
+    }
+    die "incorrect login";
+} #login
+
+sub logout {
+    my( $self, $data, $acct ) = @_;
+    if( $acct ) {
+	my $login = $acct->get_login();
+	$login->set__token();
+    }
+} #logout
+#
+# Used to wipe and reset a whole app's data. Use with caution
+# and can only be used by the superuser.
+#
+sub purge_app {
+    my( $self, $data, $account ) = @_;
+    if( $account->get__is_root() ) {
+	$self->_purge_app( $data );
+	return "Purged '$data'";
+    }
+    die "Permissions Error";
+} #purge_app
+
+
+
+
+#
+# Sends an email to the address containing a link to reset password.
+#
+sub recover_password {
+    my( $self, $args ) = @_;
+
+    my $email    = $args->{e};
+    my $from_url = $args->{u};
+    my $to_reset = $args->{t};
+
+    my $login = Yote::ObjProvider::xpath( "/_emails/$email" );
+
+    if( $login ) {
+        my $now = time();
+        if( $now - $login->get__last_recovery_time() > (60*15) ) { #need to wait 15 mins
+            my $rand_token = int( rand 9 x 10 );
+            my $recovery_hash = $self->get__recovery_logins({});
+            my $times = 0;
+            while( $recovery_hash->{$rand_token} && ++$times < 100 ) {
+                $rand_token = int( rand 9 x 10 );
+            }
+            if( $recovery_hash->{$rand_token} ) {
+                die "error recovering password";
+            }
+            $login->set__recovery_from_url( $from_url );
+            $login->set__last_recovery_time( $now );
+            $login->set__recovery_tries( $login->get__recovery_tries() + 1 );
+            $recovery_hash->{$rand_token} = $login;
+            my $link = "$to_reset?t=$rand_token";
+	    use Mail::Sender;
+	    my $sender = new Mail::Sender( {
+		smtp => 'localhost',
+		from => 'yote@localhost',
+					   } );
+	    $sender->MailMsg( { to => $email,
+				 subject => 'Password Recovery',
+				 msg => "<h1>Yote password recovery</h1> Click the link <a href=\"$link\">$link</a>",
+			       } );
+	    
+		
+        }
+	else {
+            die "password recovery attempt failed";
+        }
+    }
+    return "password recovery initiated";
+} #recover_password
+
+#
+# reset by a recovery link.
+#
+sub recovery_reset_password {
+    my( $self, $args ) = @_;
+
+    my $newpass        = $args->{p};
+    my $newpass_verify = $args->{p2};
+
+    die "Passwords don't match" unless $newpass eq $newpass_verify;
+    
+    my $rand_token     = $args->{t};
+    
+    my $recovery_hash = $self->get__recovery_logins({});
+    my $login = $recovery_hash->{$rand_token};
+    if( $login ) {
+        my $now = $login->get__last_recovery_time();
+        delete $recovery_hash->{$rand_token};
+        if( ( time() - $now ) < 3600 * 24 ) { #expires after a day
+            $login->set__password( Yote::ObjProvider::encrypt_pass( $newpass, $login ) );
+            return $login->get__recovery_from_url();
+        }
+    }
+    die "Recovery Link Expired or not valid";
+
+} #recovery_reset_password
+
 
 #
 # Removes a login. Need not only to be logged in, but present all credentials
@@ -180,14 +270,13 @@ sub create_login {
 #             returns : "deleted account"
 #
 sub remove_login {
-    my( $self, $args, $acct ) = @_;
-
-    my $ip = $args->{_ip};
+    my( $self, $args, $acct, $ip ) = @_;
 
     my $login = $acct->get_login();
 
+
     if( $login && 
-        $self->_encrypt_pass($args->{p}, $login) eq $login->get__password() &&
+        Yote::ObjProvider::encrypt_pass($args->{p}, $login) eq $login->get__password() &&
         $args->{h} eq $login->get_handle() &&
         $args->{e} eq $login->get_email() &&
         ! $login->get_is__first_login() ) 
@@ -203,81 +292,9 @@ sub remove_login {
     
 } #remove_login
 
-
-#
-# Sends an email to the address containing a link to reset password.
-#
-sub recover_password {
-    my( $self, $args ) = @_;
-
-    my $email    = $args->{e};
-    my $from_url = $args->{u};
-    my $to_reset = $args->{t};
-
-    my $login = Yote::ObjProvider::xpath( "/emails/$email" );
-    if( $login ) {
-        my $now = time();
-        if( $now - $login->get__last_recovery_time() > (60*15) ) { #need to wait 15 mins
-            my $rand_token = int( rand 9 x 10 );
-            my $recovery_hash = $self->get_recovery_logins({});
-            my $times = 0;
-            while( $recovery_hash->{$rand_token} && ++$times < 100 ) {
-                $rand_token = int( rand 9 x 10 );
-            }
-            if( $recovery_hash->{$rand_token} ) {
-                die "error recovering password";
-            }
-            $login->set__recovery_token( $rand_token );
-            $login->set_recovery_from_url( $from_url );
-            $login->set_last_recovery_time( $now );
-            $login->set_recovery_tries( $login->get_recovery_tries() + 1 );
-            $recovery_hash->{$rand_token} = $login;
-            my $link = "$to_reset?t=$rand_token&p=".MIME::Base64::encode($from_url);
-            # email
-            my $msg = MIME::Lite->new(
-                From    => 'yote@127.0.0.1',
-                To      => $email,
-                Subject => 'Password Recovery',
-                Type    => 'text/html',
-                Data    => "<h1>Yote password recovery</h1> Click the link <a href=\"$link\">$link</a>",
-                );
-            $msg->send();
-        } else {
-            die "password recovery attempt failed";
-        }
-    }
-    return "password recovery initiated";
-} #recover_password
-
-#
-# Can either be reset by logged in account, or by a recovery link.
-#
-sub reset_password {
-    my( $self, $args ) = @_;
-
-    my $newpass        = $args->{p};
-    my $newpass_verify = $args->{p2};
-
-    die "Passwords don't match" unless $newpass eq $newpass_verify;
-    
-    my $rand_token     = $args->{t};
-    
-    my $recovery_hash = $self->get_recovery_logins({});
-    my $acct = $recovery_hash->{$rand_token};
-    if( $acct ) {
-        my $login = $acct->get_login();
-        my $now = $acct->get_last_recovery_time();
-        delete $recovery_hash->{$rand_token};
-        if( ( time() - $now ) < 3600 * 24 ) { #expires after a day
-            $login->set__password( $self->_encrypt_pass( $newpass, $login ) );
-            $login->set__recovery_token( undef );
-            return "Password Reset";
-        }
-    }
-    die "Recovery Link Expired or not valid";
-
-} #reset_password
-
+# ------------------------------------------------------------------------------------------
+#      * PRIVATE METHODS *
+# ------------------------------------------------------------------------------------------
 
 #
 # Create token and store with the account and return it.
@@ -289,4 +306,58 @@ sub _create_token {
     return $login->{ID}.'-'.$token;
 }
 
+sub _purge_app {
+    my( $self, $app ) = @_;
+    my $apps = $self->get_apps();
+    return delete $apps->{$app};
+} #_purge_app
+
+
 1;
+
+__END__
+
+=head1 NAME
+
+Yote::YoteRoot
+
+=head1 DESCRIPTION
+
+The yote root is the main app of the class. It is also always object id 1 and sits at the head of the yote data tree. Yote::YoteRoot is a subclass of Yote::AppRoot.
+
+=head1 DATA 
+
+=head1 INIT METHODS
+
+=over 4
+
+=item new 
+
+=item init - takes a hash of args, passing them to a new Yote::SQLite object and starting it up.
+
+=back
+
+=head1 PUBLIC API METHODS
+
+=over 4
+
+=item create_login( args )
+
+Create a login with the given client supplied args : h => handle, e => email, p => password.
+This checks to make sure handle and email address are not already taken. 
+This is invoked by the javascript call $.yote.create_login( handle, password, email )
+
+=back
+
+=head1 AUTHOR
+
+Eric Wolf
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (C) 2012 Eric Wolf
+
+This module is free software; it can be used under the same terms as perl
+itself.
+
+=cut
