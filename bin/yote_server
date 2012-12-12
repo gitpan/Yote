@@ -8,25 +8,28 @@
 use strict;
 
 use Carp;
-use Config::Simple;
 
 use Yote::WebAppServer;
 use Yote::SQLiteIO;
 use File::Pid;
+use Yote::ConfigData;
 
-use constant YOTE_ROOT => "/usr/local/yote";
+my $var_dir = Yote::ConfigData->config( 'yote_var_dir' );
+my $base_dir = Yote::ConfigData->config( 'yote_base_dir' );
+my $run_dir = Yote::ConfigData->config( 'yote_run_dir' );
+my $port = Yote::ConfigData->config( 'port' );
 
-push( @INC, YOTE_ROOT + "/lib" );
+push( @INC, "$base_dir/lib" );
 
 $SIG{ __DIE__ } = sub { Carp::confess( @_ ) };
 
-my $pidfile = File::Pid->new( { file => "/usr/local/yote/yote.pid" } );
+my $pidfile = File::Pid->new( { file => "$run_dir/yote.pid" } );
+
 my $s = new Yote::WebAppServer;
 
 $SIG{TERM} = sub { 
     $s->shutdown();
-    print STDERR "Shutting down due to term
-";
+    print STDERR "Shutting down due to term\n";
     $pidfile->remove();
     exit;
 };
@@ -45,15 +48,13 @@ $SIG{CHLD} = sub {
 
 $SIG{PIPE} = sub {};
 
-my $sqlitefile = YOTE_ROOT + "/data/SQLite.yote.db";
-my $webroot = YOTE_ROOT + "/html";
+my $sqlitefile = "$var_dir/SQLite.yote.db";
+my $webroot = "$base_dir/html";
 unless( -e $sqlitefile ) {
     my $sqlite = new Yote::SQLiteIO( sqlitefile => $sqlitefile );
     $sqlite->ensure_datastore();
 }
-my( %config ) = ( port       => 8008, 
-		  root_dir   => YOTE_ROOT,
-		  data_dir   => YOTE_ROOT . "/data",
+my( %config ) = ( port       => $port, 
 		  webroot    => $webroot,
 		  datastore  => 'Yote::SQLiteIO', 
 		  sqlitefile => $sqlitefile );
@@ -62,7 +63,7 @@ my $do_start = 1;
 while( @ARGV ) {
     my $first = shift @ARGV;
     if($first eq '--shutdown') {
-	if( -e YOTE_ROOT + '/yote.pid' && $pidfile->running() ) {
+	if( -e "$run_dir/yote.pid" && $pidfile->running() ) {
 	    $pidfile->pid->kill();
 	}
 	$pidfile->remove();
@@ -70,15 +71,14 @@ while( @ARGV ) {
         exit;
     }
     elsif( $first eq '--version' || $first eq '-V' ) {
-	print "
-";
+	print "$Yote::VERSIONn";
 	exit;
     }
     elsif( $first eq '--restart' ) {
 	#
 	# kill any old servers hanging around
 	#
-	if( -e YOTE_ROOT + '/yote.pid' && $pidfile->running() ) {
+	if( -e "$run_dir/yote.pid" && $pidfile->running() ) {
 	    $pidfile->pid->kill();
 	}
 	$pidfile->write();
@@ -92,10 +92,10 @@ while( @ARGV ) {
 	$config{$1} = shift @ARGV;
     }
     else {
-	print "yote_server <options>\n".join( "\n\t*", ('--shutdown : stops yote server', '--restart : restarts yote server',
+       print  "yote_server <options>n".join( "\n\t*", ('--shutdown : stops yote server', '--restart : restarts yote server',
 							'--port=<port> : assigns the yote server to run on specified port',
 							'--datastore=<datastore package name> : use data store other than sqlite',
-							'--sqlitefile=<filename> : specify different sqlite file' ) );
+							'--sqlitefile=<filename> : specify different sqlite file' ) )."\n";
 	exit 0;
     }
 } #while args
@@ -104,7 +104,7 @@ while( @ARGV ) {
 # Check to make sure no processes are still hanging around.
 #
 if( $do_start ) {
-    if( -e YOTE_ROOT + '/yote.pid' && $pidfile->running() ) {
+    if( -e "$run_dir/yote.pid" && $pidfile->running() ) {
         $pidfile->pid->kill();
     }
 }
@@ -112,8 +112,9 @@ if( $do_start ) {
 #
 # Normal start
 #
-#`echo $$ > $pidfile`;
 $pidfile->write();
 
 $s->start_server( %config );
+
+__END__
 
