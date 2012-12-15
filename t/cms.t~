@@ -1,0 +1,36 @@
+#!env perl
+
+use strict;
+
+use Yote::Util::CMS;
+
+
+use Data::Dumper;
+use File::Temp qw/ :mktemp /;
+use File::Spec::Functions qw( catdir updir );
+use Test::More;
+use Test::Pod;
+
+use Carp;
+$SIG{ __DIE__ } = sub { Carp::confess( @_ ) };
+
+# -----------------------------------------------------
+#               init
+# -----------------------------------------------------
+
+my( $fh, $name ) = mkstemp( "/tmp/SQLiteTest.XXXX" );
+$fh->close();
+Yote::ObjProvider::init(
+    datastore      => 'Yote::SQLiteIO',
+    sqlitefile     => $name,
+    );
+my $db = $Yote::ObjProvider::DATASTORE->database();
+test_suite( $db );
+
+done_testing();
+
+unlink( $name );
+
+sub test_suite {
+    my $db = shift;
+}
