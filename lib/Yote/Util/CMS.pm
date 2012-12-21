@@ -6,6 +6,53 @@ use base 'Yote::Obj';
 
 use Time::Piece;
 
+sub _init {
+    my $self = shift;
+    $self->set_is_template( 1 ); # is a CMS template if on by default.
+    $self->set__date_nodes( [] );
+    $self->set__path_nodes( {} );
+    $self->set__traits( {} );
+    $self->set__trait_order( [qw/ test lang region /] );
+
+    # to set the root node. Nodes created beyond this one will have their 
+    #root set to this root
+    $self->set__root( $self );
+}
+
+sub _is__root {
+    my $self = shift;
+    return $self->_is( $self->get__root() );
+}
+
+#
+# Return the content for a node. If the node has the template flag, then <<path>> will be replaced with CMS content.
+#
+sub content {
+    my( $self, $data, $acct, $env, $seen ) = @_;
+    $seen ||= {};
+    my $working_node = $self->fetch_content_node( $data, $acct );
+    return '' if $seen->{ $working_node->{ID} }; # no recursive templating
+    $seen->{ $working_node->{ID} } = 1;
+    my $content = $working_node->get_content();
+    return $content unless $working_node->get_is_template();
+    my $start_idx = index( $content, "<<" );
+    while( $start_idx != -1 ) {
+	my $e_idx = index( $content, ">>" );
+	return $content if $e_idx == -1; #unclosed <<, so just return out
+	my $path = substr( $content, 2 + $start_idx, $e_idx - ( 2 + $start_idx ) );
+	my $val = $working_node->get__root()->content( {
+	    path => $path,
+	    lang => $data->{lang},
+	    starts => $data->{starts},
+	    ends => $data->{ends},
+	    region => $data->{region},
+						      }, $acct, $env, $seen );
+	$content = substr( $content, 0, $start_idx ) . $val  . substr( $content, $e_idx + 2 );
+	$start_idx = index( $content, "<<" );	
+    }
+    return $content;
+} #content
+
 sub fetch_specific_content_node {
     my( $self, $data, $acct ) = @_;
 
@@ -26,7 +73,7 @@ sub fetch_specific_content_node {
     
     # CHECK DATE
     if( $starts ) {
-	my( $date_node ) = sort { $a->get_start_time() gt $b->get_start_time() } grep { $_->get_start_time() le $starts } @{ $self->get__date_nodes( {} ) };
+	my( $date_node ) = sort { $a->get_start_time() gt $b->get_start_time() } grep { $_->get_start_time() le $starts } @{ $self->get__date_nodes() };
 	return undef unless $date_node;
 	return $date_node->fetch_specific_content_node( { lang   => $lang,
 							  region => $region, } );
@@ -59,26 +106,22 @@ sub fetch_content_node {
     # check if there is anything date specific
     my $now = $data->{starts} || localtime->strftime("%Y-%m-%d:%H:%M");
     my( $date_node ) = sort { $a->get_start_time() gt $b->get_start_time() } 
-                       grep { $_->get_start_time() le $now && ( ( ! $_->get_end_time() ) || $_->get_end_time() gt $now ) } @{$working_node->get__date_nodes( [] )};
+                       grep { $_->get_start_time() le $now && ( ( ! $_->get_end_time() ) || $_->get_end_time() gt $now ) } @{$working_node->get__date_nodes()};
     if( $date_node ) {
 	my $res = $date_node->fetch_content_node( $data, $acct );
 	return $res if $res;
     }
-
-    # check if there is anything language specific
-    my( $lang_node ) = $working_node->get__lang_nodes( {} )->{ $data->{lang} };
-    if( $lang_node ) {
-	my $res = $lang_node->fetch_content_node( $data, $acct );
-	return $res if $res;
+    for my $trait ( @{ $self->get__root()->get__trait_order() } ) {
+	if( $data->{ $trait } ) {
+	    my $trait_node = $working_node->get__traits()->{ $trait }{ $data->{ $trait } };
+	    if( $trait_node ) {
+		my $res = $trait_node->fetch_content_node( $data, $acct );
+		return $res if $res;
+	    }
+	}
     }
 
-    # check if there is anything region specific
-    my( $region_node ) = $working_node->get__region_nodes( {} )->{ $data->{region} };
-    if( $region_node ) {
-	my $res = $region_node->fetch_content_node( $data, $acct );
-	return $res if $res;
-    }
-    return $self;
+    return $working_node;
 
 } #fetch_content_node
 
@@ -86,24 +129,23 @@ sub attach_content {
     # specifically for textual content
     my( $self, $data, $acct ) = @_;
 
-    my $path    = $data->{path};
-    my $starts  = $data->{starts};
-    my $ends    = $data->{ends};
-    my $lang    = $data->{lang};
-    my $region  = $data->{region};
-    my $content = $data->{content};
+    my $path     = $data->{path};
+    my $starts   = $data->{starts};
+    my $ends     = $data->{ends};
+    my $traits   = $data->{traits} || [];
+    my $content  = $data->{content};
     my $mime_type = $data->{mime_type};
 
     if( $path ) {
-	my $path_node = $self->get__path_nodes( {} )->{ $path };
+	my $path_node = $self->get__path_nodes()->{ $path };
 	unless( $path_node ) {
 	    $path_node = new Yote::Util::CMS();
+	    $path_node->set__root( $self->get__root() );
 	    $self->get__path_nodes()->{ $path } = $path_node;
 	}
 	return $path_node->attach_content( { starts => $starts,
 					     ends   => $ends,
-					     lang   => $lang,
-					     region => $region,
+					     traits => $traits,
 					     content => $content,
 					     mime_type => $mime_type,
 					   } );
@@ -111,40 +153,35 @@ sub attach_content {
 
     # put these in in order of importance
     if( $starts ) {
-	my $date_nodes = $self->get__date_nodes( {} );
+	my $date_nodes = $self->get__date_nodes();
 	my( $date_node ) = grep { $_->get_start_time() eq $starts } @$date_nodes;
 	unless( $date_node ) {
 	    $date_node = new Yote::Util::CMS();
+	    $date_node->set__root( $self->get__root() );
 	    $date_node->set_start_time( $starts );
 	    $date_node->set_end_time( $ends ) if $ends;
 	    unshift @$date_nodes, $date_node;
 	}
-	return $date_node->attach_content( { lang    => $lang,
-					     region  => $region,
+	return $date_node->attach_content( { traits  => $traits,
 					     content => $content,
 					     mime_type => $mime_type,
 					   } );
     } #has starts
 
-    if( $lang ) {
-	my $lang_node = $self->get__lang_nodes( {} )->{ $lang };
-	unless( $lang_node ) {
-	    $lang_node = new Yote::Util::CMS();
-	    $self->get__lang_nodes()->{ $lang } = $lang_node;
+    if( @$traits ) {
+	my $root = $self->get__root();
+	my $r_traits = $root->get__trait_order();
+	# make sure these are in a normal search order
+	my( $trait, $value, @traits ) = @$traits;
+	my $trait_node = $self->get__traits()->{ $trait }{ $value };
+	unless( $trait_node ) {
+	    $trait_node = new Yote::Util::CMS();
+	    $trait_node->set__root( $self->get__root() );
+	    $self->get__traits()->{ $trait }{ $value } = $trait_node;
 	}
-	return $lang_node->attach_content( { region => $region, 
-					     content => $content,
-					     mime_type => $mime_type, } );
-    }
-    
-    if( $region ) {
-	my $region_node = $self->get__region_nodes( { } )->{ $region };
-	unless( $region_node ) {
-	    $region_node = new Yote::Util::CMS();
-	    $self->get__region_nodes()->{ $region } = $region_node;
-	}
-	return $region_node->attach_content( { content => $content,
-					       mime_type => $mime_type, } );
+	return $trait_node->attach_content( { traits   => \@traits,
+					      content  => $content,
+					      mime_type => $mime_type, } );
     }
 
     $self->set_mime_type( $mime_type );

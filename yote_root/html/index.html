@@ -15,7 +15,10 @@
     <link rel="stylesheet" href="/yote/css/ui-lightness/jquery-ui-1.8.23.custom.css" type="text/css" media="all" />
     <script>
     $().ready(function(){
-        
+	$.yote.init();
+	var news_app = $.yote.fetch_app('Yote::Util::Admin');
+	var cms = news_app.get_cms();
+	$( '#news' ).empty().append( cms.content( { path : 'news' } ) );
         var hello_app = $.yote.fetch_app('Yote::Test::Hello');
         function hello() {
             var result = hello_app.hello({ name:$('#txt').val() } );
@@ -47,8 +50,13 @@
     <DIV class="container">
       <DIV class="row">
 	<DIV class="span2">
-	  Todo
-	  NEWS
+	  <UL>
+	    <LI></LI>
+	    <LI>Feature Requests</LI>
+	    <LI>To Do</LI>
+	  </UL>
+	  <BR>
+	  <div id=news></div>
 	</DIV>
 	<DIV class="span10">
 	  <H2>What is Yote</H2>

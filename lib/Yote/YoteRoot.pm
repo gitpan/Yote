@@ -36,7 +36,7 @@ sub _init {
 #             returns : { l => login object, t => token }
 #
 sub create_login {
-    my( $self, $args, $dummy, $ip ) = @_;
+    my( $self, $args, $dummy, $env ) = @_;
 
     #
     # validate login args. Needs handle (,email at some point)
@@ -75,6 +75,7 @@ sub create_login {
         }
         $new_login->set_handle( $handle );
         $new_login->set_email( $email );
+	my $ip = $env->{REMOTE_ADDR};
         $new_login->set__created_ip( $ip );
 
         $new_login->set__time_created( time() );
@@ -94,9 +95,8 @@ sub create_login {
 # Fetches object by id
 #
 sub fetch {
-    my( $self, $data, $account ) = @_;
-    die "Access Error" unless $account;
-
+    my( $self, $data, $account, $env ) = @_;
+    die "Access Error" unless Yote::ObjManager::knows_dirty( ref( $data ) ? $data : [ $data ], undef, $account ? $account->get_login() : undef, $env->{GUEST_TOKEN} );
     if( ref( $data ) eq 'ARRAY' ) {
 	my $login = $account->get_login();
 	return [ map { Yote::ObjProvider::fetch( $_ ) } grep { $Yote::ObjProvider::LOGIN_OBJECTS->{ $login->{ID} }{ $_ } } @$data ];
@@ -156,9 +156,10 @@ sub guest_token {
 #             returns : { l => login object, t => token }
 #
 sub login {
-    my( $self, $data, $dummy, $ip ) = @_;
+    my( $self, $data, $dummy, $env ) = @_;
 
     if( $data->{h} ) {
+	my $ip = $env->{ REMOTE_ADDR };
         my $login = Yote::ObjProvider::xpath("/_handles/$data->{h}");
         if( $login && ($login->get__password() eq Yote::ObjProvider::encrypt_pass( $data->{p}, $login) ) ) {
             return { l => $login, t => $self->_create_token( $login, $ip ) };
@@ -272,8 +273,7 @@ sub recovery_reset_password {
 #             returns : "deleted account"
 #
 sub remove_login {
-    my( $self, $args, $acct, $ip ) = @_;
-
+    my( $self, $args, $acct, $env ) = @_;
     my $login = $acct->get_login();
 
 
