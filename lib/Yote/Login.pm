@@ -1,6 +1,7 @@
 package Yote::Login;
 
 use strict;
+use warnings;
 
 use base 'Yote::Obj';
 
@@ -36,6 +37,11 @@ sub reset_password {
     return "Password Reset";
 
 } #reset_password
+
+sub is_root {
+    my $self = shift;
+    return $self->get__is_root();
+} #is_root
 
 sub UploadAvatar {
     my( $self, $data ) = @_;

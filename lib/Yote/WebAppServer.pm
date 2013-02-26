@@ -1,6 +1,8 @@
 package Yote::WebAppServer;
 
 use strict;
+use warnings;
+no warnings 'uninitialized';
 
 use forks;
 use forks::shared;
@@ -55,7 +57,7 @@ sub init_server {
 
 sub do404 {
     my $self = shift;
-    $self->send_status( "404 Not Found" );
+    $self->send_status( "404" );
     print "Content-Type: text/html\n\nERROR : 404\n";
 }
 
@@ -103,11 +105,11 @@ sub process_http_request {
     $uri =~ s/\s+HTTP\S+\s*$//;
 
     my( @path ) = grep { $_ ne '' && $_ ne '..' } split( /\//, $uri );
-    print STDERR Data::Dumper->Dump(["PATH : '$path[0]'"]);
     if( $path[0] eq '_' || $path[0] eq '_u' ) { # _ is normal yote io, _u is upload file
+	my $path_start = shift @path;
 	my( $vars, $return_header );
 
-	if( $path[0] eq '_' ) {
+	if( $path_start eq '_' ) {
 	    my $CGI  = new CGI;
 	    $vars = $CGI->Vars();
 	    $return_header = "Content-Type: text/json\n\n";
@@ -118,8 +120,8 @@ sub process_http_request {
 	}
 
         my $action = pop( @path );
-        my $obj_id = int( pop( @path ) ) || 1;
-        my $app_id = int( pop( @path ) ) || 1;
+        my $obj_id = pop( @path );
+        my $app_id = pop( @path ) || Yote::ObjProvider::first_id();
         my $wait = $vars->{w};
 
         my $command = {
@@ -188,7 +190,7 @@ sub process_http_request {
     else { #serve up a web page
 	my $root = $self->{args}{webroot};
 	my $dest = join('/',@path);
-	if( -d "<$root/$dest" ) {
+	if( -d "$root/$dest" && ! -f "$root/$dest" ) {
 	    $dest .= '/index.html';
 	}
 	if( open( IN, "<$root/$dest" ) ) {
@@ -209,6 +211,7 @@ sub process_http_request {
             }
             close( IN );
 	} else {
+	    print STDERR Data::Dumper->Dump(["404",$@,$!,"<$root/$dest"]);
 	    $self->do404();
 	}
 	return;
@@ -351,6 +354,7 @@ sub _process_command {
 
 	# security check
 	unless( Yote::ObjManager::allows_access( $obj_id, $app, $login, $guest_token ) ) {
+	    print STDERR Data::Dumper->Dump(["TRIES TO ACCCESS $obj_id",$app,$login,$guest_token,$Yote::ObjManager::LOGIN_OBJS,$Yote::ObjManager::GUEST_OBJS]);
 	    die "Access Error";
 	}
 
@@ -417,8 +421,11 @@ sub _process_command {
 sub _translate_data {
     my( $val ) = @_;
 
-    if( ref( $val ) ) { #from javacript object, or hash. no fields starting with underscores accepted
+    if( ref( $val ) eq 'HASH' ) { #from javacript object, or hash. no fields starting with underscores accepted
         return { map {  $_ => _translate_data( $val->{$_} ) } grep { index( $_, '_' ) != 0 } keys %$val };
+    }
+    elsif( ref( $val ) eq 'ARRAY' ) { #from javacript object, or hash. no fields starting with underscores accepted
+        return [ map {  _translate_data( $_ ) } @$val ]; 
     }
     return undef unless $val;
     if( index($val,'v') == 0 ) {

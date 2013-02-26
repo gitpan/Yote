@@ -1,25 +1,29 @@
 package Yote::ObjManager;
 
 use strict;
+use warnings;
 
 $Yote::ObjManager::LOGIN_OBJS = {};
 $Yote::ObjManager::GUEST_OBJS = {};
 
 sub allows_access {
     my( $obj_id, $app, $login, $guest_token ) = @_;
-    print STDERR Data::Dumper->Dump([\@_,"ALLOWZ"]);
+
     unless( $obj_id ) {
-	return $app && $app->isa( 'Yote::AppRoot' );
+	return 1 if $app && $app->isa( 'Yote::AppRoot' );
     }
 
-    return 1 if $obj_id == 1;
+    return 1 if $obj_id eq Yote::ObjProvider::first_id() || ( $app && $obj_id eq $app->{ID} ) || ( $login && $obj_id eq $login->{ID} );
 
+    my $obj = Yote::ObjProvider::fetch( $obj_id );
+    return 1 unless $obj;
+    return 1 if ref( $obj ) !~/^(HASH|ARRAY)$/ && $obj->isa( 'Yote::AppRoot' );
 
     if( $login ) {
-	return $Yote::ObjManager::LOGIN_OBJS->{ $login->{ID} };
+	return $Yote::ObjManager::LOGIN_OBJS->{ $login->{ID} }{ $obj_id };
     }
 
-    return $Yote::ObjManager::GUEST_OBJS->{ $guest_token };
+    return $Yote::ObjManager::GUEST_OBJS->{ $guest_token }{ $obj_id };
     
 } #allows_access
 
@@ -31,12 +35,12 @@ sub knows_dirty {
 
 sub register_object {
     my( $obj_id, $login, $guest_token ) = @_;
-
+    die unless $obj_id;
     my $t = time();
     if( $login ) {
-	$Yote::ObjManager::LOGIN_OBJS->{ $login->{ID} }{ $_ } = $t;
+	$Yote::ObjManager::LOGIN_OBJS->{ $login->{ID} }{ $obj_id } = $t;
     } else {
-	$Yote::ObjManager::GUEST_OBJS->{ $guest_token }{ $_ } = $t;
+	$Yote::ObjManager::GUEST_OBJS->{ $guest_token }{ $obj_id } = $t;
     }
 
 } #register_object

@@ -115,21 +115,29 @@ $.yote.util = {
 	}
 	return $( '#' + idname );
     },
-    make_table:function() {
+    make_table:function(extra) {
+	var xtr = extra ? extra : '';
 	return {
-	    html:'<table>',
-	    add_header_row : function( arry ) {
-		this.html = this.html + '<tr>';
+	    html:'<table ' + xtr + '>',
+	    add_header_row : function( arry, extra_row, extra_headers ) {
+		var xtr_row = extra_row ? extra_row : '';
+		var xtr_headers = extra_headers ? extra_headers : '';
+		this.html = this.html + '<tr ' + xtr_row + '>';
 		for( var i=0; i<arry.length; i++ ) {
-		    this.html = this.html + '<th>' + arry[i] + '</th>';
+		    this.html = this.html + '<th ' + xtr_headers + '>' + arry[i] + '</th>';
 		}
 		this.html = this.html + '</tr>';
 		return this;
 	    },
-	    add_row : function( arry ) {
-		this.html = this.html + '<tr>';
+	    add_row : function( arry, extra_row, extra_headers ) {
+		var xtr_row = extra_row ? extra_row : '';
+		this.html = this.html + '<tr ' + xtr_row + '>';
 		for( var i=0; i<arry.length; i++ ) {
-		    this.html = this.html + '<td>' + arry[i] + '</td>';
+		    if( extra_headers ) {
+			this.html = this.html + '<td ' + extra_headers[i] + '>' + arry[i] + '</td>';
+		    } else {
+			this.html = this.html + '<td>' + arry[i] + '</td>';
+		    }
 		}
 		this.html = this.html + '</tr>';		
 		return this;
@@ -149,7 +157,135 @@ $.yote.util = {
 	}
     }, //make_table
 
+    make_paginatehash_table:function( arg ) {
+	return (function( args ){
+	    
+	    var ptab = {
+		obj       : args[ 'obj' ],
+		list_name : args[ 'list_name' ],
+		size      : args[ 'size' ] || 100,
+		col_names : args[ 'col_names' ],
+		title     : args[ 'title' ] || '',
+		col_funs  : args[ 'col_functions' ],
+		attach_point : args[ 'attach_point' ]
+	    };
+
+	    ptab[ 'show' ] = function( start_pos ) {
+		if( ptab[ 'attach_point' ] ) {
+		    $( ptab[ 'attach_point' ] ).empty().append( ptab.build_html( start_pos ) );
+		    $( '#forward_' + ptab.obj.id ).click(function(){
+			ptab.show( start_pos + ptab.size );
+		    });
+		    $( '#back_' + ptab.obj.id ).click(function(){
+			var x = start_pos - ptab.size;
+			ptab.show( x > 0 ? x : 0 );
+		    });
+
+		}
+	    };
+
+	    ptab[ 'build_html' ] = function(start_pos) {
+		var start = start_pos ? start_pos : 0;
+		var tab = $.yote.util.make_table();
+		if( ptab.col_names ) {
+		    tab.add_header_row( ptab.col_names );
+		}
+		var hash = ptab.obj[ 'paginate_hash' ]( [ ptab.list_name, ptab.size + 1, start ] );
+		var max = hash.length() < ptab.size ? hash.length() : ptab.size;
+		var keys = hash.keys();
+		for( var i=0; i < max ; i++ ) {
+		    var key = keys[ i ];
+		    var val = hash.get( key );
+		    if( ptab.col_funs ) {
+			var arry = [];
+			for( var j=0; j < ptab.col_funs.length; j++ ) {
+			    var fun = ptab.col_funs[ j ];
+			    arry.push( fun( key, val ) );
+			}
+			tab.add_row( arry );
+		    } 
+		    else {
+			tab.add_row( [ key, val ] );
+		    }
+		}
+		
+		var buf = ptab.title + tab.get_html();
+		
+		if( start > 0 ) {
+		    buf = buf + '<span id="back_' + ptab.obj.id + '" class="btn"><i class="icon-fast-backward"></i></span>';
+		    if( hash.length() > max ) {
+			buf = buf + '<span id="forward_' + ptab.obj.id + '" class="btn"><i class="icon-fast-forward"></i></span>';
+		    }
+		    else {
+			buf = buf + '<span class="btn"><i class="icon-fast-forward icon-white"></i></span>';
+		    }
+		} 
+		else {
+		    if( hash.length() > max ) {
+			buf = buf + '<span class="btn"><i class="icon-fast-backward icon-white"></i></span>';
+			buf = buf + '<span id="forward_' + ptab.obj.id + '" class="btn"><i class="icon-fast-forward"></i></span>';
+		    } else {
+			//nothing to do
+		    }
+		}
+/*
+		var list = ptab.obj[ 'paginate_hash' ]( [ ptab.list_name, ptab.size + 1, start ] );
+
+		var max = list.length() < ptab.size ? list.length() : ptab.size;
+		for( var i=0; i < max ; i++ ) {
+		    var pair = list.get( i );
+		    var key = pair.get( 0 );
+		    var val = pair.get( 1 );
+		    if( ptab.col_funs ) {
+			var arry = [];
+			for( var j=0; j < ptab.col_funs.length; j++ ) {
+			    var fun = ptab.col_funs[ j ];
+			    arry.push( fun( key, val ) );
+			}
+			tab.add_row( arry );
+		    } 
+		    else {
+			tab.add_row( [ key, val ] );
+		    }
+		}
+		
+		var buf = ptab.title + tab.get_html();
+		
+		if( start > 0 ) {
+		    buf = buf + '<span id="back_' + ptab.obj.id + '" class="btn"><i class="icon-fast-backward"></i></span>';
+		    if( list.length() > max ) {
+			buf = buf + '<span id="forward_' + ptab.obj.id + '" class="btn"><i class="icon-fast-forward"></i></span>';
+		    }
+		    else {
+			buf = buf + '<span class="btn"><i class="icon-fast-forward icon-white"></i></span>';
+		    }
+		} 
+		else {
+		    if( list.length() > max ) {
+			buf = buf + '<span class="btn"><i class="icon-fast-backward icon-white"></i></span>';
+			buf = buf + '<span id="forward_' + ptab.obj.id + '" class="btn"><i class="icon-fast-forward"></i></span>';
+		    } else {
+			//nothing to do
+		    }
+		}
+		*/
+		return buf;
+	    };
+	    
+	    ptab[ 'attach_to' ] = function( attach_point ) {
+		ptab[ 'attach_point' ] = attach_point;
+		ptab.show( 0 );
+	    };
+
+	    if( ptab[ 'attach_point' ] ) {
+		ptab.show( 0 );
+	    }
+
+	    return ptab;
+	})( arg );
+    }, //make_paginatehash_table
     
+
     button_actions:function( args ) {
 	var but         = args[ 'button' ];
 	var action      = args[ 'action' ] || function(){};
@@ -311,29 +447,30 @@ $.yote.util = {
 		if( app ) {
 		    my_account = app.account();
 		}
-		
+
 		var avatar_img = '';
 		var side_txt = '';
 		
 		var side_array = [];
 		
 		if( my_login ) {
-		    $( container_id ).empty().append( brand_html + 
-						      '<ul class="nav" role="navigation">' +
-						      // other navigation options go here
-						      '</ul>' +
-						      '<ul class="nav pull-right" role="navigation">' +
-						      '<li class="dropdown">' +
-						      '<a id="_yote_login-label" href="#" role="button" class="dropdown-toggle" data-toggle="dropdown">' +
-						      'logged in as <b>' + my_login.get_handle() + '</b>' +
-						      '<b class="caret"></b>' +
-						      '</a>' +
-						      '<ul class="dropdown-menu" role="menu" aria-labelledby="login-label">' +
-						      '<li><a id="_yote_accountsettings" tabindex="-1" href="#">Account Settings</a></li>' +
-						      '<li><a id="_yote_changelogin" tabindex="-1" href="#">Sign In as other user</a></li>' +
-						      '<li><a id="_yote_logout" tabindex="-1" href="#">Log Out</a></li>' +
-						      '</ul>'+
-						      '</li>' );
+		    $( container_id ).empty()
+			.append( brand_html + 
+//				 '<ul class="nav" role="navigation">' +
+				 // other navigation options go here
+//				 '</ul>' +
+				 '<ul class="nav pull-right" role="navigation">' +
+				 '<li class="dropdown">' +
+				 '<a id="_yote_login-label" href="#" role="button" class="dropdown-toggle" data-toggle="dropdown">' +
+				 'logged in as <b>' + my_login.get_handle() + '</b>' +
+				 '<b class="caret"></b>' +
+				 '</a>' +
+				 '<ul class="dropdown-menu" role="menu" aria-labelledby="login-label">' +
+				 '<li><a id="_yote_accountsettings" tabindex="-1" href="#">Account Settings</a></li>' +
+				 '<li><a id="_yote_changelogin" tabindex="-1" href="#">Sign In as other user</a></li>' +
+				 '<li><a id="_yote_logout" tabindex="-1" href="#">Log Out</a></li>' +
+				 '</ul>'+
+				 '</li>' );
 		    $( '#_yote_accountsettings' ).click(function() { $.yote.util.edit_account( modal_div, app ); });
 
 		    var logout = function() {
@@ -346,20 +483,13 @@ $.yote.util = {
 			$.yote.util.login( modal_div, cls );
 		    });
 		    $( '#_yote_logout' ).click(logout);
-		    
 		    logged_in_function( my_login, my_account );
 		}
 		else {
-		    $( container_id ).empty().append( '<a class="brand" href="./index.html">' + brand_html + '</a>' +
-						      '<ul class="nav" role="navigation">' +
-						      // other navigation options go here
-						      '</ul>' +
-						      '<ul class="nav pull-right" role="navigation">' +
-						      '<li class="dropdown">' +
-						      '<a id="_yote_login" href="#" role="button" class="dropdown-toggle" data-toggle="dropdown">' +
+		    $( container_id ).empty().append( '<div>' + brand_html +
+						      '<a id="_yote_login" href="#" role="button" aclass="pull-right" STYLE="margin-right:15px;height:auto;float:right;display:inline">' +
 						      'Log In' +
-						      '</a>' +
-						      '</li>' );
+						      '</a></div>' );
 		    $( '#_yote_login' ).click(function() {
 			$.yote.util.login( modal_div, cls );
 		    } );
@@ -373,13 +503,13 @@ $.yote.util = {
 	})( cls_f );
 	
     }, //make_login_bar
-
+//rgba(47, 139, 34, 0.59)
 
     forgot_password: function( modal_attach_point, login_function ) {
 	$.yote.util.prep_modal_div( modal_attach_point, 'modal_main_div' );
 	var input_div_txt = $.yote.util.container_div(
 	    [
-		[ [ '<div id="_yote_forgot_email_row_div">Email ' + $.yote.util.make_text( 'email_t' ) + '</div>', 'span3' ] ],
+		[ [ '<div id="_yote_forgot_email_row_div">Email ' + $.yote.util.make_text( '_yote_email_t' ) + '</div>', 'span3' ] ],
 		[ [ '<div id="_yote_forgot_msg"></div>', 'span3' ] ],
 		[ [ $.yote.util.make_button( '_yote_forgot_b', 'Recover' ), 'span2' ] ]
 	    ]

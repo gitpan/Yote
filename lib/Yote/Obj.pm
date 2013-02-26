@@ -1,7 +1,11 @@
 package Yote::Obj;
 
+use strict;
+use warnings;
+no warnings 'uninitialized';
+
 #
-# This is base Yote Object class. 
+# This is base class for all Yote objects. 
 #
 # It is a container class with fields and methods.
 #
@@ -26,7 +30,6 @@ package Yote::Obj;
 #   data may be written to if it starts with a capitol letter
 #
 
-use strict;
 
 use Yote::ObjManager;
 use Yote::ObjProvider;
@@ -111,7 +114,15 @@ sub _absorb {
 sub _is {
     my( $self, $obj ) = @_;
     return ref( $obj ) && ref( $obj ) eq ref( $self ) &&
-        Yote::ObjProvider::get_id( $obj ) == Yote::ObjProvider::get_id( $self );
+        Yote::ObjProvider::get_id( $obj ) eq Yote::ObjProvider::get_id( $self );
+}
+
+# 
+# Returns all xpaths for this object.
+#
+sub _paths_to_root {
+    my $self = shift;
+    return Yote::ObjProvider::paths_to_root( $self );
 }
 
 # 
@@ -164,7 +175,7 @@ sub __obj_to_response {
 	    $m = Yote::ObjProvider::package_methods( $ref );
         }
 
-	Yote::ObjManager::register_object( $use_id, $login, $guest_token );
+	Yote::ObjManager::register_object( $use_id, $login, $guest_token ) if $use_id;
 	return $m ? { a => ref( $self ), c => $ref, id => $use_id, d => $d, 'm' => $m } : { a => ref( $self ), c => $ref, id => $use_id, d => $d };
     } # if a reference
     return "v$to_convert";
@@ -190,7 +201,9 @@ sub __transform_data_no_id {
         return { map { $_ => $self->__obj_to_response( $item->{$_}, $login, $guest_token ) } keys %$item };
     }
     elsif( ref( $item ) ) {
-        return  Yote::ObjProvider::get_id( $item ); 
+        my $id = Yote::ObjProvider::get_id( $item ); 
+	Yote::ObjManager::register_object( $id, $login, $guest_token );
+	return $id;
     }
     else {
         return "v$item"; #scalar case
@@ -222,6 +235,23 @@ sub paginate {
 
 } #paginate
 
+sub paginate_hash {
+    my( $self, $data, $account ) = @_;
+    my( $list_name, $number, $start ) = @$data;
+
+    if( index( $list_name, '_' ) == 0 && ! $account->get_login()->is_root() ) {
+	die "permissions error";
+    }
+
+    return Yote::ObjProvider::paginate_xpath( $self->_path_to_root() . "/$list_name", $number, $start );
+
+} #paginate_hash
+
+sub _allows_update {
+    my( $self, $field, $account ) = @_;
+    return $field =~ /^[A-Z]/ || ( $account && $account->get_login()->get__is_root() );
+}
+
 #
 # Updates the object but only for capitolized keys that already exist.
 # public client method.
@@ -230,7 +260,7 @@ sub update {
     my( $self, $data, $account ) = @_;
     my $updated = {};
     for my $fld (keys %$data) {
-        next unless $fld =~ /^[A-Z]/ && defined( $self->{DATA}{$fld} );
+        next unless $self->_allows_update( $fld, $account ) && defined( $self->{DATA}{$fld} );
         my $inval = Yote::ObjProvider::xform_in( $data->{$fld} );
         Yote::ObjProvider::dirty( $self, $self->_id ) if $self->{DATA}{$fld} ne $inval;
         $self->{DATA}{$fld} = $inval;
@@ -267,7 +297,7 @@ sub AUTOLOAD {
             my $arry = $self->$get([]); # init array if need be
 	    for my $val ( @vals ) {
 		unless( grep { $val eq $_ } @$arry ) {
-		    push( @$arry, $val ) unless grep { $val eq $_ } @$arry;
+		    push @$arry, $val;
 		}
 	    }
 	};

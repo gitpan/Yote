@@ -11,7 +11,7 @@ use Yote::Test::TestAppNoLogin;
 use Yote::Test::TestAppNeedsLogin;
 use Yote::Test::TestDeepCloner;
 use Yote::Test::TestNoDeepCloner;
-use Yote::SQLiteIO;
+use Yote::MongoIO;
 
 use Data::Dumper;
 use File::Temp qw/ :mktemp /;
@@ -24,7 +24,7 @@ use Carp;
 $SIG{ __DIE__ } = sub { Carp::confess( @_ ) };
 
 BEGIN {
-    for my $class (qw/Obj Hash SQLiteIO/) {
+    for my $class (qw/Obj Hash MongoIO/) {
         use_ok( "Yote::$class" ) || BAIL_OUT( "Unable to load Yote::$class" );
     }
 }
@@ -33,28 +33,32 @@ BEGIN {
 #               init
 # -----------------------------------------------------
 
-my( $fh, $name ) = mkstemp( "/tmp/SQLiteTest.XXXX" );
-$fh->close();
-Yote::ObjProvider::init(
-    datastore      => 'Yote::SQLiteIO',
-    sqlitefile     => $name,
+my( $host, $port ) = ( 'localhost', 27017 );
+
+my $client = MongoDB::MongoClient->new(
+    host=> $host,
+    port=> $port,
     );
-my $db = $Yote::ObjProvider::DATASTORE->database();
+my $db = $client->get_database( 'yote_test' );
+$db->drop();
+
+Yote::ObjProvider::init(
+    datastore      => 'Yote::MongoIO',
+    datahost       => $host,
+    dataport       => $port,
+    databasename   => 'yote_test',
+    );
+
+$db = $Yote::ObjProvider::DATASTORE->database();
 test_suite( $db );
 
 done_testing();
 
-unlink( $name );
-
-sub query_line {
-    my( $db, $query, @args ) = @_;
-    my( @ret ) = $db->selectrow_array( $query, {}, @args );
-}
-
 sub test_suite {
     my $db = shift;
-
-
+    my $objcol = $db->get_collection( "objects" );
+    
+    Yote::YoteRoot->fetch_root();
 # -----------------------------------------------------
 #               start of yote tests
 # -----------------------------------------------------
@@ -63,92 +67,51 @@ sub test_suite {
 #                                      #
 # ----------- simple object tests -----#
 #                                      #
-    Yote::YoteRoot->fetch_root();
-    my( $o_count ) = query_line( $db, "SELECT count(*) FROM objects" );
-    is( $o_count, 7, "number of objects before save root, since root is initiated automatically" );
-    my $root = Yote::ObjProvider::fetch( 1 );
+    is( $objcol->count(), 7, "number of objects after fetchroot" );
+    my $root = Yote::ObjProvider::fetch( Yote::ObjProvider::first_id() );
     is( ref( $root ), 'Yote::YoteRoot', 'correct root class type' );
-    ok( $root->{ID} == 1, "Root has id of 1" );
-    my $max_id = $Yote::ObjProvider::DATASTORE->max_id();
-    is( $max_id, 7, "highest id in database is 7" );
-    ( $o_count ) = query_line( $db, "SELECT count(*) FROM objects" );
-    is( $o_count, 7, "number of objects after save root" ); # which also makes an account root automiatcially and has apps,emails,accounts,app_alias and library paths underneath it
-    my( $f_count ) = query_line( $db, "SELECT count(*) FROM field" );
-    is( $f_count, 6, "number of fields after yoteroot is called" );
+    Yote::ObjProvider::stow_all();
+    is( $objcol->count(), 7, "number of objects after save root" ); # which also makes an account root automiatcially and has apps,emails,accounts,app_alias and library paths underneath it
 
 #
 # Save key value fields for simple scalars, arrays and hashes.
-#                                                       # rows in fields total 
-    $root->get_default( "DEFAULT" );                        # 1
-    $root->set_first( "FRIST" );                            # 1
-    $root->get_default_array( ["DEFAULT ARRAY"] );          # 2
-    $max_id = $Yote::ObjProvider::DATASTORE->max_id();
-    is( $max_id, 8, "highest id in database 8" );
-    $root->set_reallybig( "BIG" x 1.000);                    # 0
-    $root->set_gross( 12 * 12 );                            # 1
-    $root->set_array( ["THIS IS AN ARRAY"] );               # 2
-    $max_id = $Yote::ObjProvider::DATASTORE->max_id();
-    is( $max_id, 9, "highest id in database 9" );
-    $root->get_default_hash( { "DEFKEY" => "DEFVALUE" } );  # 2
-    $max_id = $Yote::ObjProvider::DATASTORE->max_id();
-    is( $max_id, 10, "highest id in database 10" );
-    my $newo = new Yote::Obj();
-    $max_id = $Yote::ObjProvider::DATASTORE->max_id();
-    is( $max_id, 11, "highest id in database 11" );
+#                                                       # Objects total
+    $root->get_default( "DEFAULT" );                        # 
+    $root->set_first( "FRIST" );                            # 
+    $root->get_default_array( ["DEFAULT ARRAY"] );          # 8
+    $root->set_reallybig( "BIG" x 1.000);                   # 0
+    $root->set_gross( 12 * 12 );                            # 
+    $root->set_array( ["THIS IS AN ARRAY"] );               # 9
+    $root->get_default_hash( { "DEFKEY" => "DEFVALUE" } );  # 10
+
+    my $newo = new Yote::Obj();                             # 11
     my $somehash = {"preArray" => $newo};
-    $newo->set_somehash( $somehash ); #testing for recursion
-    $max_id = $Yote::ObjProvider::DATASTORE->max_id();
-    is( $max_id, 12, "highest id in database 12" );
-    $root->get_cool_hash( { "llamapre" => ["prethis",$newo,$somehash] } );  # 2 (7 after stow all)
-    $max_id = $Yote::ObjProvider::DATASTORE->max_id();
-    is( $max_id, 14, "highest id in database 14" );
-    $root->set_hash( { "KEY" => "VALUE" } );                # 2
-    $max_id = $Yote::ObjProvider::DATASTORE->max_id();
-    is( $max_id, 15, "highest id in database 15" );
+    $newo->set_somehash( $somehash );                       # 12 testing for recursion
+    $root->get_cool_hash( { "llamapre" => ["prethis",$newo,$somehash] } );  # 14
+    $root->set_hash( { "KEY" => "VALUE" } );                # 15
     Yote::ObjProvider::stow_all();
-    $max_id = $Yote::ObjProvider::DATASTORE->max_id();
-    is( $max_id, 15, "highest id in database still 15" );
+    is( $objcol->count(), 15, "number of objects after adding a bunch" );
 
-    # added default_hash, { 'llama', ["this", new yote obj, "Array, and a new yote object bringing the object count to 7 + 6 = 13
-    # the new max id should be 7 (root) + defalt_array 1,  array 1, default_hash 1, newobj 1, somehash 1, coolahash 1, arryincoolhash 1, hash 1
-    $max_id = $Yote::ObjProvider::DATASTORE->max_id();
-    is( $max_id, 15, "highest id in database is 15 after adding more objects" );
+    # this resets the cool hash, overwriting what is there, which was a hash, array, a new obj and a hash ( 4 things )
+    $root->set_cool_hash( { "ll.ama" => ["this",new Yote::Obj(),{"Array",new Yote::Obj()}] } );  # 5 new objects
+    Yote::ObjProvider::stow_all();
+    my $recycled = Yote::ObjProvider->recycle_objects();
+    is( $recycled, 4, "recycled 4 objects" );
+    Yote::ObjProvider::stow_all();
+    is( $objcol->count(), 14, "number of objects after recycling" );
 
-    # this resets the cool hash, overwriting what is there. 
-    $root->set_cool_hash( { "llama" => ["this",new Yote::Obj(),{"Array",new Yote::Obj()}] } );  # 5 new objects
-    my $recycled = $Yote::ObjProvider::DATASTORE->recycle_objects();
-    is( $recycled, 5, "recycled 5 objects" );
+    my $root_clone = Yote::ObjProvider::fetch( Yote::ObjProvider::first_id() );
+    is( ref( $root_clone->get_cool_hash()->{'ll.ama'} ), 'ARRAY', '2nd level array object. Also tests escape of dot (.) in yote.' );
+    is( ref( $root_clone->get_cool_hash()->{'ll.ama'}->[2]->{Array} ), 'Yote::Obj', 'deep level yote object in hash' );
+    is( ref( $root_clone->get_cool_hash()->{'ll.ama'}->[1] ), 'Yote::Obj', 'deep level yote object in array' );
 
-    # the cool hash has been reset, resulting in 6 more objects, and 6 objects that no longer connect to the root
-    
-
-# 1 from accounts under root (default)
-# 1 from apps under root
-# 1 from alias_apps
-    my $db_rows = $db->selectall_arrayref("SELECT * FROM field");
-
-    BAIL_OUT("error saving after stow all") unless is( scalar(@$db_rows), 25, "Number of db rows saved to database with stow all" );
-
-    $db_rows = $db->selectall_arrayref("SELECT * FROM objects WHERE recycled=0");
-    is( scalar(@$db_rows), 15, "Number of db rows saved to database not recycled" ); 
-    $db_rows = $db->selectall_arrayref("SELECT * FROM objects WHERE recycled=1");
-    is( scalar(@$db_rows), 5, "Number of db rows recycled" ); 
-
-
-    my $root_clone = Yote::ObjProvider::fetch( 1 );
-    is( ref( $root_clone->get_cool_hash()->{llama} ), 'ARRAY', '2nd level array object' );
-    is( ref( $root_clone->get_cool_hash()->{llama}->[2]->{Array} ), 'Yote::Obj', 'deep level yote object in hash' );
-    is( ref( $root_clone->get_cool_hash()->{llama}->[1] ), 'Yote::Obj', 'deep level yote object in array' );
-
-
-
-    is( ref( $root->get_cool_hash()->{llama} ), 'ARRAY', '2nd level array object (original root after save)' );
-    is( ref( $root->get_cool_hash()->{llama}->[2]->{Array} ), 'Yote::Obj', 'deep level yote object in hash  (original root after save)' );
-    is( ref( $root->get_cool_hash()->{llama}->[1] ), 'Yote::Obj', 'deep level yote object in array (original root after save)' );
+    is( ref( $root->get_cool_hash()->{'ll.ama'} ), 'ARRAY', '2nd level array object (original root after save)' );
+    is( ref( $root->get_cool_hash()->{'ll.ama'}->[2]->{Array} ), 'Yote::Obj', 'deep level yote object in hash  (original root after save)' );
+    is( ref( $root->get_cool_hash()->{'ll.ama'}->[1] ), 'Yote::Obj', 'deep level yote object in array (original root after save)' );
 
 
     is_deeply( $root_clone, $root, "CLONE to ROOT");
-    ok( $root_clone->{ID} == 1, "Reloaded Root has id of 1" );
+    ok( $root_clone->{ID} eq Yote::ObjProvider::first_id(), "Reloaded Root has id of 1" );
     is( $root_clone->get_default(), "DEFAULT", "get scalar with default" );
     is( $root_clone->get_first(), "FRIST", "simple scalar" );
     is( length($root_clone->get_reallybig()), length("BIG" x 1.000), "Big String" );
@@ -288,7 +251,7 @@ sub test_suite {
     $simple_hash->{BZAZ} = [ "woof", "bOOf" ];
     Yote::ObjProvider::stow_all();
 
-    my $root_2 = Yote::ObjProvider::fetch( 1 );
+    my $root_2 = Yote::ObjProvider::fetch( Yote::ObjProvider::first_id() );
     ( %simple_hash ) = %{$root_2->get_hash()};
     delete $simple_hash{__ID__};
     is_deeply( \%simple_hash, {"KEY"=>"VALUE","FOO" => "bar", BZAZ => [ "woof", "bOOf" ]}, "Simple hash after reload" );
@@ -321,7 +284,7 @@ sub test_suite {
     Yote::ObjProvider::stow_all();
 
     $simple_array = $root->get_array();
-    my $root_3 = Yote::ObjProvider::fetch( 1 );
+    my $root_3 = Yote::ObjProvider::fetch( Yote::ObjProvider::first_id() );
     is_deeply( $root_3, $root, "recursive data structure" );
 
     is_deeply( $root_3->get_obj(), $new_obj, "setting object" );
@@ -357,7 +320,7 @@ sub test_suite {
     $simple_array = $root_3->get_array();
     is( scalar(@$simple_array), 2, "add_to test array count after remove all" );
 
-    my $root_4 = Yote::ObjProvider::fetch( 1 );
+    my $root_4 = Yote::ObjProvider::fetch( Yote::ObjProvider::first_id() );
 
 
     # test shallow and deep clone.
@@ -395,7 +358,7 @@ sub test_suite {
 # ------------- app serv tests ------------#
 #
 #                                          #
-    $root = Yote::ObjProvider::fetch( 1 );
+    $root = Yote::ObjProvider::fetch( Yote::ObjProvider::first_id() );
     Yote::ObjProvider::stow_all();
     eval { 
         $root->create_login();
@@ -516,12 +479,13 @@ sub test_suite {
     
     Yote::ObjProvider::xpath_delete( '/_apps/Yote::Test::TestAppNeedsLogin/azzy/2' );
     $res = Yote::ObjProvider::paginate_xpath( '/_apps/Yote::Test::TestAppNeedsLogin/azzy' );
-    is_deeply( $res, { 0 => 'A', 1 => 'B', 3 => 'D', 4 => 'E' }, 'xpath hash without limits correct after xpath_delete' );
+    is_deeply( $res, { 0 => 'A', 1 => 'B', 2 => 'D', 3 => 'E' }, 'xpath hash without limits correct after xpath_delete' );
     $res = Yote::ObjProvider::paginate_xpath_list( '/_apps/Yote::Test::TestAppNeedsLogin/azzy' );
     is_deeply( $res, [ qw/A B D E/ ], 'xpath list without limits correct after xpath_delete' );
 
     Yote::ObjProvider::xpath_list_insert( '/_apps/Yote::Test::TestAppNeedsLogin/azzy', 'foo/bar' );
     $res = Yote::ObjProvider::paginate_xpath_list( '/_apps/Yote::Test::TestAppNeedsLogin/azzy' );
+
     is_deeply( $res, [ qw(A B D E foo/bar ) ], 'added value with / in the name' );
 
     Yote::ObjProvider::stow_all();    

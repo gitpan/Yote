@@ -1,6 +1,8 @@
 package Yote::YoteRoot;
 
 use strict;
+use warnings;
+no warnings 'uninitialized';
 
 use Yote::Cron;
 use Yote::Login;
@@ -17,7 +19,7 @@ our $EMAIL_CACHE = {};
 # ------------------------------------------------------------------------------------------
 sub _init {
     my $self = shift;
-    $self->set_apps({});
+    $self->set__apps({});
     $self->set__handles({});
     $self->set__emails({});
     $self->set__crond( new Yote::Cron() );
@@ -109,12 +111,12 @@ sub fetch {
 #
 sub fetch_app_by_class {
     my( $self, $data ) = @_;
-    my $app = $self->get_apps()->{$data};
+    my $app = $self->get__apps({})->{$data};
     unless( $app ) {
         eval("use $data");
         die $@ if $@;
         $app = $data->new();
-        $self->get_apps()->{$data} = $app;
+        $self->get__apps()->{$data} = $app;
     }
     return [$app,@{$app->_extra_fetch()}];
 } #fetch_app_by_class
@@ -124,9 +126,10 @@ sub fetch_app_by_class {
 # Returns this root object.
 #
 sub fetch_root {
-    my $root = Yote::ObjProvider::fetch( 1 );
+    my $root = Yote::ObjProvider::fetch( Yote::ObjProvider::first_id() );
     unless( $root ) {
 	$root = new Yote::YoteRoot();
+	Yote::ObjProvider::stow( $root );
     }
     return $root;
 }
@@ -203,6 +206,8 @@ sub recover_password {
 
     my $login = Yote::ObjProvider::xpath( "/_emails/$email" );
 
+    print STDERR Data::Dumper->Dump(["RECOVERY FOR $email",$login]);
+
     if( $login ) {
         my $now = time();
         if( $now - $login->get__last_recovery_time() > (60*15) ) { #need to wait 15 mins
@@ -225,6 +230,7 @@ sub recover_password {
 		smtp => 'localhost',
 		from => 'yote@localhost',
 					   } );
+	    print STDERR Data::Dumper->Dump(["RECOVERY LINK $link"]);
 	    $sender->MailMsg( { to => $email,
 				 subject => 'Password Recovery',
 				 msg => "<h1>Yote password recovery</h1> Click the link <a href=\"$link\">$link</a>",
@@ -310,7 +316,7 @@ sub _create_token {
 
 sub _purge_app {
     my( $self, $app ) = @_;
-    my $apps = $self->get_apps();
+    my $apps = $self->get__apps();
     return delete $apps->{$app};
 } #_purge_app
 

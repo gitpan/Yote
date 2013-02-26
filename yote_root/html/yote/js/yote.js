@@ -83,12 +83,13 @@ if (!Array.prototype.map) {
 $.yote = {
     guest_token:null,
     token:null,
+    port:null,
     err:null,
     objs:{},
-    methods:{},
     debug:true,
 
-    init:function() {
+    init:function(use_port) {
+	$.yote.port = use_port || location.port;
         var t = $.cookie('yoken');
 	$.yote.token = t;
 
@@ -147,12 +148,16 @@ $.yote = {
     }, //fetch_app
 
     fetch_root:function() {
-	return this.objs[1] || this._create_obj( this.message( {
-            async:false,
-            cmd:'fetch_root',
-	    wait:true
-	} ).r, 1 );
-	
+	var r = this.objs['root'];
+	if( ! r ) {
+	    r = this.message( {
+		async:false,
+		cmd:'fetch_root',
+		wait:true
+	    } );
+	    this.objs['root'] = r;
+	}
+	return r;
     }, //fetch_root
 
 
@@ -204,14 +209,12 @@ $.yote = {
         var async  = params.async == true ? 1 : 0;
 	var wait   = params.wait  == true ? 1 : 0;
         var url    = params.url;
-        var app_id = params.app_id;
+        var app_id = params.app_id || '';
         var cmd    = params.cmd;
-        var obj_id = params.obj_id; //id to act on
+        var obj_id = params.obj_id || ''; //id to act on
 
 	root.upload_count = 0;
 
-        app_id = app_id || '';
-        obj_id = obj_id || '';
         var url = '/_/' + app_id + '/' + obj_id + '/' + cmd;
 
 	var uploads = root._functions_in( data );
@@ -222,7 +225,6 @@ $.yote = {
         if( async == 0 ) {
             root._disable();
         }
-
         var put_data = {
             d:$.base64.encode(JSON.stringify( {d:data} ) ),
             t:$.yote.token,
@@ -232,7 +234,7 @@ $.yote = {
 	var resp;
 
         if( $.yote.debug == true ) {
-	    console.log('outgoing ' + url );  
+	    console.log('outgoing ' + url + '-------------------------' );  
 	    console.log( data );
 	    console.log( JSON.stringify( {d:data} ) );
 	    console.log( put_data ); 
@@ -251,15 +253,41 @@ $.yote = {
 	    error:function(a,b,c) { root._error(a); },
 	    success:function( data ) {
                 if( typeof data !== 'undefined' ) {
-		    resp = data; //for returning synchronous
+		    resp = ''; //for returning synchronous
+
+		    //dirty objects that may need a refresh
+		    if( typeof data.d === 'object' ) {
+			for( var oid in data.d ) {
+			    if( root._is_in_cache( oid ) ) {
+				var cached = root.objs[ oid ];
+				for( fld in cached._d ) {
+				    //take off old getters/setters
+				    delete cached['get_'+fld];
+				}
+				cached._d = data.d[ oid ];
+				
+				for( fld in cached._d ) {
+				    //add new getters/setters
+				    cached['get_'+fld] = (function(fl) { return function() { return this.get(fl) } } )(fld);
+				}
+			    }
+			} //each dirty
+		    } //if dirty
+
 		    if( typeof data.err === 'undefined' ) {
-		        if( typeof params.passhandler === 'function' ) {
-			    if( typeof data.r === 'object' ) {
-				params.passhandler( root._create_obj( data.r, this._app_id ) );
-			    } else if( typeof data.r === 'undefined' ) {
+			if( typeof data.r === 'object' ) {
+			    resp = root._create_obj( data.r, app_id );
+		            if( typeof params.passhandler === 'function' ) {
+				params.passhandler( resp );
+			    }
+			} else if( typeof data.r === 'undefined' ) {
+		            if( typeof params.passhandler === 'function' ) {
 				params.passhandler();
-			    } else {
-				params.passhandler( data.r.substring( 1 ) );
+			    }
+			} else {
+			    resp = data.r.substring( 1 );
+		            if( typeof params.passhandler === 'function' ) {
+				params.passhandler( resp );
 			    }
 		        }
 		    } else if( typeof params.failhandler === 'function' ) {
@@ -272,7 +300,7 @@ $.yote = {
 	    type:'POST',
 	    url:url
 	} );
-        if( async == 0 ) {
+        if( ! async ) {
             root._reenable();
             return resp;
         }
@@ -315,12 +343,11 @@ $.yote = {
         var data   = root._translate_data( params.data || {}, true );
 	var wait   = params.wait  == true ? 1 : 0;
         var url    = params.url;
-        var app_id = params.app_id;
+        var app_id = params.app_id || '';
         var cmd    = params.cmd;
-        var obj_id = params.obj_id; //id to act on
-        app_id = app_id || '';
-        obj_id = obj_id || '';
-        var url = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port: '') + 
+        var obj_id = params.obj_id || ''; //id to act on
+
+        var url = location.protocol + '//' + location.hostname + ':' + $.yote.port +
 	    '/_u/' + app_id + '/' + obj_id + '/' + cmd;
 
 	root.iframe_count++;
@@ -354,7 +381,6 @@ $.yote = {
 		$( '#' + iframe_name ).remove();
 		try {
 		    resp = JSON.parse( contents );
-		    console.log( [ 'uploaded', resp ] );
                     if( typeof resp !== 'undefined' ) {
 			if( typeof resp.err === 'undefined' ) {
 			    //dirty objects that may need a refresh
@@ -406,7 +432,7 @@ $.yote = {
 
     _create_obj:function(data,app_id) {
 	var root = this;
-	return (function(x,ai) {
+	var retty = (function(x,ai) {
 	    var o = {
 		_app_id:ai,
                 _dirty:false,
@@ -421,6 +447,9 @@ $.yote = {
 		    }
 		    return cnt;
 		},
+		equals:function(oth) {
+		    return typeof oth === 'object' && oth.id && oth.id == this.id;
+		},
 		keys:function() {
 		    var k = []
 		    for( key in this._d ) {
@@ -434,7 +463,6 @@ $.yote = {
 		},
 		sort:function(sortfun) {
 		    var res = this.values().sort( sortfun );
-		    console.log( [ 'SORTY', res ] );
 		    return res;
 		}		
 	    };
@@ -459,9 +487,9 @@ $.yote = {
 	    else {
 		if( typeof x.m === 'object' && x.m !== null ) {
 		    for( m in x.m ) {
-			o[x.m[m]] = (function(key) {
+			o[x.m[m]] = (function(key,thobj) {
 			    return function( params, passhandler, failhandler ) {
-				var ret = root.message( {
+				return root.message( {
 				    async:false,
 				    app_id:this._app_id,
 				    cmd:key,
@@ -471,99 +499,19 @@ $.yote = {
 				    passhandler:passhandler,
 				    wait:true
 				} ); //sending message
-				if( ! ret ) {
-				    return null;
-				}
-
-				//dirty objects that may need a refresh
-				if( typeof ret.d === 'object' ) {
-				    for( var oid in ret.d ) {
-					if( root._is_in_cache( oid ) ) {
-					    var cached = root.objs[ oid ];
-					    for( fld in cached._d ) {
-						//take off old getters/setters
-						delete cached['get_'+fld];
-					    }
-					    cached._d = ret.d[ oid ];
-					    for( fld in cached._d ) {
-						//add new getters/setters
-						cached['get_'+fld] = (function(fl) { return function() { return this.get(fl) } } )(fld);
-					    }
-					}
-				    }
-				}
-				if( typeof ret.r === 'object' ) {
-				    return root._create_obj( ret.r, this._app_id );
-				} else {
-                                    if( typeof ret.r === 'undefined' ) {
-					if( typeof failhandler === 'function' ) {
-                                            failhandler('no return value');
-					}
-					return undefined;
-                                    }
-				    return ret.r.substring(1);
-				}
-			    } } )(x.m[m]);
+			    } } )(x.m[m],x);
 		    } //each method
 		} // if methods were included in the return value of the call
-		else {
-		    for( var i=0; i < methods.length; i++ ) {
-			o[methods[i]] = (function(key) {
-			    return function( params, passhandler, failhandler, use_async ) {
-				var ret = root.message( {
-				    async:use_async,
-				    app_id:this._app_id,
-				    cmd:key,
-				    data:params,
-				    failhandler:failhandler,
-                                    obj_id:this.id,
-				    passhandler:passhandler,
-				    wait:true
-				} ); //sending message
-
-				if( ! ret ) {
-				    return null;
-				}
-
-				//dirty objects that may need a refresh
-				if( typeof ret.d === 'object' ) {
-				    for( var oid in ret.d ) {
-					if( root._is_in_cache( oid ) ) {
-					    var cached = root.objs[ oid ];
-					    for( fld in cached._d ) {
-						//take off old getters/setters
-						delete cached['get_'+fld];
-					    }
-					    cached._d = ret.d[ oid ];
-					    for( fld in cached._d ) {
-						//add new getters/setters
-						cached['get_'+fld] = (function(fl) { return function() { return this.get(fl) } } )(fld);
-					    }
-					}
-				    }
-				}
-				if( typeof ret.r === 'object' ) {
-				    return root._create_obj( ret.r, this._app_id );
-				} else {
-                                    if( typeof ret.r === 'undefined' ) {
-					if( typeof failhandler === 'function' ) {
-                                            failhandler('no return value');
-					}
-					return undefined;
-                                    }
-				    return ret.r.substring(1);
-				}
-			    } } )(methods[i]);
-		    }
-		}
 	    } // if object
 
 	    o.get = function( key ) {
 		var val = this._staged[key] || this._d[key];
 		if( typeof val === 'undefined' ) return false;
 		if( typeof val === 'object' ) return val;
-		if( (0+val) > 0 ) {
+		if( (0+val) > 0 || val.substring(0,1) != 'v' ) {
+		    if( ! root.objs[ val ] ) { console.log( ["FETCH " + key, this, this._d[key],typeof this._d[key]] ) }
 		    var obj = root.objs[val] || $.yote.fetch_root().fetch(val).get(0);
+		    obj._app_id = this._app_id;
                     if( this._staged[key] == val ) {
                         this._staged[key] = obj;
                     } else {
@@ -574,17 +522,25 @@ $.yote = {
 		return val.substring(1);
 	    };
 
+	    o.set = function( key, val, failh, passh ) {
+		this._stage( key, val );
+		this._send_update( undefined, failh, passh );
+	    };
+
 	    // get fields
 	    if( typeof x.d === 'object' && x.d !== null ) {
 		for( fld in x.d ) {
 		    var val = x.d[fld];
-		    if( typeof val === 'object' ) {
-			o._d[fld] = (function(xx) { return root._create_obj( xx, o._app_id ); })(val);
+		    if( typeof val === 'object' && val != null ) {
+			o._d[fld] = (function(xx) { return root._create_obj( xx, app_id ); })(val);
 		    } 
 		    else {
 			o._d[fld] = (function(xx) { return xx; })(val);
 		    }
 		    o['get_'+fld] = (function(fl) { return function() { return this.get(fl) } } )(fld);
+                    if( fld.match(/^[A-Z]/) ) {
+			o['set_'+fld] = (function(fl,fh,ph) { return function(val) { return this.set(fl,val,fh,ph) } } )(fld);
+		    }
 		}
 	    }
 
@@ -649,7 +605,7 @@ $.yote = {
                 }
                 if( needs == 0 ) { return; }
                 
-                root.message( {
+                root.message( { //for send update
                     app_id:this._app_id,
                     async:false,
                     data:to_send,
@@ -675,11 +631,12 @@ $.yote = {
                 } );
             };
 
-	    if( (0 + x.id ) > 0 ) {
-		root.objs[x.id] = o;
+	    if( o.id && o.id.substring(0,1) != 'v' ) {
+		root.objs[o.id] = o;
 	    }
 	    return o;
         } )(data,app_id);
+	return retty;
     }, //_create_obj
 
     _disable:function() {
@@ -728,12 +685,17 @@ $.yote = {
             return undefined;
         }
         if( typeof data === 'object' ) {
-            if( data.id + 0 > 0 && typeof data._d !== 'undefined' ) {
+            if( data.id  && typeof data._d !== 'undefined' && data.id.substring(0,1) != 'v' ) {
                 return data.id;
             }
             // this case is for paramers being sent thru message
             // that will not get ids.
-            var ret = Object();
+            var ret;
+	    if (data instanceof Array) {
+		ret = [];
+	    } else {
+		ret = Object();
+	    }
             for( var key in data ) {
                 ret[key] = this._translate_data( data[key], run_functions );
             }
@@ -762,5 +724,3 @@ $.yote = {
     
 }; //$.yote
 
-
-1

@@ -1,6 +1,3 @@
-#!/usr/bin/env perl
-
-use 5.006;
 use strict;
 use warnings;
 use File::Copy;
@@ -51,6 +48,7 @@ my $builder = Module::Build->new(
     dist_version_from  => 'lib/Yote.pm',
     license            => 'perl',
     module_name        => 'Yote',
+    release_status     => 'alpha',
     script_files       => [ 'bin/yote_server' ],
     requires => {
 	'Crypt::Passwd::XS'     => 0.601,
@@ -65,6 +63,7 @@ my $builder = Module::Build->new(
 	'MIME::Lite'            => 3.029,
 	'Net::Server::HTTP'     => 0,
 	'WeakRef'               => 0.01,
+	'MongoDB'               => 0,
     },
     );
 

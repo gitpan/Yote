@@ -5,6 +5,9 @@ package Yote::SQLiteIO;
 #
 
 use strict;
+use warnings;
+no warnings 'uninitialized';
+no warnings 'recursion';
 use feature ':5.10';
 
 use Data::Dumper;
@@ -72,7 +75,7 @@ sub ensure_datastore {
                       ); CREATE INDEX IF NOT EXISTS rec ON objects( recycled );~
         );
     my %index_definitions = (
-	uniq_idx => q~CREATE INDEX IF NOT EXISTS obj_id_field ON field(obj_id,field);~,
+	uniq_idx => q~CREATE INDEX IF NOT EXISTS obj_id ON field(obj_id);~,
 	ref_idx => q~CREATE INDEX IF NOT EXISTS ref ON field ( ref_id );~,
         );
     $self->start_transaction();
@@ -83,11 +86,22 @@ sub ensure_datastore {
 } #ensure_datastore
 
 #
+# Returns the first ID that is associated with the root YoteRoot object
+#
+sub first_id {
+    my( $self, $class ) = @_;
+    if( $class ) {
+	$self->_do( "INSERT OR IGNORE INTO objects (id,class) VALUES (?,?)",  1, $class );
+    }
+    return 1;
+} #first_id
+
+#
 # Returns a single object specified by the id. The object is returned as a hash ref with id,class,data.
 #
 sub fetch {
     my( $self, $id ) = @_;
-    my( $class ) = $self->_selectrow_array( "SELECT class FROM objects WHERE id=?",  $id );
+    my( $class ) = $self->_selectrow_array( "SELECT class FROM objects WHERE recycled=0 AND id=?",  $id );
     die $self->{DBH}->errstr() if $self->{DBH}->errstr();
 
 
@@ -126,7 +140,7 @@ sub get_id {
 
     my( $recycled_id ) = $self->_do( "SELECT id FROM objects WHERE recycled=1 LIMIT 1" );
     if( int($recycled_id) > 0 ) {
-	$self->_do( "UPDATE objects SET recycled=0 WHERE id=?", $recycled_id );
+	$self->_do( "UPDATE objects SET recycled=0, class=? WHERE id=?", $class, $recycled_id );
 	return $recycled_id;
     }
     my $res = $self->_do( "INSERT INTO objects (class) VALUES (?)",  $class );
@@ -164,7 +178,7 @@ sub max_id {
 # Returns a hash of paginated items that belong to the xpath.
 # @TODO - maybe get rid of this, since hash is not a good order dependent thing
 sub paginate_xpath {
-    my( $self, $path, $paginate_start, $paginate_length ) = @_;
+    my( $self, $path, $paginate_length, $paginate_start ) = @_;
 
     my( @list ) = _xpath_to_list( $path );
     my $next_ref = 1;
@@ -191,7 +205,8 @@ sub paginate_xpath {
 	}
     }    
 
-    my $res = $self->_selectall_arrayref( "SELECT field, ref_id, value FROM field WHERE obj_id=? $PAG", $next_ref );
+    my $res = $self->_selectall_arrayref( "SELECT field, ref_id, value FROM field WHERE obj_id=? ORDER BY field $PAG", $next_ref );
+#    return [ map { [ $_->[0], $_->[1] || 'v' . $_->[2] ] } @$res ];
     my %ret;
     for my $row (@$res) {
 	$ret{$row->[0]} = $row->[1] || "v$row->[2]";
@@ -233,7 +248,7 @@ sub paginate_xpath_list {
 	}
     }    
 
-    my $res = $self->_selectall_arrayref( "SELECT field, ref_id, value FROM field WHERE obj_id=? ORDER BY field $PAG", $next_ref );
+    my $res = $self->_selectall_arrayref( "SELECT field, ref_id, value FROM field WHERE obj_id=? ORDER BY cast( field as int ) $PAG", $next_ref );
     my @ret;
     for my $row (@$res) {
 	push @ret, $row->[1] || "v$row->[2]";
@@ -242,7 +257,7 @@ sub paginate_xpath_list {
 } #paginate_xpath_list
 
 #
-# Return the path to root that this object has, if any.
+# Return a path to root that this object has (specified by id), if any.
 #
 sub path_to_root {
     my( $self, $obj_id ) = @_;
@@ -258,9 +273,52 @@ sub path_to_root {
     return undef;
 } #path_to_root
 
+#
+# Return all paths to root that this object (specified by id) has, if any.
+#
+sub paths_to_root {
+    my( $self, $obj_id, $seen ) = @_;
+    $seen ||= {};
+    return [''] if $obj_id == 1;
+    my $ret = [];
+    my $res = $self->_selectall_arrayref( "SELECT obj_id,field FROM field WHERE ref_id=?", $obj_id );
+    for my $row (@$res) {
+	my( $new_obj_id, $field ) = @$row;
+	if(  ! $seen->{$new_obj_id} && $self->has_path_to_root( $new_obj_id ) ) {
+	    $seen->{$new_obj_id} = 1;
+	    my $paths = $self->paths_to_root( $new_obj_id, $seen );
+	    push @$ret, map { $_. "/$field" } @$paths;
+	}
+    }
+    
+    return $ret;
+} #paths_to_root
+
+#
+# Finds objects not connected to the root and recycles them.
+# This interface would be broken with the MongDB implementation.
+#
+sub recycle_objects {
+    my( $self, $start_id, $end_id ) = @_;
+    $start_id ||= 2;
+    $end_id   ||= $self->max_id();
+
+    my $recycled;
+    
+    for( my $id=$start_id; $id <= $end_id; $id++ ) {
+	my $obj = $self->fetch( $id );
+	if( $obj && ( ! $self->has_path_to_root( $id ) ) ) {
+	    $self->recycle_object( $id );
+	    ++$recycled;
+	}
+    }
+    #print STDERR "RECYCLED $recycled objects\n";
+    return $recycled;
+} #recycle_objects
+
 sub recycle_object {
     my( $self, $obj_id ) = @_;
-    $self->_do( "DELETE FROM field WHERE obj_id=?", $obj_id );
+    $self->_do( "DELETE FROM field WHERE obj_id=? or ref_id=?", $obj_id, $obj_id );
     $self->_do( "UPDATE objects SET class=NULL,recycled=1 WHERE id=?", $obj_id );
 }
 
@@ -270,17 +328,73 @@ sub start_transaction {
     die $self->{DBH}->errstr() if $self->{DBH}->errstr();
 }
 
-sub stow {
+sub stow_now {
     my( $self, $id, $class, $data ) = @_;
-
-    my $updates = $self->__stow_updates( $id, $class, $data );
-
+    my(  $updates, $udata ) = $self->__stow_updates( $id, $class, $data );    
     for my $upd (@$updates) {
 	$self->_do( @$upd );
 	die $self->{DBH}->errstr() if $self->{DBH}->errstr();
     }
+    my $first_data = shift @$udata;
+    if( $first_data ) {
+	$self->_do( qq~INSERT INTO field
+                       SELECT ? AS obj_id, ? AS field, ? as ref_id, ? as value ~.
+		    join( ' ', map { ' UNION SELECT ?, ?, ?, ? ' } @$udata ),
+		    map { @$_ } $first_data, @$udata );
+    }
+} #stow_now
 
+sub stow_all {
+    my( $self, $objs ) = @_;
+    $self->{QUERIES} = [[[]],[[]]];
+    $self->{STOW_LATER} = 1;
+    for my $objd ( @$objs ) {
+	$self->stow( @$objd );
+    }
+    $self->engage_queries();
+    $self->{STOW_LATER} = 0;
+    $self->{QUERIES} = [[[]],[[]]];
+} #stow_all
+
+sub stow {
+    my( $self, $id, $class, $data ) = @_;
+
+    unless( $self->{STOW_LATER} ) {
+	return $self->stow_now( $id, $class, $data );
+    }
+    my( $updates, $udata ) = $self->__stow_updates( $id, $class, $data );
+    my $ups = $self->{QUERIES}[0];
+    my $uds = $self->{QUERIES}[1];
+    my $llist = $ups->[$#$ups];
+    if( scalar( @$llist ) > 50 ) {
+	$llist = [];
+	push( @$ups, $llist );
+	push( @$uds, [] );
+    }
+    my $uus = $uds->[$#$uds];
+    push( @$llist, @$updates );
+    push( @$uus,   @$udata   );
 } #stow
+
+sub engage_queries {
+    my $self = shift;
+    my( $upds, $uds ) = @{ $self->{QUERIES} };
+    for( my $i=0; $i < scalar( @$upds ); $i++ ) {
+	my $updates = $upds->[ $i ];
+	my $udata   = $uds->[ $i ];
+	for my $upd (@$updates) {
+	    $self->_do( @$upd );
+	    die $self->{DBH}->errstr() if $self->{DBH}->errstr();
+	}
+	my $first_data = shift @$udata;
+	if( $first_data ) {
+	    $self->_do( qq~INSERT INTO field
+                       SELECT ? AS obj_id, ? AS field, ? as ref_id, ? as value ~.
+			join( ' ', map { ' UNION SELECT ?, ?, ?, ? ' } @$udata ),
+			map { @$_ } $first_data, @$udata );
+	}
+    }
+} #engage_queries
 
 
 #
@@ -450,7 +564,7 @@ sub _connect {
 
 sub _do {
     my( $self, $query, @params ) = @_;
-#    print STDERR "Do Query : $query\n";
+#    print STDERR "Do Query : $query @params\n";
     return $self->{DBH}->do( $query, {}, @params );
 } #_do
 
@@ -462,7 +576,7 @@ sub _selectrow_array {
 
 sub _selectall_arrayref {
     my( $self, $query, @params ) = @_;
-#    print STDERR "Do Query : $query\n";
+#    print STDERR "Do Query : $query @params\n";
     return $self->{DBH}->selectall_arrayref( $query, {}, @params );
 } #_selectall_arrayref
 
@@ -494,7 +608,7 @@ sub _xpath_to_list {
 sub __stow_updates {
     my( $self, $id, $class, $data ) = @_;
 
-    my( @cmds );
+    my( @cmds, @cdata );
 
     given( $class ) {
         when('ARRAY') {
@@ -505,10 +619,11 @@ sub __stow_updates {
 		next unless defined $data->[$i];
                 my $val = $data->[$i];
                 if( index( $val, 'v' ) == 0 ) {
-		    push( @cmds, ["INSERT INTO field (obj_id,field,value) VALUES (?,?,?)",  $id, $i, substr($val,1) ] );
+#		    push( @cmds, ["INSERT INTO field (obj_id,field,value) VALUES (?,?,?)",  $id, $i, substr($val,1) ] );
+		    push( @cdata, [$id, $i, '', substr($val,1) ] );
                 } else {
-                    push( @cmds, ["INSERT INTO field (obj_id,field,ref_id) VALUES (?,?,?)",  $id, $i, $val ] );
-
+#                    push( @cmds, ["INSERT INTO field (obj_id,field,ref_id) VALUES (?,?,?)",  $id, $i, $val ] );
+		    push( @cdata, [$id, $i, $val, '' ] );
                 }
             }
         }
@@ -517,15 +632,17 @@ sub __stow_updates {
             for my $key (keys %$data) {
                 my $val = $data->{$key};
                 if( index( $val, 'v' ) == 0 ) {
-		    push( @cmds, ["INSERT INTO field (obj_id,field,value) VALUES (?,?,?)",  $id, $key, substr($val,1) ] );
+#		    push( @cmds, ["INSERT INTO field (obj_id,field,value) VALUES (?,?,?)",  $id, $key, substr($val,1) ] );
+		    push( @cdata, [$id, $key, '', substr($val,1) ] );
                 }
                 else {
-                    push( @cmds, ["INSERT INTO field (obj_id,field,ref_id) VALUES (?,?,?)",  $id, $key, $val ] );
+#                    push( @cmds, ["INSERT INTO field (obj_id,field,ref_id) VALUES (?,?,?)",  $id, $key, $val ] );
+		    push( @cdata, [$id, $key, $val, '' ] );
                 }
             } #each key
         }
     }
-    return \@cmds;
+    return \@cmds,\@cdata;
 } # __stow_updates
 
 

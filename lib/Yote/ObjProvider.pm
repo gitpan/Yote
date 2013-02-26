@@ -1,14 +1,17 @@
 package Yote::ObjProvider;
 
 use strict;
-
+use warnings;
+no warnings 'numeric';
+no warnings 'uninitialized';
+no warnings 'recursion';
 use feature ':5.10';
 
 use Yote::Array;
 use Yote::Hash;
 use Yote::Obj;
 use Yote::YoteRoot;
-use Yote::SQLiteIO;
+use Yote::SimpleLRUCache;
 
 use Crypt::Passwd::XS;
 use WeakRef;
@@ -19,6 +22,7 @@ $Yote::ObjProvider::PKG_TO_METHODS = {};
 $Yote::ObjProvider::WEAK_REFS = {};
 
 our $DATASTORE;
+our $CACHE;
 
 use vars qw($VERSION);
 
@@ -36,9 +40,11 @@ sub new {
 
 sub init {
     my $args = ref( $_[0] ) ? $_[0] : { @_ };
-    $DATASTORE = new Yote::SQLiteIO( $args );
+    my $datapkg = $args->{datastore} || 'Yote::SQLiteIO';
+    eval( "require $datapkg" );
+    $DATASTORE = $datapkg->new( $args );
     $DATASTORE->ensure_datastore();
-    fetch(1) || new Yote::YoteRoot(); #ensure that there is the singleton root object.
+    $CACHE = new Yote::SimpleLRUCache();
 } #init
 
 
@@ -73,47 +79,53 @@ sub encrypt_pass {
     return $acct ? Crypt::Passwd::XS::crypt( $pw, $acct->get_handle() ) : undef;
 } #encrypt_pass
 
+
+#
+# Returns the first ID that is associated with the root YoteRoot object
+#
+sub first_id {
+    return $DATASTORE->first_id();
+}
+
 sub fetch {
-    my( $id_or_xpath ) = @_;
+    my( $id ) = @_;
 
-    if( $id_or_xpath && $id_or_xpath == 0 ) {
-	#assume xpath
-	return xpath( $id_or_xpath );
-    }
-
+    return undef unless $id;
     #
     # Return the object if we have a reference to its dirty state.
     #
-    my $ref = $Yote::ObjProvider::DIRTY->{$id_or_xpath} || $Yote::ObjProvider::WEAK_REFS->{$id_or_xpath};
+    my $ref = $Yote::ObjProvider::DIRTY->{$id} || $Yote::ObjProvider::WEAK_REFS->{$id} || $CACHE->fetch( $id );
     return $ref if $ref;
-
-    my $obj_arry = $DATASTORE->fetch( $id_or_xpath );
+    my $obj_arry = $DATASTORE->fetch( $id );
 
     if( $obj_arry ) {
-        my( $id_or_xpath, $class, $data ) = @$obj_arry;
+        my( $id, $class, $data ) = @$obj_arry;
         given( $class ) {
             when('ARRAY') {
                 my( @arry );
-                tie @arry, 'Yote::Array', $id_or_xpath, @$data;
+                tie @arry, 'Yote::Array', $id, @$data;
                 my $tied = tied @arry; $tied->[2] = \@arry;
-                __store_weak( $id_or_xpath, \@arry );
+                __store_weak( $id, \@arry );
+		$CACHE->stow( $id, \@arry );
                 return \@arry;
             }
             when('HASH') {
                 my( %hash );
-                tie %hash, 'Yote::Hash', $id_or_xpath, map { $_ => $data->{$_} } keys %$data;
+                tie %hash, 'Yote::Hash', $id, map { $_ => $data->{$_} } keys %$data;
                 my $tied = tied %hash; $tied->[2] = \%hash;
-                __store_weak( $id_or_xpath, \%hash );
+                __store_weak( $id, \%hash );
+		$CACHE->stow( $id, \%hash );
                 return \%hash;
             }
             default {
                 eval("require $class");
 		print STDERR Data::Dumper->Dump([$class,$!,$@]) if $@;
-                my $obj = $class->new( $id_or_xpath );
+                my $obj = $class->new( $id );
                 $obj->{DATA} = $data;
-                $obj->{ID} = $id_or_xpath;
+                $obj->{ID} = $id;
 		$obj->_load();		
-                __store_weak( $id_or_xpath, $obj );
+                __store_weak( $id, $obj );
+		$CACHE->stow( $id, $obj );
                 return $obj;
             }
         }
@@ -139,7 +151,7 @@ sub get_id {
             my( @data ) = @$ref;
             my $id = $DATASTORE->get_id( $class );
             tie @$ref, 'Yote::Array', $id;
-            my $tied = tied @$ref; $tied->[2] = $ref;
+	    $tied = tied @$ref; $tied->[2] = $ref;
             push( @$ref, @data );
             dirty( $ref, $id );
             __store_weak( $id, $ref );
@@ -160,7 +172,7 @@ sub get_id {
             my $id = $DATASTORE->get_id( $class );
             my( %vals ) = %$ref;
             tie %$ref, 'Yote::Hash', $id;
-            my $tied = tied %$ref; $tied->[2] = $ref;
+	    $tied = tied %$ref; $tied->[2] = $ref;
             for my $key (keys %vals) {
                 $ref->{$key} = $vals{$key};
             }
@@ -169,7 +181,11 @@ sub get_id {
             return $id;
         }
         default {
-            $ref->{ID} ||= $DATASTORE->get_id( $class );
+	    if( $class eq 'Yote::YoteRoot' ) {
+		$ref->{ID} = $DATASTORE->first_id( $class );
+	    } else {
+		$ref->{ID} ||= $DATASTORE->get_id( $class );
+	    }
             __store_weak( $ref->{ID}, $ref );
             return $ref->{ID};
         }
@@ -184,19 +200,13 @@ sub has_path_to_root {
     return $DATASTORE->has_path_to_root( $obj_id );
 } #has_path_to_root
 
-
-sub max_id {
-    my $self = shift;
-    return $DATASTORE->max_id();
-}
-
 sub package_methods {
     my $pkg = shift;
     my $methods = $Yote::ObjProvider::PKG_TO_METHODS{$pkg};
     unless( $methods ) {
 
         no strict 'refs';
-	my @m = grep { $_ && $_ !~ /^(_.*|AUTOLOAD|BEGIN|DESTROY|CLONE_SKIP|ISA|VERSION|unix_std_crypt|is|add_to_.*|remove_from_.*|import|[sg]et_.*|can|isa|new|decode_base64|encode_base64)$/ } grep { $_ !~ /::/ } keys %{"${pkg}\::"};
+	my @m = grep { $_ && $_ !~ /^(_.*|AUTOLOAD|BEGIN|DESTROY|CLONE_SKIP|ISA|VERSION|unix_std_crypt|is|add_(once_)?to_.*|remove_(all_)?from_.*|import|[sg]et_.*|can|isa|new|decode_base64|encode_base64)$/ } grep { $_ !~ /::/ } keys %{"${pkg}\::"};
 
         for my $class ( @{"${pkg}\::ISA" } ) {
             my $pm = package_methods( $class );
@@ -213,8 +223,8 @@ sub package_methods {
 # Returns a hash of paginated items that belong to the xpath.
 #
 sub paginate_xpath {
-    my( $path, $paginate_start, $paginate_length ) = @_;
-    my $hash = $DATASTORE->paginate_xpath( $path, $paginate_start, $paginate_length );
+    my( $path, $paginate_length, $paginate_start ) = @_;
+    my $hash = $DATASTORE->paginate_xpath( $path, $paginate_length, $paginate_start );
     return { map { $_ => xform_out( $hash->{$_} ) } keys %$hash };
 } #paginate_xpath
 
@@ -225,9 +235,18 @@ sub paginate_xpath {
 #
 sub paginate_xpath_list {
     my( $path, $paginate_length, $paginate_start ) = @_;
-    my $list = $DATASTORE->paginate_xpath_list( $path, $paginate_length, $paginate_start );
-    return [ map { xform_out( $_ ) } @$list ];
+    return [ map { xform_out( $_ ) } @{ $DATASTORE->paginate_xpath_list( $path, $paginate_length, $paginate_start ) } ];
 } #paginate_xpath_list
+
+sub paths_to_root {
+    my( $obj ) = @_;
+    return $DATASTORE->paths_to_root( get_id($obj) );
+}
+
+sub info {
+    my( $obj ) = @_;
+    return [ get_id($obj), ref($obj), paths_to_root($obj), $obj ];
+}
 
 sub path_to_root {
     my( $obj ) = @_;
@@ -242,28 +261,33 @@ sub power_clone {
     my $class = ref( $item );
     return $item unless $class;
 
-    my $at_start = 0;
     unless( $replacements ) {
-        $at_start = 1;
         $replacements ||= {};
     }
     my $id = get_id( $item );
     return $replacements->{$id} if $replacements->{$id};
 
     if( $class eq 'ARRAY' ) {
-        my $arry_clone = [ map { power_clone( $_, $replacements ) } @$item ];
-        my $c_id = get_id( $arry_clone );
-        $replacements->{$id} = $c_id;
-        return $arry_clone;
+	my $clone_arry = [];
+        my $c_id = get_id( $clone_arry );
+        $replacements->{ $id } = $c_id;
+	for my $it ( @$item ) {
+	    push @$clone_arry, power_clone( $it, $replacements );
+	}
+        return $clone_arry;
     }
     elsif( $class eq 'HASH' ) {
-        my $hash_clone = { map { $_ => power_clone( $item->{$_}, $replacements ) } keys %$item };
-        my $c_id = get_id( $hash_clone );
-        $replacements->{$id} = $c_id;
-        return $hash_clone;
+	my $clone_hash = {};
+        my $c_id = get_id( $clone_hash );
+        $replacements->{ $id } = $c_id;
+	for my $key (keys %$item) {
+	    $clone_hash->{ $key } = power_clone( $item->{ $key }, $replacements );
+	}
+
+        return $clone_hash;
     }
     else {
-        return $item if $item->isa( 'Yote::AppRoot' ) && (! $at_start);
+        return $item if $item->isa( 'Yote::Account' ) || $item->isa( 'Yote::AppRoot' );
     }
 
     my $clone = $class->new;
@@ -278,14 +302,6 @@ sub power_clone {
         }
     }
 
-    if( $at_start ) {
-	my( @cloned ) = map { fetch($_)  } keys %$replacements;
-	my( %cloned );
-	for my $obj (@cloned) {
-	    $cloned{ ref( $obj ) }++;
-	}
-    }
-
     return $clone;
     
 } #power_clone
@@ -298,23 +314,10 @@ sub recycle_object {
 
 #
 # Finds objects not connected to the root and recycles them.
+# This interface would be broken with the MongDB implementation.
 #
 sub recycle_objects {
-    my( $self, $start_id, $end_id ) = @_;
-    $start_id ||= 2;
-    $end_id   ||= $self->max_id();
-
-    my $recycled;
-    
-    for( my $id=$start_id; $id <= $end_id; $id++ ) {
-	my $obj = fetch( $id );
-	if( $obj && ( ! $self->has_path_to_root( $id ) ) ) {
-	    $self->recycle_object( $id );
-	    ++$recycled;
-	}
-    }
-    #print STDERR "RECYCLED $recycled objects\n";
-    return $recycled;
+    return $DATASTORE->recycle_objects( @_ );
 } #recycle_objects
 
 sub reset_changed {
@@ -325,6 +328,7 @@ sub start_transaction {
 }
 sub stow {
     my( $obj ) = @_;
+
     my $class = ref( $obj );
     return unless $class;
     my $id = get_id( $obj );
@@ -373,15 +377,25 @@ sub stow {
             }
         }
     } #given
-    delete $Yote::ObjProvider::WEAK_REFS->{$id};
-    
+
 } #stow
 
 sub stow_all {
-    my( %objs ) = %{$Yote::ObjProvider::DIRTY};
-    for my $obj (values %objs) {
-        stow( $obj );
+    my @odata;
+    for my $obj (values %{$Yote::ObjProvider::DIRTY} ) {
+	my $cls;
+	my $ref = ref( $obj );
+	if( $ref eq 'ARRAY' || $ref eq 'Yote::Array' ) {
+	    $cls = 'ARRAY';
+	} elsif( $ref eq 'HASH' || $ref eq 'Yote::Hash' ) {
+	    $cls = 'HASH';
+	} else {
+	    $cls = $ref;
+	}
+	push( @odata, [ get_id( $obj ), $cls, __raw_data( $obj ) ] );
     }
+    $DATASTORE->stow_all( \@odata );
+    $Yote::ObjProvider::DIRTY = {};
 } #stow_all
 
 sub xform_in {
@@ -544,7 +558,7 @@ Requests the data store used disconnect.
 
 Returns a string of the argument encrypted.
 
-=item fetch( id_or_xpath )
+=item fetch( id )
 
 Returns the array ref, hash ref or yote object specified by the numeric id or hash path.
 
@@ -558,10 +572,6 @@ if none had been assigned to it.
 Returns true if the argument ( which can be an array ref, hash ref or yote object ) can
 trace a path back to the root Yote::YoteRoot object ( id 1 ). This is used to detect if the
 object is dead and should be recycled.
-
-=item max_id( )
-
-Returns the max id of all objects in the data store. This is used by test programs.
 
 =item package_methods( package_name )
 

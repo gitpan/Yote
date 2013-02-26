@@ -6,6 +6,7 @@
 
 
 use strict;
+use warnings;
 
 use Carp;
 
@@ -14,10 +15,10 @@ use Yote::SQLiteIO;
 use File::Pid;
 use Yote::ConfigData;
 
-my $var_dir = Yote::ConfigData->config( 'yote_var_dir' );
 my $base_dir = Yote::ConfigData->config( 'yote_base_dir' );
 my $run_dir = Yote::ConfigData->config( 'yote_run_dir' );
 my $port = Yote::ConfigData->config( 'port' );
+my %config;
 
 push( @INC, "$base_dir/lib" );
 
@@ -36,29 +37,41 @@ $SIG{TERM} = sub {
 
 $SIG{INT} = sub { 
     $s->shutdown();
-    print STDERR "Shutting down due to term
-";
+    print STDERR "Shutting down due to int\n";
     $pidfile->remove();
     exit;
 };
 
 $SIG{CHLD} = sub { 
+    print STDERR "Got CHLD\n";
     #this is important. I may be able to handle the occasional crashing of the web server process right here!
+    print STDERR Data::Dumper->Dump(["GOT SIG CHLD", \%config]);
 };
 
 $SIG{PIPE} = sub {};
 
-my $sqlitefile = "$var_dir/SQLite.yote.db";
 my $webroot = "$base_dir/html";
-unless( -e $sqlitefile ) {
-    my $sqlite = new Yote::SQLiteIO( sqlitefile => $sqlitefile );
-    $sqlite->ensure_datastore();
-}
-my( %config ) = ( port       => $port, 
-		  webroot    => $webroot,
-		  datastore  => 'Yote::SQLiteIO', 
-		  sqlitefile => $sqlitefile );
 
+if( 0 ) {
+    my $var_dir = Yote::ConfigData->config( 'yote_var_dir' ) || '/tmp';
+    my $sqlitefile = "$var_dir/SQLite.yote.db";
+    unless( -e $sqlitefile ) {
+	my $sqlite = new Yote::SQLiteIO( sqlitefile => $sqlitefile );
+	$sqlite->ensure_datastore();
+    }
+    ( %config ) = ( port       => $port, 
+		    webroot    => $webroot,
+		    datastore  => 'Yote::SQLiteIO', 
+		    sqlitefile => $sqlitefile );
+} else {
+    ( %config ) = ( port         => $port, 
+		    webroot      => $webroot,
+		    datastore    => 'Yote::MongoIO', 
+		    datahost     => 'localhost',
+		    databasename => 'yote',
+		    dataport     => 27017,
+	);
+}
 my $do_start = 1;
 while( @ARGV ) {
     my $first = shift @ARGV;
@@ -71,7 +84,7 @@ while( @ARGV ) {
         exit;
     }
     elsif( $first eq '--version' || $first eq '-V' ) {
-	print "$Yote::VERSIONn";
+	print "$Yote::VERSION\n";
 	exit;
     }
     elsif( $first eq '--restart' || $first eq 'restart' ) {
@@ -94,7 +107,9 @@ while( @ARGV ) {
 	$config{$1} = shift @ARGV;
     }
     else {
-       print  "yote_server <options>n".join( "\n\t*", ('--shutdown : stops yote server', '--restart : restarts yote server',
+       print  "yote_server <options>n".join( "\n\t*", ('--shutdown : stops yote server',
+						       '--restart : restarts yote server',
+						       '--version : print yote version',
 							'--port=<port> : assigns the yote server to run on specified port',
 							'--datastore=<datastore package name> : use data store other than sqlite',
 							'--sqlitefile=<filename> : specify different sqlite file' ) )."\n";
