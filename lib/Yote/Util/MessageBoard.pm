@@ -1,5 +1,7 @@
 package Yote::Util::MessageBoard;
 
+use strict;
+
 use Yote::Obj;
 
 use base 'Yote::Obj';
@@ -17,7 +19,7 @@ sub post {
     $msg->set_message( $data->{message} );
     $msg->set_subject( $data->{subject} );
     $msg->set_sent( time() );
-    if( $data->{from} && $acct->is( $data->{from}->get_account() ) ) {
+    if( $data->{from} && $acct->_is( $data->{from}->get_account() ) ) {
 	$msg->set_from( $data->{from} );
     } 
     else {
@@ -54,7 +56,7 @@ sub read {
 	    $all_messages = [ grep {  $_->get_message()->get_from()->get_handle() =~ /$data->{filter}{from}/i  } @$all_messages ];
 	}
 	if( $data->{filter}{from} ) {
-	    $all_messages = [ grep { $data->{filter}{from}->is( $_->get_message()->get_from() )  } @$all_messages ];
+	    $all_messages = [ grep { $data->{filter}{from}->_is( $_->get_message()->get_from() )  } @$all_messages ];
 	}
 	if( $data->{filter}{subject} ) {
 	    $all_messages = [ grep { $_->get_message()->get_subject() =~ /$data->{filter}{subject}/i } @$all_messages ];
@@ -62,21 +64,21 @@ sub read {
     } #filters
     
     if( $data->{sort} eq 'date' ) {
-	if( $sort_asc ) {
+	if( $data->{sort_asc} ) {
 	    $all_messages = [ sort { $a->get_sent() <=> $b->get_sent()  } @$all_messages ];
 	} else {
 	    $all_messages = [ sort { $b->get_sent() <=> $a->get_sent()  } @$all_messages ];
 	}
     }
     elsif( $data->{sort} eq 'name' ) {
-	if( $sort_desc ) {
+	if( $data->{sort_desc} ) {
 	    $all_messages = [ sort { $b->get_from()->get_handle() cmp $a->get_from()->get_handle()  } @$all_messages ];
 	} else {
 	    $all_messages = [ sort { $a->get_from()->get_handle() cmp $b->get_from()->get_handle()  } @$all_messages ];
 	}	
     }
     elsif( $data->{sort} eq 'subject' ) {
-	if( $sort_desc ) {
+	if( $data->{sort_desc} ) {
 	    $all_messages = [ sort { $b->get_subject() cmp $a->get_subject()  } @$all_messages ];
 	} else {
 	    $all_messages = [ sort { $a->get_subject() cmp $b->get_subject()  } @$all_messages ];

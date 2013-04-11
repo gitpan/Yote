@@ -1,6 +1,7 @@
 package Yote::Hash;
 
 use strict;
+use warnings;
 
 use Tie::Hash;
 
@@ -14,7 +15,6 @@ sub TIEHASH {
     my( $class, $id, %hash ) = @_;
     my $storage = {};
     my $obj = bless [ $id, $storage ], $class;
-
     for my $key (keys %hash) {
         $storage->{$key} = $hash{$key};
     }
@@ -62,9 +62,6 @@ sub CLEAR {
     my $self = shift;
     Yote::ObjProvider::dirty( $self->[2], $self->[0] );
     %{$self->[1]} = ();
-#    for my $key (%{$self->[1]}) {
-#        delete $self->[1]{$key};
-#    }
 }
 
 1;
@@ -77,7 +74,9 @@ Yote::Hash - All hashes in the Yote system get tied to this class.
 
 =head1 DESCRIPTION
 
+This module is essentially a private module and its methods will not be called directly by programs.
 Yote::Hash extends Tie::Hash and is used by the Yote for hash persistance.
+This is used transparently and this can be considered a private class.
 
 =head1 AUTHOR
 

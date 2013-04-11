@@ -15,10 +15,12 @@ use vars qw($VERSION);
 
 $VERSION = '0.01';
 
-sub init {
+sub _init {
     my $self = shift;
     $self->set_yote_obj( new Yote::Test::TestAppNoLogin() );
     $self->get_yote_obj()->set_name( "INITY" );
+    $self->set_auto_listy( [ "A", "B", "C" ] );
+    $self->set_auto_hashy( { "foo" => "bar", "baz" => "baf" } );
 }
 
 sub _allows {
@@ -67,12 +69,26 @@ sub nologin_obj {
     return $self->get_yote_obj();
 }
 
+sub list {
+    my $self = shift;
+    return $self->get_auto_listy();
+}
+
+sub hash {
+    my $self = shift;
+    return $self->get_auto_hashy();
+}
+
 sub array {
     my( $self, $data, $acct ) = @_;
     die "Need account" unless $acct;
-    return [ 'A', { inner => [ 'Juan', { peanut => 'Butter', ego => $self->get_yote_obj() }] }, $self->get_yote_obj()  ];
+    return [ 'A', { inner => [ 'Juan', { peanut => 'Butter', ego => $self->get_yote_obj() }] }, $self->get_yote_obj(),
+	     [ qw/ b a d e f c / ]
+	];
 }
 
+
+# @TODO - should not have a sub starting with get_. refactor test
 sub get_hash {
     my( $self, $data, $acct_root, $acct ) = @_;
     die "Need account" unless $acct;
@@ -84,6 +100,21 @@ sub reset {
     die "Need account" unless $acct;
     $self->set_obj( undef );
     $self->set_made([]);
+    $self->set_auto_listy( [ "A", "B", "C" ] );
+    $self->set_auto_hashy( { "foo" => "bar", "baz" => "baf" } );
+
+}
+
+sub long_time {
+    sleep( 5 );
+    return "Long";
+}
+sub short_time {
+    return "short";
+}
+sub medium_time {
+    sleep( 2 );
+    return "Med";
 }
 
 1;

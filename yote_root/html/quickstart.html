@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Yote Quickstart</title>
+    <script src="/yote/js/jquery-1.8.0.min.js"></script>
+    <script src="/yote/js/jquery.cookie.js"></script>
+    <script src="/yote/js/jquery.base64.min.js"></script>
+    <script src="/yote/js/json2.js"></script>
+
+    <script src="/js/main.js"></script>
+    <script src="/yote/js/yote.js"></script>
+    <link href="/yote.css" rel="stylesheet" type="text/css" media="all" />
+    <link href="/css/main.css" rel="stylesheet" type="text/css" media="all" />
+
+    <STYLE>
+      .overlesson { min-width: 900px; display:inline;}
+      .lesson    { border: 0; }
+      .sidebar   { top:0px; width:200px; display:inline-block; vertical-align:top; }
+      .mainpanel { top:0px; width:700px; display:inline-block; }      
+      .lesson td { height: auto; vertical-align:middle; }
+      .server_col { border:ridge 4px lightblue; padding: 5px; background-color: #E1EEED; }
+      .client_col { border:ridge 4px lightblue; padding: 5px; background-color: #EEE1ED; }
+    </STYLE>
+
+    <script>
+    $().ready(function(){
+
+	make_menus( '#top_nav' );
+
+	$.yote.init();
+	
+	if( false ) {
+	    var hello_app = $.yote.fetch_app('Yote::Test::Hello');
+	    alert( hello_app.get_my_hash().get( 'store' ).get( 'AnObject' ).get_flavor() );
+	    /*
+	    alert( hello_app.hello_scalar() );
+	    var yote_list = hello_app.hello_array();
+	    for( var i=0; i < yote_list.length(); i++ ) {
+		alert( yote_list.get( i ) );
+	    }
+	    var yote_hash = hello_app.hello_hash();
+	    var hash_keys = yote_hash.keys();
+	    for( var i=0; i < hash_keys.length; i++ ) {
+		var hk = hash_keys[ i ];
+		alert( hk + ' --> ' + yote_hash.get( hk ) );
+	    }
+	    alert( hello_app.hello_nothing() );
+	    */
+	}
+
+	var lesson_template = 
+	    {
+		title             : '',
+		summary           : '',
+		client            : '',
+		server            : '',
+		discussion        : '',
+		server_discussion : '',
+		client_discussion : ''
+	    };
+
+
+	var lessons = [
+	    // ******************* HELLO WORLD *****************
+	    {
+		title   : 'Hello World',
+		summary : 'Connect client to server',
+		client  : '\
+$.yote.init();\n\
+var hello_app = $.yote.fetch_app(\'Yote::Hello\');\n\
+alert( hello_app.hello() );',
+		server : '\
+package Hello;\n\
+use base \'Yote::AppRoot\';\n\
+\n\
+sub hello {\n\
+  return "Hello World";\n\
+}\n\
+1;',
+		discussion : 'This kata shows how perl app methods can be invoked from the client side.',
+		server_discussion : 'All Apps inherit from Yote::AppRoot and have a singleton object associated with them.',
+		client_discussion : 'Once yote is initialized, an app singleton object is obtained by calling fetch_app.'
+	    },
+
+	    // ******************* HELLO OUTPUTS *****************
+	    {
+		title             : 'Hello Outputs',
+		summary           : 'Show four of the five output types that the server can emit to the client.',
+		client            : '\
+$.yote.init();\n\
+var hello_app = $.yote.fetch_app(\'Yote::Hello\');\n\
+alert( hello_app.hello_scalar() );\n\
+var yote_list = hello_app.hello_array();\n\
+for( var i=0; i < yote_list.length(); i++ ) {\n\
+   alert( yote_list.get( i ) );\n\
+}\n\
+var yote_hash = hello_app.hello_hash();\n\
+var hash_keys = yote_hash.keys();\n\
+var hash_keys = yote_hash.keys();\n\
+for( var i=0; i < hash_keys.length; i++ ) {\n\
+  var hk = hash_keys[ i ];\n\
+  alert( hk + \' --> \' + yote_hash.get( hk ) );\n\
+}\n\
+alert( hello_app.hello_nothing() );',
+		server            : '\
+package Hello;\n\
+use base \'Yote::AppRoot\';\n\
+\n\
+sub hello_scalar {\n\
+  return "Hello"\n\
+}\n\
+sub hello_array {\n\
+  return [ "A", "B", 33 ];\n\
+}\n\
+sub hello_hash {\n\
+  return { Foo => "BAR", \n\
+           Baz => "BAF" }\n\
+}\n\
+sub hello_nothing {}',
+		discussion        : 'This kata shows how scalar, array and hash outputs are passed from the client to the server. It\'s very important to note that arrays and hashes returned are not javascript arrays and hashes, but are array and has like objects.',
+		server_discussion : 'The server can pass back undef, scalars, arrays, hashes and yote objects.  Yote objects are not seen here. They will be covered in a later lesson',
+		client_discussion : 'It\'s very important to note that hashes and arrays are returned to the client as javascript objects that are not hash nor array. The array has a length() <strong>method</strong> rather than a length <i>property</i>. Items are extracted from these javascript objects using <strong>get( index or key )</strong>.'
+	    },
+
+	    // ******************* HELLO INPUTS *****************
+	    {
+		title   : 'Hello Inputs',
+		summary : 'Discover three out of four of the input types the client can pass to the server',
+		client  : '\
+$.yote.init();\n\
+var hello_app = $.yote.fetch_app(\'Yote::Hello\');\n\
+alert( hello_app.hello(\'Bob\') );\n\
+alert( hello_app.list_length( [ \'A\', \'B\', \'C\' ] ));\n\
+alert( hello_app.hash_keycount( { foo : \'bar\',\n\
+                                  baz : \'baf\' } ));',
+
+		server : '\
+package Hello;\n\
+use base \'Yote::AppRoot\';\n\
+\n\
+sub hello {\n\
+  my( $self, $name ) = @_;\n\
+  return "Hello \'$name\'";\n\
+}\n\
+sub list_length {\n\
+  my( $self, $list ) = @_;\n\
+  return "The input list is " . scalar( @$list ). "items long";\n\
+}\n\
+sub hash_keycount {\n\
+  my( $self, $hash ) = @_;\n\
+  return "The hash has " . scalar( keys %$hash ). "keys";\n\
+}\n\
+1;',
+		discussion : 'This kata shows how to pass inputs to perl app methods from the client side. Shown here is passing scalar, list, and hash input types. Not shown is passing yote objects as parameters.',
+		server_discussion : 'The second element of the @_ input array is always a reference to any data passed in, or undef if none was.',
+		client_discussion : ''
+	    },
+
+	    // ******************* HELLO VARIABLES **************
+	    {
+		title             : 'Hello Variables',
+		summary           : 'Show how variables set on the server side are immediately visible to the client side',
+		client            : '\
+$.yote.init();\n\
+var hello_app = $.yote.fetch_app(\'Yote::Hello\');\n\
+hello_app.push( "a" );\n\
+hello_app.push( { "HASH" : "VALUE" } );\n\
+hello_app.push( [ "LIST", "WITH", "STUFF" ] );\n\
+hello_app.hash( [ "key", "value" ] );\n\
+hello_app.call_set( "SomeValueHere" );\n\
+',
+		server            : '\
+package Hello;\n\
+use base \'Yote::AppRoot\';\n\
+\n\
+sub push {\n\
+  my( $self, $val ) = @_;\n\
+  $self->add_to_myarray( $val );\n\
+  return $self->get_my_array();\n\
+}\n\
+sub hash {\n\
+   my( $self, $key_val_pair ) = @_;\n\
+   $self->get_somehash( {} )->{ $key_val_pair->[ 0 ] } = $key_val_pair->[ 1 ];\n\
+}\n\
+sub call_set {\n\
+   my( $self, $val ) = @_;\n\
+   $self->set_foo( $val );\n\
+}',
+		discussion        : 'There are several types of automatic accessors on the server side : ' + 
+		    '<UL><LI><STRONG>set_</STRONG><I>foo</I><STRONG>(</STRONG><I> value </I><STRONG>)</STRONG> : sets the value of <I>foo</I></LI>' + 
+		    '<LI><STRONG>add_to_</STRONG><I>bar</I><STRONG>(</STRONG><I> list of values </I><STRONG>)</STRONG> : Ads the values to list <I>bar</I></LI>' + 
+		    '<LI><STRONG>add_once_to_</STRONG><I>bar</I><STRONG>(</STRONG><I> list of values </I><STRONG>)</STRONG> : Ads the values to list <I>bar</I>, ensuring values in the list are not duplicated</LI>' + 
+		    '<LI><STRONG>remove_from_</STRONG><I>bar</I><STRONG>(</STRONG><I> list of values </I><STRONG>)</STRONG> : Removes the first occurance of the items pased in from list <I>bar</I></LI>' + 
+		    '<LI><STRONG>remove_all_from_</STRONG><I>bar</I><STRONG>(</STRONG><I> list of values </I><STRONG>)</STRONG> : Removes the all occurances of the items pased in from list <I>bar</I></LI>' + 
+		    '</UL>',
+		server_discussion : 'The setting methods set the variables on their targets immediately. The Yote server takes care of their persistance so no explitic save is needed to be called.',
+		client_discussion : 'As soon as the variables are set on the server side, they are visible on the client side. When a new variable is attached to a server side oject, the client will be automatically updated with its value the next time the client contacts the server.'
+	    },
+
+	    // ******************* HELLO OBJECTS **************
+/*
+	    {
+		title             : 'Hello Objects',
+		summary           : '',
+		client            : '',
+		server            : '',
+		discussion        : '',
+		server_discussion : '',
+		client_discussion : ''
+	    },
+*/
+
+	    // ******************* HELLO INIT *****************
+	    {
+		title             : 'Hello Init',
+		summary           : 'Shows how data can be initialized for an app or other Yote object.',
+		client            : '\
+$.yote.init();\n\
+\n\
+var hello_app = $.yote.fetch_app(\'Hello\');\n\
+\n\
+alert( hello_app.get_my_hash().get( \'store\' )\n\
+       .get( \'AnObject\' ).get_flavor() );',
+		server            : '\
+package Fruitcase;\n\
+use base \'Yote::Obj\';\n\
+\n\
+sub _init {\n\
+  my $self = shift;\n\
+  $self->set_flavor( "blueberry" );\n\
+}\n\
+\n\
+package Hello;\n\
+use base \'Yote::AppRoot\';\n\
+\n\
+#\n\
+# _init is called when the object is first created.\n\
+#    note that methods that begin with underscores \n\
+#    are not accessable from the client.\n\
+sub _init {\n\
+   my $self = shift;\n\
+   $self->set_my_hash( {\n\
+        foo    => "BAR",\n\
+        llamas => [ "Like", "To", \n\
+        "Play", "With", "Twigs" ],\n\
+        store  => { AnObject => new Fruitcase(),\n\
+                    ANumber  => 22,\n\
+                  },\n\
+   } );\n\
+}\n\
+1;',
+		discussion        : '',
+		server_discussion : 'Init is called only first time a Yote object is instantiated. Note that both the Fruitcase object and the Hello app both have an _init method defined.',
+		client_discussion : ''
+	    },
+
+	    // ******************* HELLO ACCOUNT *****************
+	    {
+		title             : 'Hello Account',
+		summary           : 'Create and use an account',
+		client            : '\
+$.yote.init();\n\
+\n\
+$.yote.create_login(\n\
+       "Programmer",\n\
+       "isEncryptedOnServer",\n\
+       "coyocanid@gmail.com" );\n\
+$.yote.login(\n\
+       "Programmer",\n\
+       "isEncryptedOnServer" );\n\
+var hello_app = $.yote.fetch_app(\'Hello\');\n\
+alert( hello_app.hello(&quot;Hi there&quot;) );',
+		server            : '\
+package Hello;\n\
+use base \'Yote::AppRoot\';\n\
+\n\
+sub hello {\n\
+    my( $self, $value, $account ) = @_;\n\
+    return $value . &quot;, " . $account->get_handle();\n\
+}\n\
+1;',
+		discussion        : 'An account is just a bundle of data associated with a user and an app. The same user will have an account for each different app on the system.',
+		server_discussion : 'The account object is always passed as the third parameter to any yote method if a user is logged in.',
+		client_discussion : 'Methods for logging in and creating accounts are provided.'
+	    },
+
+	    // ******************* HELLO ENVIRONMENT *****************
+	    {
+		title             : 'Hello Environment',
+		summary           : 'Show how environment variables are passed into Yote',
+		client            : '\
+$.yote.init();\n\
+\n\
+$.yote.create_login(\n\
+       "Programmer",\n\
+       "isEncryptedOnServer",\n\
+       "coyocanid@gmail.com" );\n\
+$.yote.login(\n\
+       "Programmer",\n\
+       "isEncryptedOnServer" );\n\
+var hello_app = $.yote.fetch_app(\'Hello\');\n\
+alert( hello_app.hello(\'Hi there\') );',
+		server            : '\
+package Hello;\n\
+use base \'Yote::AppRoot\';\n\
+\n\
+sub hello {\n\
+my( $self, $value, $account, $env ) = @_;\n\
+my $from_ip =       $env-&gt;{ REMOTE_ADDR };\n\
+    return $value . &quot;, " . $account->get_handle() . "from $from_ip";\n\
+}\n\
+1;',
+		discussion        : '',
+		server_discussion : '',
+		client_discussion : ''
+	    }
+	];
+
+	var page_counter = $.yote.fetch_app('Yote::Util::Counter');
+	page_counter.increment( 'Quickstart Page',
+				function( count ) {
+				    $('#counter').empty().append( count );
+				},
+				function( err ) {
+				    msg( err );
+				},
+				1 );
+
+	var buf = '';
+	for( var i=0; i < lessons.length; i++ ) {
+	    var lesson = lessons[ i ];
+	    buf += '<LI id="li_' + i + '"><A HREF="#" id="lesson_' + i + '"> ' +
+		lesson[ 'title' ] + '</LI>';
+	}
+	
+	$( '#navcol' ).empty().append( buf );
+	for( var i=0; i < lessons.length; i++ ) {
+	    $( '#lesson_' + i ).click( (function(ii) { 
+		return function() {
+		    show_lesson( ii );
+		} 
+	    } )( i ) );
+	}
+
+	function show_lesson( lesson_idx ) {
+	    var lesson = lessons[ lesson_idx ];
+	    $( '#navcol li' ).removeClass( 'active' );
+	    $( '#li_' + lesson_idx ).addClass( 'active' );
+	    if( ! lesson ) {
+		return;
+	    }
+	    var buf = '<DIV class="page-header"><h3>' +
+		lesson[ 'title' ] + '</h3>' + lesson[ 'summary' ] + '</DIV>' +
+		'<table class="lesson">' +
+		'<tr><th>Server Side</th><th>Client Side</th></tr>' +
+		'<tr id="lrow"><td><div class="server_col"><pre><code>' + lesson[ 'server' ] + '</code></pre></div></td>' +
+		'<td><div class="client_col"><pre><code>' + lesson[ 'client' ] + '</code></pre></div></td>' +
+		'</table>';
+	    if( lesson[ 'server_discussion' ] ) {
+		buf += '<p><h4>Server Notes</h4>' + lesson[ 'server_discussion' ] + '</p>';
+	    } 
+	    if( lesson[ 'client_discussion' ] ) {
+		buf += '<p><h4>Client Notes</h4>' + lesson[ 'client_discussion' ] + '</p>';
+	    } 
+	    if( lesson[ 'discussion' ] ) {
+		buf += '<p><h4>Discussion</h4>' + lesson[ 'discussion' ] + '</p>';
+	    }
+	    buf += '<div style="padding:0 300px 0 300px;display:inline">';
+	    if( lesson_idx > 0 ) {
+		// can move backwards
+		buf += '<a id="back" href="#">BACK</a>';
+	    }
+	    if( lesson_idx < (lessons.length-1) ) {
+		// can move forwards
+		buf += '<a id="ahead" href="#" style="float:right">AHEAD</a>';
+	    }
+	    buf += '</div>';
+
+	    $( '#lesson' ).empty().append( buf );
+	    $( '#lesson pre' ).height( $( '#lrow' ).height() );
+
+	    $( '#back' ).click( (function(newidx) { 
+		return function() { show_lesson( newidx ); }
+	    } )( lesson_idx - 1 ) );
+
+	    $( '#ahead' ).click( (function(newidx) { 
+		return function() { show_lesson( newidx ); }
+	    } )( lesson_idx + 1 ) );
+
+	} //show_lesson
+
+	show_lesson( 0 );
+    });
+    </script>
+  </head>
+
+  <BODY>
+
+    <DIV class="header">
+	<img src="yotelogo.png">
+	<UL id="top_nav" class="nav"/>
+    </DIV>
+
+    <SECTION>
+      <h1>Quickstart</h1>
+      <p>These excersizes are designed to show one concept at a time in order to learn the ins and outs of programming Yote. For the server side examples, the package is expected to be in the classpath used by Yote. For the client side examples, the appropriate javascript files are expected to be included. <BR>
+	For these cases, <code>&lt;script src="/yote/js/yote.js"&gt;&lt;/script&gt;</code> must be included.</p>
+    </SECTION>
+
+    <DIV class="overlesson">
+      <DIV class="sidebar">
+	<UL id="navcol" class="nav nav-list"/>
+      </DIV>
+
+      <DIV class="mainpanel">
+	<SECTION id="lesson">
+	</SECTION>
+      </DIV>
+    </DIV>
+    <footer>
+      This page has been viewed <span id="counter"></span> times.
+    </footer>
+    <script src="/js/local.js"></script>
+</body>
+</html>

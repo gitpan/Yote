@@ -1,18 +1,20 @@
 $.yote.util = {
     ids:0,
+
     next_id:function() {
         return 'yidx_'+this.ids++;
     },
-    stage_text_field:function(attachpoint,yoteobj,fieldname) {
+ 
+   stage_text_field:function(attachpoint,yoteobj,fieldname) {
         var val = yoteobj.get(fieldname);
         var idname = this.next_id();
-        attachpoint.append( '<input type=text id=' + idname + '>' );
+        attachpoint.append( '<input type="text" id="' + idname + '">' );
         $( '#'+idname ).val( val );
         $( '#'+idname ).keyup( (function (o,k,id,initial) {
             return function(e) {
                 var newval = $(id).val();
-                o.stage(k,newval);
-                if( initial != newval || o.is_dirty(k)) {
+                o._stage(k,newval);
+                if( initial != newval || o._is_dirty(k)) {
                     $(id).css('background-color','lightyellow' );
                 } else {
                     $(id).css('background-color','white' );
@@ -31,7 +33,7 @@ $.yote.util = {
         var as_list   = args['as_list'];
 
         var idname    = this.next_id();
-        attachpoint.append( '<textarea cols='+cols+' rows='+rows+' id=' + idname + '></textarea>' );
+        attachpoint.append( '<textarea cols="'+cols+'" rows="'+rows+'" id="' + idname + '"></textarea>' );
         var val;
         if( as_list == true ) {
             var a = Array();
@@ -48,7 +50,7 @@ $.yote.util = {
             return function(e) {
                 var newval = $(id).attr('value');
 
-                if( initial != newval || o.is_dirty(k)) {
+                if( initial != newval || o._is_dirty(k)) {
                     $(id).css('background-color','lightyellow' );
                 } else {
                     $(id).css('background-color','white' );
@@ -57,11 +59,11 @@ $.yote.util = {
                 if( as_list == true ) {
                     newval = newval.split( /\r\n|\r|\n/ );
                     for( var nk in newval ) {
-                        o.stage( nk, newval[nk] );
+                        o._stage( nk, newval[nk] );
                     }
                 }
                 else {
-                    o.stage(k,newval);
+                    o._stage(k,newval);
                 }
             }
         } )(yoteobj,fieldname,'#'+idname,val) );
@@ -84,7 +86,7 @@ $.yote.util = {
 
         var current_id = typeof current === 'undefined' ? undefined : current.id;
 	var idname = this.next_id();
-        attachpoint.append( '<SELECT id='+idname+'>' + (include_none == true ? '<option value="">None</option>' : '' ) + '</select>' );
+        attachpoint.append( '<SELECT id="'+idname+'">' + (include_none == true ? '<option value="">None</option>' : '' ) + '</select>' );
         for( var i=0; i<yote_list.length(); ++i ) {
             var obj = yote_list.get( i );
             var val = obj.get( list_fieldname );
@@ -94,12 +96,8 @@ $.yote.util = {
                 ( function(o,k,id,initial) {
                     return function() {
                         var newid = $(id).val();
-                        if( 0 + newid > 0 ) {
-                            o.stage(k,fetch_obj(newid,obj._app));
-                        } else {
-                            o.stage(k,undefined);
-                        }
-                        if( initial != newid || o.is_dirty(k) ) {
+                        o._stage(k,undefined);
+                        if( initial != newid || o._is_dirty(k) ) {
                             $(id).css('background-color','lightyellow' );
                         } else {
                             $(id).css('background-color','white' );
@@ -110,197 +108,97 @@ $.yote.util = {
         }
     }, //stage_object_select
 
+    build_select_txt:function( args ) {
+	var items = args[ 'items' ], text = args[ 'text' ], val = args[ 'val' ], id = args[ 'id' ];
+	var dflt = args[ 'default' ];
+	if( items.length() == 0 ) { return dflt; }
+	var buf = '<SELECT id="' + id + '" ' + args[ 'extra' ] + '>';
+	if( args[ 'include_none' ] ) { buf += '<OPTION value="">None</OPTION>'; }
+	for( var i=0; i < items.length(); i++ ) {
+	    var item = items.get( i );
+	    buf += '<OPTION value="' + val( item, i ) + '">' + text( item ) + '</OPTION>';
+	}
+	return buf + '</SELECT>';
+    }, //build_select_txt
+
     make_select:function(attachpoint,list,list_fieldname) {
 	var idname = this.next_id();
-        attachpoint.append( '<select id='+idname+'></select>' );
+        attachpoint.append( '<select id="'+idname+'"></select>' );
 	for( var i in list ) {
 	    var item = list[i];
 	    $( '#'+idname ).append( '<option value='+item.id+'>'+item.get(list_fieldname)+'</option>' );
 	}
 	return $( '#' + idname );
     },
-    make_login_box:function(args) {
-	var target = args['target'];
-	var logged_in_f = args['on_login']   || args['on_in'];
-	var created_f = args['on_register']  || args['on_in'];
-	var recover_f = args['on_recover']   || args['on_in'];
-	var logged_out_f = args['on_logout'];
-
-	$(target).empty();
-	$(target).append( "<span id=login_msg_outerspan style=display:none><span id=login_msg_span class=warning></span><BR></span>" +
-
-			  // do login
-			  "<div style=display:none id=y_login_div>" +
-			  "<table><tr><td>Handle</td><td><input class=login id=login type=text></td>" +
-			  "</tr><tr><td>Password</td><td><input class=login id=password type=password>" +
-			  "</td></tr></table><br>" +
-			  "<input class=login id=login_submit type=submit value=Login>" +
-			  " <a href='#' id=register_link>Register</a>" +
-			  " <a href='#' id=forgot_link>Forgot</a>" +
-			  "</div>" +
-
-			  // not logged in
-			  "<div style=display:none id=y_not_loggedin>" +
-			  "Not logged in. <a href='#' id=login_link>Login</a> &nbsp;" +
-			  "<a href='#' id=register_link>Register</a>" +
-			  "</div>" +
-
-			  // register account
-			  "<div style=display:none id=y_register_account>" +
-			  "<table><tr><td>Handle</td><td><input class=register id=login type=text></td>" +
-			  "</tr><tr><td>Email</td><td><input class=register id=email type=text>" +
-			  "</tr><tr><td>Password</td><td><input class=register id=password type=password>" +
-			  "</td></tr></table>" + 
-			  "<input id=register_submit type=submit value=Register> " +
-			  "  <div id=register_login_link_div><a href='#' id=login_link>Login</a></div>" +
-			  "</div>" +
-
-			  // recover
-			  "<div style=display:none id=y_recover_account>" +
-			  "Email <input class=recover id=email> " +
-			  "<input id=recover_submit type=submit value=Recover>" +
-                          "<a href='#' id=login_link>Login</a>" + 
-			  "</div>" +
-
-			  // logged in
-			  "<div style=display:none id=y_logged_in>" +
-			  "Logged in as <span class=logged_in id=handle></span><BR> [<a id=logout_link href='#'>logout</a>]" +
-			  "</div>"
-			);
-	var message = function( msg ) {
-            if( typeof msg === 'string' ) {
-	        $( target + ' #login_msg_span').empty()
-	        $( target + ' #login_msg_span').append( msg )
-	        $( target + ' #login_msg_outerspan').show()	    
-	    } else {
-	        $( target + ' #login_msg_span').empty()
-	        $( target + ' #login_msg_outerspan').hide()
-            }
-	}
-	var install_function = function( f ) { return function() { f(); } }
-	var on_enter = function(f) { return function(e) { if(e.which == 13 ) { f(); } } }
-	var to_login = function(msg) {
-	    message( msg );
-	    $( target + ' > div ' ).hide();
-	    $( target + ' > div#y_login_div' ).show();
-	}
-	var to_recover = function() {
-	    $( target + ' > div ' ).hide();
-	    $( target + ' > div#y_recover_account' ).show();
-	}
-	var to_register = function(msg) {
-	    message( msg );
-	    $( target + ' > div ' ).hide();
-	    $( target + ' > div#y_register_account' ).show();
-	}
-	var to_logged_in = function(name,msg) {
-            message(msg);
-	    $( target + ' > div ' ).hide();
-	    $( target + ' .logged_in#handle' ).empty();
-	    $( target + ' .logged_in#handle' ).append(name);
-	    $( target + ' > div#y_logged_in' ).show();                
-	    logged_in_f();
-	}
-	var do_login = function() {
-	    $.yote.login( $( target + " .login#login").val(), $(target + " .login#password").val(),
-			  function(data) { //pass
-			      to_logged_in($.yote.login_obj.get('handle'));
-			      // note the following line will work but is not closure safe yet.
-			      if( typeof logged_in_f === 'function' ) { logged_in_f(); }
-			  },
-			  function(data) { //fail
-			      to_login(data);
-			  }
-			);
-	}
-	var do_register = function() {
-
-            if( $( target + " .register#password").val().length > 2 ) {
-	        $.yote.create_login( $( target + " .register#login").val(),
-				     $( target + " .register#password").val(),
-				     $( target + " .register#email").val(),
-				     function(data) { //pass
-					 to_logged_in($.yote.login_obj.get('handle'),"Created Account");
-					 if( typeof created_f === 'function' ) { created_f(); }
-				     },
-				     
-				     function(data) { //fail
-					 to_register(data);
-				          }
-				   );     
-            } else {
-                to_register("password too short");
-            }           
-	}
-	var do_recover = function() {
-	    $.yote.root.recover_password( { e:$( target + ' .recover#email' ).val(), 
-					    u:window.location.href,
-					    t:window.location.href.replace(/[^\/]$/, 'reset.html' )
-					  },
-					  function(d) {
-					      to_login( "sent recovery email" );
-					  },
-					  function(d) {
-					      message(d);
-					  }
-					);
-	    if( typeof recover_f === 'function' ) { recover_f(); }
-	}
-	var logout = function() {
-	    $( target + ' > div ' ).hide();
-            var rootapp = $.yote.fetch_root();
-
-            if( rootapp.number_of_accounts() > 0 ) {
-		$( target + ' > div#y_not_loggedin' ).show();
-		$( target + ' #register_login_link_div' ).show();
-            } else {
-                $( target + ' > div#y_register_account' ).show();
-		$( target + ' #register_login_link_div' ).hide();
-                message( "Create Initial Root Account" );
-            }
-	    $( target + ' #password' ).val('');
-	    $.yote.fetch_root().logout();
-	    if( typeof logged_out_f === 'function' ) { logged_out_f(); }
-	}
-
-	//link actions
-        var nada = function() {};
-
-	$( target + ' #login_link').click( install_function(to_login || nada ) );
-	$( target + ' #register_link').click( install_function(to_register || nada) );
-	$( target + ' #logout_link').click( install_function(logout || nada) );
-	$( target + ' #forgot_link').click( install_function(to_recover || nada) );
-
-	//button actions
-	$( target + ' #login_submit').click( install_function(do_login || nada) );
-	$( target + ' .login#login,' + target + ' .login#password' ).keypress( on_enter(do_login) );
-	$( target + ' #register_submit').click( install_function(do_register || nada) );
-	$( target + ' .register#login,' + target + ' .register#password,' + target + ' .register#email' ).keypress( on_enter(do_register) );
-	$( target + ' .recover#email' ).keypress( on_enter(do_recover) );
-	$( target + ' #recover_submit' ).click( install_function(do_recover || nada) );
-	if( $.yote.is_logged_in() ) {
-            to_logged_in( $.yote.get_login().get_handle() );
-	} else {
-	    logout();
-	}
-
-    }, //make_login_box
-
-    make_table:function() {
+    make_table:function(extra) {
+	var xtr = extra ? extra : '';
 	return {
-	    html:'<table>',
-	    add_header_row : function( arry ) {
-		this.html = this.html + '<tr>';
+	    html:'<table ' + xtr + '>',
+	    next_row_class:'class="even-row" ',
+	    add_header_row : function( arry, extra_row, extra_headers ) {
+		var xtr_row = extra_row ? extra_row : '';
+		var xtr_headers = extra_headers ? extra_headers : '';
+		this.html = this.html + '<tr ' + this.next_row_class + xtr_row + '>';
+		if( this.next_row_class == 'class="even-row" ' ) {
+		    this.next_row_class = 'class="odd-row" ';
+		} else {
+		    this.next_row_class = 'class="even-row" ';		    
+		}
+		var cls = 'class="even-col" ';
 		for( var i=0; i<arry.length; i++ ) {
-		    this.html = this.html + '<th>' + arry[i] + '</th>';
+		    this.html = this.html + '<th ' + cls + xtr_headers + '>' + arry[i] + '</th>';
+		    if( cls == 'class="even-col" ' ) {
+			cls = 'class="odd-col" ';
+		    } else {
+			cls = 'class="even-col" ';
+		    }
 		}
 		this.html = this.html + '</tr>';
 		return this;
 	    },
-	    add_row : function( arry ) {
-		this.html = this.html + '<tr>';
+	    add_row : function( arry, extra_row, extra_headers ) {
+		var xtr_row = extra_row ? extra_row : '';
+		this.html = this.html + '<tr ' + this.next_row_class + xtr_row + '>';
+		if( this.next_row_class == 'class="even-row" ' ) {
+		    this.next_row_class = 'class="odd-row" ';
+		} else {
+		    this.next_row_class = 'class="even-row" ';		    
+		}
+
+		var cls = 'class="even-col" ';
 		for( var i=0; i<arry.length; i++ ) {
-		    this.html = this.html + '<td>' + arry[i] + '</td>';
+		    if( extra_headers ) {
+			this.html = this.html + '<td ' + cls + extra_headers[i] + '>' + arry[i] + '</td>';
+		    } else {
+			this.html = this.html + '<td ' + cls + '>' + arry[i] + '</td>';
+		    }
+		    if( cls == 'class="even-col" ' ) {
+			cls = 'class="odd-col" ';
+		    } else {
+			cls = 'class="even-col" ';
+		    }
+		}
+		this.html = this.html + '</tr>';		
+		return this;
+	    },
+	    add_param_row : function( arry ) {
+		this.html = this.html + '<tr ' + this.next_row_class + '>';		
+		if( this.next_row_class == 'class="even-row" ' ) {
+		    this.next_row_class = 'class="odd-row" ';
+		} else {
+		    this.next_row_class = 'class="even-row" ';		    
+		}
+		if( arry.length > 0 ) {
+		    this.html = this.html + '<th class="even-col">' + arry[0] + '</th>';
+		}
+		var cls = 'class="odd-col" ';
+		for( var i=1; i<arry.length; i++ ) {
+		    this.html = this.html + '<td ' + cls + '>' +  arry[i] + '</td>';		    
+		    if( cls == 'class="even-col" ' ) {
+			cls = 'class="odd-col" ';
+		    } else {
+			cls = 'class="even-col" ';
+		    }
 		}
 		this.html = this.html + '</tr>';		
 		return this;
@@ -309,33 +207,126 @@ $.yote.util = {
 	}
     }, //make_table
 
-	
-    button_actions:function( args ) {
-	var but     = args[ 'button' ];
-	var action  = args[ 'action' ];
-	var texts   = args[ 'texts'  ] || [];
-	var exempt  = args[ 'cleanup_exempt' ] || {};
+    make_paginatehash_table:function( arg ) {
+	return (function( args ){
+	    
+	    var ptab = {
+		obj       : args[ 'obj' ],
+		list_name : args[ 'list_name' ],
+		size      : args[ 'size' ] || 100,
+		col_names : args[ 'col_names' ],
+		title     : args[ 'title' ] || '',
+		col_funs  : args[ 'col_functions' ],
+		attach_point : args[ 'attach_point' ]
+	    };
 
-	function check_ready() {
-	    for( var i=0; i<texts.length; ++i ) {
-		if( ! $( texts[i] ).val().match( /\S/ ) ) {
+	    ptab[ 'show' ] = function( start_pos ) {
+		if( ptab[ 'attach_point' ] ) {
+		    $( ptab[ 'attach_point' ] ).empty().append( ptab.build_html( start_pos ) );
+		    $( '#forward_' + ptab.obj.id ).click(function(){
+			ptab.show( start_pos + ptab.size );
+		    });
+		    $( '#back_' + ptab.obj.id ).click(function(){
+			var x = start_pos - ptab.size;
+			ptab.show( x > 0 ? x : 0 );
+		    });
+
+		}
+	    };
+
+	    ptab[ 'build_html' ] = function(start_pos) {
+		var start = start_pos ? start_pos : 0;
+		var tab = $.yote.util.make_table();
+		if( ptab.col_names ) {
+		    tab.add_header_row( ptab.col_names );
+		}
+		var hash = ptab.obj[ 'paginate_hash' ]( [ ptab.list_name, ptab.size + 1, start ] );
+		var max = hash.length() < ptab.size ? hash.length() : ptab.size;
+		var keys = hash.keys();
+		for( var i=0; i < max ; i++ ) {
+		    var key = keys[ i ];
+		    var val = hash.get( key );
+		    if( ptab.col_funs ) {
+			var arry = [];
+			for( var j=0; j < ptab.col_funs.length; j++ ) {
+			    var fun = ptab.col_funs[ j ];
+			    arry.push( fun( key, val ) );
+			}
+			tab.add_row( arry );
+		    } 
+		    else {
+			tab.add_row( [ key, val ] );
+		    }
+		}
+		
+		var buf = ptab.title + tab.get_html();
+		
+		if( start > 0 ) {
+		    buf = buf + '<span id="back_' + ptab.obj.id + '" class="btn"><i class="icon-fast-backward"></i></span>';
+		    if( hash.length() > max ) {
+			buf = buf + '<span id="forward_' + ptab.obj.id + '" class="btn"><i class="icon-fast-forward"></i></span>';
+		    }
+		    else {
+			buf = buf + '<span class="btn"><i class="icon-fast-forward icon-white"></i></span>';
+		    }
+		} 
+		else {
+		    if( hash.length() > max ) {
+			buf = buf + '<span class="btn"><i class="icon-fast-backward icon-white"></i></span>';
+			buf = buf + '<span id="forward_' + ptab.obj.id + '" class="btn"><i class="icon-fast-forward"></i></span>';
+		    } else {
+			//nothing to do
+		    }
+		}
+		return buf;
+	    };
+	    
+	    ptab[ 'attach_to' ] = function( attach_point ) {
+		ptab[ 'attach_point' ] = attach_point;
+		ptab.show( 0 );
+	    };
+
+	    if( ptab[ 'attach_point' ] ) {
+		ptab.show( 0 );
+	    }
+
+	    return ptab;
+	})( arg );
+    }, //make_paginatehash_table
+    
+
+    button_actions:function( args ) {
+	var but         = args[ 'button' ];
+	var action      = args[ 'action' ] || function(){};
+	var on_escape   = args[ 'on_escape' ] || function(){};
+	var texts       = args[ 'texts'  ] || [];
+	var req_texts   = args[ 'required' ];
+	var exempt      = args[ 'cleanup_exempt' ] || {};
+	var extra_check = args[ 'extra_check' ] || function() { return true; }
+
+	var check_ready = (function(rt,te,ec) { return function() {
+	    var t = rt || te;
+	    var ecval = ec();
+	    for( var i=0; i<t.length; ++i ) {
+		if( ! $( t[i] ).val().match( /\S/ ) ) {
 	    	    $( but ).attr( 'disabled', 'disabled' );
 		    return false;
 		}
 	    }
-
-	    $( but ).attr( 'disabled', false );
-	    return true;
-	} // check_ready
+	    $( but ).attr( 'disabled', ! ecval );
+	    return ecval;
+	} } )( req_texts, texts, extra_check ) // check_ready
 
 	for( var i=0; i<texts.length - 1; ++i ) {
-	    $( texts[i] ).keyup( check_ready );
-	    $( texts[i] ).keypress( (function(box) {
+	    $( texts[i] ).keyup( function() { check_ready(); return true; } );
+	    $( texts[i] ).keypress( (function(box,oe) {
 		return function( e ) {
 		    if( e.which == 13 ) {
 			$( box ).focus();
-		    }
-		} } )( texts[i+1] ) );
+		    } else if( e.which == 27 ) {
+			oe();
+		    }		   
+		} } )( texts[i+1], on_escape ) );
 	}
 
 	act = (function( c_r, a_f, txts ) { return function() {
@@ -349,15 +340,19 @@ $.yote.util = {
 	    }
 	} } ) ( check_ready, action, texts );
 
-	$( texts[texts.length - 1] ).keyup( check_ready );
-	$( texts[texts.length - 1] ).keypress( (function(a) { return function( e ) {
+	$( texts[texts.length - 1] ).keyup( function() { check_ready(); return true; } );
+	$( texts[texts.length - 1] ).keypress( (function(a,oe) { return function( e ) {
 	    if( e.which == 13 ) {
 		a();
-	    } } } )(act) );
+	    } else if( e.which == 27 ) {
+		eo();
+	    } } } )(act,on_escape) );
 
 	$( but ).click( act );
 
 	check_ready();
+
+	return check_ready;
 
     }, // button_actions
 
