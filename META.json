@@ -46,7 +46,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.0976"
+         "version" : "0.0977"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -63,10 +63,6 @@
       "Yote::Cache" : {
          "file" : "lib/Yote/Cache.pm",
          "version" : "0.01"
-      },
-      "Yote::Census" : {
-         "file" : "lib/Yote/Util/Census.pm",
-         "version" : "0.1"
       },
       "Yote::Cron" : {
          "file" : "lib/Yote/Cron.pm",
@@ -111,9 +107,6 @@
       "Yote::SQLiteIO" : {
          "file" : "lib/Yote/SQLiteIO.pm",
          "version" : "0.01"
-      },
-      "Yote::Sample::Census" : {
-         "file" : "lib/Yote/Sample/Census.pm"
       },
       "Yote::Sample::SecretCollect" : {
          "file" : "lib/Yote/Sample/SecretCollect.pm",
@@ -180,5 +173,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.0976"
+   "version" : "0.0977"
 }
