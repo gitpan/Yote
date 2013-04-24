@@ -46,7 +46,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.0975"
+         "version" : "0.0976"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -66,7 +66,7 @@
       },
       "Yote::Census" : {
          "file" : "lib/Yote/Util/Census.pm",
-         "version" : "0.01"
+         "version" : "0.1"
       },
       "Yote::Cron" : {
          "file" : "lib/Yote/Cron.pm",
@@ -180,5 +180,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.0975"
+   "version" : "0.0976"
 }
