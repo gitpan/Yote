@@ -3,12 +3,30 @@ use warnings;
 use File::Copy;
 use Module::Build;
 
-# check to see where the database can be kept
-my $yote_base_dir = '/usr/local/yote';
-unless( -w '/usr/local' ) {
-    $yote_base_dir = "$ENV{HOME}/.yote";
-}
-mkdir $yote_base_dir unless -d $yote_base_dir;
+use strict;
+use warnings;
+
+# check to find the root directory for yote using a list of common candidates
+my( $yote_root_parent ) = grep { -e && -r && -w } ( '/opt',
+						    '/var',
+						    '/usr/local',
+						    $ENV{HOME} );
+
+die "Unable to write yote root directory" unless -w $yote_root_parent;
+my $yote_root = "$yote_root_parent/yote";
+
+mkdir $yote_root unless -d $yote_root;
+
+die "Unable to create root directory" unless -w $yote_root;
+
+mkdir "$yote_root/holding";
+mkdir "$yote_root/html";
+mkdir "$yote_root/html/uploads";
+mkdir "$yote_root/data";
+mkdir "$yote_root/log";
+mkdir "$yote_root/daemon";
+
+# fill the root directory
 sub copy_dir {
     my( $dir, $dest ) = @_;
     mkdir "$dest" unless -d "$dest";
@@ -22,54 +40,39 @@ sub copy_dir {
 	    copy( "$dir/$fn", "$dest/$fn" );
 	}
     }
-}
-
-copy_dir( 'yote_root', $yote_base_dir );
-
-my $yote_var_dir = '/var/yote';
-unless( -w '/var/' ) {
-    $yote_var_dir = "$ENV{HOME}/.yote";
-}
-mkdir $yote_var_dir unless -d $yote_var_dir;
-
-my $yote_run_dir = '/var/run';
-unless( -w $yote_run_dir ) {
-    $yote_run_dir = "$ENV{HOME}/.yote";
-    mkdir $yote_run_dir unless -d $yote_run_dir;
-}
+} #copy_dir
+copy_dir( 'yote_root', $yote_root );
 
 my $builder = Module::Build->new(
     add_to_cleanup      => [ 'Yote-*' ],
     build_requires => {
         'Test::More' => 0,
+	'Test::Pod'  => 0,
     },
     create_makefile_pl => 'traditional',
     dist_author        => q{Eric Wolf (coyocanid@gmail.com)},
     dist_version_from  => 'lib/Yote.pm',
     license            => 'perl',
     module_name        => 'Yote',
-    release_status     => 'alpha',
+    release_status     => 'testing',
     script_files       => [ 'bin/yote_server' ],
     requires => {
 	'Crypt::Passwd::XS'     => 0.601,
-	'forks'                 => 0.34,
+	'DBI'                   => 1.625,
 	'DateTime'              => 0.77,
 	'DBD::SQLite'           => 1.35,
-	'DBI'                   => 0,
 	'Email::Valid'          => 0.190,
 	'File::UStore'          => 0.12,
-	'JSON'                  => 0,
-	'Mail::Sender'          => 0,
+	'forks'                 => 0.34,
+	'forks::shared'         => 0.34,
+	'JSON'                  => 2.53,
+	'Logger::Simple'        => 2.0,
 	'MIME::Lite'            => 3.029,
-	'Net::Server::HTTP'     => 0,
+	'MongoDB'               => 0.503,
 	'WeakRef'               => 0.01,
-	'MongoDB'               => 0,
     },
     );
 
-$builder->config_data( 'yote_var_dir' => $yote_var_dir );
-$builder->config_data( 'yote_run_dir' => $yote_run_dir );
-$builder->config_data( 'yote_base_dir' => $yote_base_dir );
-$builder->config_data( 'port'         => 8008 );
+$builder->config_data( 'yote_root' => $yote_root );
 
 $builder->create_build_script();

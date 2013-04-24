@@ -1,22 +1,24 @@
+<!DOCTYPE html>
 <html>
   <head>
     <title>Yote</title>
     <script src="/yote/js/jquery-latest.js"></script>
-    <script src="/yote/js/jquery.dumper.js"></script>
     <script src="/yote/js/jquery.cookie.js"></script>
     <script src="/yote/js/jquery.base64.min.js"></script>
     <script src="/yote/js/json2.js"></script>
-    <link href="/css/bootstrap.css" rel="stylesheet" type="text/css" media="all" />
-    <link href="/css/bootstrap-responsive.css" rel="stylesheet" type="text/css" media="all" />
 
+    <script src="/js/main.js"></script>
     <script src="/yote/js/yote.js"></script>
-    <script src="/yote/js/yote.util.js"></script>
-    <link rel="stylesheet" href="/yote/css/jquery.mobile.css" type="text/css" media="all" />
-    <link rel="stylesheet" href="/yote/css/ui-lightness/jquery-ui-1.8.23.custom.css" type="text/css" media="all" />
     <link href="/yote.css" rel="stylesheet" type="text/css" media="all" />
+    <link href="/css/main.css" rel="stylesheet" type="text/css" media="all" />
+
+    <STYLE>
+    </STYLE>
+
     <script>
     $().ready(function(){
-    var $window = $(window);
+	
+	make_menus( '#top_nav' );
 	$.yote.init();
 	var news_app = $.yote.fetch_app('Yote::Util::Admin');
 	var cms = news_app.get_cms();
@@ -29,68 +31,51 @@
     </script>
   </head>
 
-  <BODY  data-spy="scroll" data-target="#navcol" >
-    <DIV class="navbar navbar-fixed-top navbar-inverse">
-      <DIV class="navbar-inner">
-	<A class="brand"><img src="yotelogo.png"></A>
-	<UL class="nav">
-	  <LI class="active"><a href="index.html">About</a></LI>
-	  <LI><A href="install.html">Install</A></LI>
-	  <LI><A href="samples.html">Samples</A></LI>
-<!--	  <LI><A href="program.html">Program</A></LI> -->
-	</UL>      
-      </DIV>
-    </DIV>
+  <BODY>
 
-    <HEADER class="jumbotron subhead" style="height:70px">
-      &nbsp;
-    </HEADER>
+    <DIV class="header">
+	<img src="yotelogo.png">
+	<UL id="top_nav" class="nav"/>
+    </DIV>
 
     <SECTION>
       <DIV class="page-header">
 	<H1>What is Yote</H1>
-      </DIV>	    
-      <P>Yote is a web application server,
-	a set of perl libraries and, a set of javascript libraries. It is
-	designed for the rapid development of web applications. This website is run from a yote
-	server as are all the apps that appear on this site.
+      </DIV>
+      <P>Yote is a web application server written in perl and javascript. It is
+	designed for the rapid development of web applications. 
       </P>
-      <P>
-	Yote objects are container objects organized in a tree that are automatically saved by the server and
-	require no table definitions. A master process runs yote methods and is the only process that can touch 
-	the backend datastore (currently SQLite, but drivers can be made for other data stores).
+      <p>
+	Yote manages persistant objects in a graph structure containing a root node. It can also be used as a web server itself.
+	The objects are automatically saved and cached. The datastore can be one of Mongo, SQLite and MySQL. Mongo is the 
+	favored and fastest data store for Yote.
       </P>
-      <P>
-	Yote is just venturing as an alpha release. This means that, while there are test programs to make sure it is doing its job,
-	there are likely bugs that the test program does not yet test for. It means that not all features have been created even if
-	they are planned.
+      <p>
+	Yote has just entered its alpha release phase, meaning it's in feature freeze. It also means that 
+	the installer kinks need to be worked out post haste and a big bughunt begins.
+	This website is dogfooding Yote, meaning that all pages and apps on the site are run from a Yote server. 
       </P>
     </SECTION>
 
     <SECTION>
       <DIV class="page-header">
-	<H2>Who is Yote for</H2>
+	<H2>It's for those who</H2>
       </DIV>	    
-      <P>
-	Yote is for the Impatient; those people who want to code the business logic and object to object relationships without
-	having to muck about writing table schemas.
-	<BR>
-	Yote is for someone who wants to put a prototype of a web application together in short order.
-      </P>
+      <UL>
+	<LI>Don't have the time to use schemas</LI>
+	<LI>Want to just code the business logic</LI>
+	<LI>Have to keep pace with fickle design changes</LI>
+      </UL>
     </section>
 
     <SECTION>
       <DIV class="page-header">
-	<H2>What makes Yote Special</H2>
+	<H2>Why Yote makes you more productive</H2>
       </DIV>
       <ul>
-	<LI>Objects defined on the server side have automatically created proxies on the client side.</LI>
-	<LI>Objects on the client side are transparently updated when changed on the server side</LI>
-	<LI>Any key value pair can be attached to any Yote object as long as the key is a string and the value is a string, number, array, hash or Yote object.</LI>
-	<LI>Yote objects are lazilly loaded and active in memory while being used.</LI>
-	<LI>The key value pairs attached to any Yote object are automatically saved.</LI>
-	<LI>All active Yote objects can trace a reference back to the root Yote object</LI>
-	
+	<LI><strong>MVC :</strong> the model is created transparently and has much less an overt footprint in the code. This means you mainly focus on the controller and model.</LI>
+	<LI><strong>Schema gone :</strong> you change data structures on the fly and on a case by case basis.</LI>
+	<LI><strong>Synchronous :</strong> the javascript calls are synchronous by default, but can be called asynchronous as well. The code then flows from one statement to the next without needing to chain lots of asycnronous calls.</LI>
       </ul>
     </SECTION>
     
@@ -98,12 +83,18 @@
       <DIV class="page-header">
 	<H1>Contacting the programmer</H1>
       </DIV>
-      My name is Eric Wolf and I've been working on Yote for a good three years, on and off, when I have time. I can be reached at <a href="mailto:coyocanid@gmail.com">coyocanid@gmail.com</a>.
+      <p>
+      My name is Eric Wolf and I've been working on Yote for a good three years, on and off, when I have time. 
+      </p><p>
+      I can be reached at <a href="mailto:coyocanid@gmail.com">coyocanid@gmail.com</a>.
+      </p><p>
+      Yes, I will help with any questions or installation issues.
+      </p>
     </SECTION>	  
     
-    <script src="/js/bootstrap.js"></script>
     <footer>
       This page has been viewed <span id="counter"></span> times.
     </footer>
+    <script src="/js/local.js"></script>
   </body> 
 </html>

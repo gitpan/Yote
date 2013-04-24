@@ -40,7 +40,13 @@ sub new {
 
 sub init {
     my $args = ref( $_[0] ) ? $_[0] : { @_ };
-    my $datapkg = $args->{datastore} || 'Yote::SQLiteIO';
+    my $datapkg = 'Yote::SQLiteIO';
+    if( $args->{engine} eq 'mongo' ) {
+	$datapkg = 'Yote::MongoIO';
+    }
+    elsif( $args->{engine} eq 'mysql' ) {
+	$datapkg = 'Yote::MysqlIO';
+    }
     eval( "require $datapkg" );
     $DATASTORE = $datapkg->new( $args );
     $DATASTORE->ensure_datastore();
@@ -62,8 +68,8 @@ sub commit_transaction {
 sub dirty {
     my $obj = shift;
     my $id = shift;
+    Yote::ObjManager::mark_dirty( $id );
     $Yote::ObjProvider::DIRTY->{$id} = $obj;
-    $Yote::ObjProvider::CHANGED->{$id} = 1;
 } #dirty
 
 
@@ -234,8 +240,8 @@ sub paginate_xpath {
 #   rather than [ undef, undef, undef, 'val1', 'val2' ]
 #
 sub paginate_xpath_list {
-    my( $path, $paginate_length, $paginate_start ) = @_;
-    return [ map { xform_out( $_ ) } @{ $DATASTORE->paginate_xpath_list( $path, $paginate_length, $paginate_start ) } ];
+    my( $path, $paginate_length, $paginate_start, $reverse ) = @_;
+    return [ map { xform_out( $_ ) } @{ $DATASTORE->paginate_xpath_list( $path, $paginate_length, $paginate_start, $reverse ) } ];
 } #paginate_xpath_list
 
 sub paths_to_root {
@@ -320,9 +326,6 @@ sub recycle_objects {
     return $DATASTORE->recycle_objects( @_ );
 } #recycle_objects
 
-sub reset_changed {
-    $Yote::ObjProvider::CHANGED = {};
-}
 sub start_transaction {
     return $DATASTORE->start_transaction();
 }
@@ -458,10 +461,6 @@ sub __clean {
     my $id = shift;
     delete $Yote::ObjProvider::DIRTY->{$id};
 } #__clean
-
-sub __fetch_changed {
-    return [keys %{$Yote::ObjProvider::CHANGED}];
-}
 
 sub __is_dirty {
     my $obj = shift;

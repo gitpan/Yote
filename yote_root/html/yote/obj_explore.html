@@ -4,7 +4,6 @@
 
 <script src="/yote/js/jquery-latest.js"></script>
 <script src="/yote/js/jquery.cookie.js"></script>
-<script src="/yote/js/jquery.dumper.js"></script>
 <script src="/yote/js/jquery.base64.min.js"></script>
 <script src="/yote/js/json2.js"></script>
 <script src="/yote/js/yote.js"></script>
@@ -14,7 +13,6 @@
    $().ready(function(){ 
        $.yote.debug = true;
        function show_header( name, obj, attachpoint ) {
-//	   obj.load_direct_descendents();
 	   var plus_id = $.yote.util.next_id();
 	   var list_id = $.yote.util.next_id();
 	   attachpoint.append( '<span><a id="a_' + obj.id + '" name="a_' + obj.id + '">name</a></span> <span id=' + plus_id +
@@ -57,9 +55,9 @@
 </script>
 </head>
 <body>
-<h1>Yote Object Explorer</h1>
-
-<div id=root></div>
-
+  <h1>Yote Object Explorer</h1>
+  
+  <div id="root"></div>
+  
 </body>
 </html>

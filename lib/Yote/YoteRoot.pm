@@ -2,6 +2,10 @@ package Yote::YoteRoot;
 
 use strict;
 use warnings;
+
+use vars qw($VERSION);
+$VERSION = '0.01';
+
 no warnings 'uninitialized';
 
 use Yote::Cron;
@@ -45,7 +49,8 @@ sub create_login {
     #
     my( $handle, $email, $password ) = ( $args->{h}, $args->{e}, $args->{p} );
     if( $handle ) {
-        if( $HANDLE_CACHE->{$handle} || Yote::ObjProvider::xpath("/_handles/$handle") ) {
+	my $lc_handle = lc( $handle );
+        if( $HANDLE_CACHE->{$lc_handle} || Yote::ObjProvider::xpath("/_handles/$lc_handle") ) {
             die "handle already taken";
         }
         if( $email ) {
@@ -53,7 +58,7 @@ sub create_login {
                 die "email already taken";
             }
             unless( Email::Valid->address( $email ) ) {
-                die "invalid email";
+                die "invalid email '$email'";
             }
         }
         unless( $password ) {
@@ -61,7 +66,7 @@ sub create_login {
         }
 
 	$EMAIL_CACHE->{$email}   = 1;
-	$HANDLE_CACHE->{$handle} = 1;
+	$HANDLE_CACHE->{$lc_handle} = 1;
 
         my $new_login = new Yote::Login();
 
@@ -85,7 +90,7 @@ sub create_login {
         $new_login->set__password( Yote::ObjProvider::encrypt_pass($password, $new_login) );
 
 	Yote::ObjProvider::xpath_insert( "/_emails/$email", $new_login );
-	Yote::ObjProvider::xpath_insert( "/_handles/$handle", $new_login );
+	Yote::ObjProvider::xpath_insert( "/_handles/$lc_handle", $new_login );
 	
         return { l => $new_login, t => $self->_create_token( $new_login, $ip ) };
     } #if handle
@@ -98,7 +103,7 @@ sub create_login {
 #
 sub fetch {
     my( $self, $data, $account, $env ) = @_;
-    die "Access Error" unless Yote::ObjManager::knows_dirty( ref( $data ) ? $data : [ $data ], undef, $account ? $account->get_login() : undef, $env->{GUEST_TOKEN} );
+    die "Access Error" unless Yote::ObjManager::allows_access( $data, $self, $account ? $account->get_login() : undef, $env->{GUEST_TOKEN} );
     if( ref( $data ) eq 'ARRAY' ) {
 	my $login = $account->get_login();
 	return [ map { Yote::ObjProvider::fetch( $_ ) } grep { $Yote::ObjProvider::LOGIN_OBJECTS->{ $login->{ID} }{ $_ } } @$data ];
@@ -118,7 +123,7 @@ sub fetch_app_by_class {
         $app = $data->new();
         $self->get__apps()->{$data} = $app;
     }
-    return [$app,@{$app->_extra_fetch()}];
+    return $app;
 } #fetch_app_by_class
 
 
@@ -162,9 +167,11 @@ sub login {
     my( $self, $data, $dummy, $env ) = @_;
 
     if( $data->{h} ) {
+	my $lc_h = lc( $data->{h} );
 	my $ip = $env->{ REMOTE_ADDR };
-        my $login = Yote::ObjProvider::xpath("/_handles/$data->{h}");
+        my $login = Yote::ObjProvider::xpath("/_handles/$lc_h");
         if( $login && ($login->get__password() eq Yote::ObjProvider::encrypt_pass( $data->{p}, $login) ) ) {
+	    Yote::ObjManager::clear_login( $login, $env->{GUEST_TOKEN} );
             return { l => $login, t => $self->_create_token( $login, $ip ) };
         }
     }

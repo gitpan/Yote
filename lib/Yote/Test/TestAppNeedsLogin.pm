@@ -19,11 +19,8 @@ sub _init {
     my $self = shift;
     $self->set_yote_obj( new Yote::Test::TestAppNoLogin() );
     $self->get_yote_obj()->set_name( "INITY" );
-}
-
-sub _extra_fetch {
-    my $self = shift;
-    return [$self->get_yote_obj()];	
+    $self->set_auto_listy( [ "A", "B", "C" ] );
+    $self->set_auto_hashy( { "foo" => "bar", "baz" => "baf" } );
 }
 
 sub _allows {
@@ -72,6 +69,16 @@ sub nologin_obj {
     return $self->get_yote_obj();
 }
 
+sub list {
+    my $self = shift;
+    return $self->get_auto_listy();
+}
+
+sub hash {
+    my $self = shift;
+    return $self->get_auto_hashy();
+}
+
 sub array {
     my( $self, $data, $acct ) = @_;
     die "Need account" unless $acct;
@@ -93,6 +100,21 @@ sub reset {
     die "Need account" unless $acct;
     $self->set_obj( undef );
     $self->set_made([]);
+    $self->set_auto_listy( [ "A", "B", "C" ] );
+    $self->set_auto_hashy( { "foo" => "bar", "baz" => "baf" } );
+
+}
+
+sub long_time {
+    sleep( 5 );
+    return "Long";
+}
+sub short_time {
+    return "short";
+}
+sub medium_time {
+    sleep( 2 );
+    return "Med";
 }
 
 1;

@@ -8,9 +8,9 @@ use strict;
 use warnings;
 no warnings 'uninitialized';
 no warnings 'recursion';
-use feature ':5.10';
 
 use Data::Dumper;
+use DBD::SQLite;
 use DBI;
 
 use vars qw($VERSION);
@@ -107,27 +107,25 @@ sub fetch {
 
     return undef unless $class;
     my $obj = [$id,$class];
-    given( $class ) {
-        when('ARRAY') {
-            $obj->[DATA] = [];
-            my $res = $self->_selectall_arrayref( "SELECT field, ref_id, value FROM field WHERE obj_id=?",  $id );
-            die $self->{DBH}->errstr() if $self->{DBH}->errstr();
-
-            for my $row (@$res) {
-                my( $idx, $ref_id, $value ) = @$row;
-		$obj->[DATA][$idx] = $ref_id || "v$value";
-            }
-        }
-        default {
-            $obj->[DATA] = {};
-            my $res = $self->_selectall_arrayref( "SELECT field, ref_id, value FROM field WHERE obj_id=?",  $id );
-            die $self->{DBH}->errstr() if $self->{DBH}->errstr();
-
-            for my $row (@$res) {
-                my( $field, $ref_id, $value ) = @$row;
-		$obj->[DATA]{$field} = $ref_id || "v$value";
-            }
-        }
+    if( $class  eq 'ARRAY') {
+	$obj->[DATA] = [];
+	my $res = $self->_selectall_arrayref( "SELECT field, ref_id, value FROM field WHERE obj_id=?",  $id );
+	die $self->{DBH}->errstr() if $self->{DBH}->errstr();
+	
+	for my $row (@$res) {
+	    my( $idx, $ref_id, $value ) = @$row;
+	    $obj->[DATA][$idx] = $ref_id || "v$value";
+	}
+    }
+    else {
+	$obj->[DATA] = {};
+	my $res = $self->_selectall_arrayref( "SELECT field, ref_id, value FROM field WHERE obj_id=?",  $id );
+	die $self->{DBH}->errstr() if $self->{DBH}->errstr();
+	
+	for my $row (@$res) {
+	    my( $field, $ref_id, $value ) = @$row;
+	    $obj->[DATA]{$field} = $ref_id || "v$value";
+	}
     }
     return $obj;
 } #fetch
@@ -176,7 +174,7 @@ sub max_id {
 
 #
 # Returns a hash of paginated items that belong to the xpath.
-# @TODO - maybe get rid of this, since hash is not a good order dependent thing
+# 
 sub paginate_xpath {
     my( $self, $path, $paginate_length, $paginate_start ) = @_;
 
@@ -456,7 +454,7 @@ sub xpath_count {
 
 
 #
-# Inserts a value into the given xpath. /foo/bar/baz. Overwrites old value if it exists. Appends if it is a list.
+# Deletes a value from the given xpath. /foo/bar/baz.
 #
 sub xpath_delete {
     my( $self, $path ) = @_;
@@ -556,7 +554,7 @@ sub xpath_list_insert {
 sub _connect {
     my $self  = shift;
     my $args  = ref( $_[0] ) ? $_[0] : { @_ };
-    my $file  = $args->{sqlitefile} || $self->{args}{sqlitefile} || '/usr/local/yote/data/SQLite.yote.db';
+    my $file  = $args->{ store };
     $self->{DBH} = DBI->connect( "DBI:SQLite:db=$file" );
     $self->{DBH}->{AutoCommit} = 1;
     $self->{file} = $file;
@@ -610,37 +608,35 @@ sub __stow_updates {
 
     my( @cmds, @cdata );
 
-    given( $class ) {
-        when('ARRAY') {
-            push( @cmds, ["DELETE FROM field WHERE obj_id=?",  $id ] );
+    if( $class eq 'ARRAY') {
+	push( @cmds, ["DELETE FROM field WHERE obj_id=?",  $id ] );
 
 
-            for my $i (0..$#$data) {
-		next unless defined $data->[$i];
-                my $val = $data->[$i];
-                if( index( $val, 'v' ) == 0 ) {
+	for my $i (0..$#$data) {
+	    next unless defined $data->[$i];
+	    my $val = $data->[$i];
+	    if( index( $val, 'v' ) == 0 ) {
 #		    push( @cmds, ["INSERT INTO field (obj_id,field,value) VALUES (?,?,?)",  $id, $i, substr($val,1) ] );
-		    push( @cdata, [$id, $i, '', substr($val,1) ] );
-                } else {
+		push( @cdata, [$id, $i, '', substr($val,1) ] );
+	    } else {
 #                    push( @cmds, ["INSERT INTO field (obj_id,field,ref_id) VALUES (?,?,?)",  $id, $i, $val ] );
-		    push( @cdata, [$id, $i, $val, '' ] );
-                }
-            }
-        }
-        default {
-            push( @cmds, ["DELETE FROM field WHERE obj_id=?",  $id ] );
-            for my $key (keys %$data) {
-                my $val = $data->{$key};
-                if( index( $val, 'v' ) == 0 ) {
+		push( @cdata, [$id, $i, $val, '' ] );
+	    }
+	}
+    }
+    else {
+	push( @cmds, ["DELETE FROM field WHERE obj_id=?",  $id ] );
+	for my $key (keys %$data) {
+	    my $val = $data->{$key};
+	    if( index( $val, 'v' ) == 0 ) {
 #		    push( @cmds, ["INSERT INTO field (obj_id,field,value) VALUES (?,?,?)",  $id, $key, substr($val,1) ] );
-		    push( @cdata, [$id, $key, '', substr($val,1) ] );
-                }
-                else {
+		push( @cdata, [$id, $key, '', substr($val,1) ] );
+	    }
+	    else {
 #                    push( @cmds, ["INSERT INTO field (obj_id,field,ref_id) VALUES (?,?,?)",  $id, $key, $val ] );
-		    push( @cdata, [$id, $key, $val, '' ] );
-                }
-            } #each key
-        }
+		push( @cdata, [$id, $key, $val, '' ] );
+	    }
+	} #each key
     }
     return \@cmds,\@cdata;
 } # __stow_updates

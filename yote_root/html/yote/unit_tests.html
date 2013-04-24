@@ -10,7 +10,6 @@
 
 <script src="/yote/js/jquery-latest.js"></script>
 <script src="/yote/js/jquery.cookie.js"></script>
-<script src="/yote/js/jquery.dumper.js"></script>
 <script src="/yote/js/jquery.base64.min.js"></script>
 <script src="/yote/js/json2.js"></script>
 <script src="/yote/js/yote.js"></script>
@@ -62,7 +61,13 @@ function wrap_up() {
     } else {
         $('#results').append( "Passed all " + tests + " tests" );
     }
-}
+    var d = new Date();
+    var t2 = d.getTime();
+    $.yote.remove_login( 'unit_test_account', 'ut', 'nobody@fenowyn.com', 
+			 pass( "remove login" ), fail( "remove login" ) );
+    var d2 = new Date();
+    $('#tests').append( "<br>tests completed in " + Math.round(d2.getTime() - t2) + " ms" );
+} //wrap_up
 var step_count = 0;
 function step( msg ) {
     console.log( "step " + step_count + ':' + msg  );
@@ -126,8 +131,7 @@ $().ready(function(){
         step('login with correct password');
         $.yote.login( 'unit_test_account', 'ut',
                       pass( "able to log in" ),
-                      fail( "able to log in" ) );
-
+                      fail( "unable to log in" ) );
         step('login has token');
 	ok( $.yote.token != '', 'login has token', 'token missing from login' );
 	ok( $.cookie('yoken') != '', 'cookie was set', 'cookie was not set' );
@@ -149,6 +153,7 @@ $().ready(function(){
             fail( "yote_obj not returned" )();
             return;      
         }
+	is( login.list().length(), 3, " list properly returned " );
 
         // try passing in a javascript proxy object as a data parameter
         var o1 = login.make_obj( {Text:'foo'}, pass( "created object 1" ), fail( "create object 1" ) );
@@ -157,9 +162,8 @@ $().ready(function(){
         is( o1.get_Text(), 'foo', 'correct object 1 text directly a' );
         is( o2.get_Text(), 'bar', 'correct object 2 text directly a' );
         login.give_obj( o2, pass( "gave object 2" ), fail( "gave object 2" ) );
-        is( login.obj_text(), 'bar', 'correct object 1 text' );
-
-        var o3 = login.get_obj();
+        is( login.obj_text(), 'bar', 'correct object 1 text' ); //should have dirty sent back
+        var o3 = login.get_obj(); //<--- STILL FAIL
         is( o3.get_Text(), 'bar', 'correct object 1 text directly' );
 
         login.give_obj( o1, pass( "gave object 2" ), fail( "gave object 2" ) );
@@ -184,7 +188,7 @@ $().ready(function(){
         is( o3.get_bext(), 'Something else', 'correct object 2 text directly' );
         is( o3.get('zip'), false, 'correct object 2 text directly' );
 
-        pass( "no login returns yote obj" );      
+        pass( "no login returns yote obj" )();      
         step('name get called on testappneedslogin to succeed');
         var initval = obj.get_name();
         is( initval, 'INITY', "yote object inited on server side" );
@@ -242,21 +246,34 @@ $().ready(function(){
         $.yote._dump_cache();
         is( $.yote._cache_size(), 0, "cache now empty" );
         var login = $.yote.fetch_app( 'Yote::Test::TestAppNeedsLogin' );
-        is( $.yote._cache_size(), 4, "cache with loginapp and root and obj in loginapp ( root gets two entries )" );
-        login.load_direct_descendents();
-        is( $.yote._cache_size(), 6, "cache with loginapp, root and loginapps threefields (made,yoteobj,obj) " );
+	console.log( [ 'YOTE CACHE', $.yote.objs ] );
+        is( $.yote._cache_size(), 3, "cache with loginapp and root and obj in loginapp" );
 
-        wrap_up();
+	var hello_app = $.yote.fetch_app( 'Yote::Test::Hello' );
+	hello_app.hello();
+	is( hello_app.get_my_hash().get( 'store' ).get( 'AnObject' ).get_flavor(), 'blueberry', "chained objects passed correctly" );
+	//timing tests
+
+	var needs = 4;
+
+	function meets() {
+	    needs--;
+	    if( needs == 0 ) {
+		wrap_up();
+	    }
+	}
+	
+
+	login.long_time( '', function( pass_resp ) { pass( "Passed long time test" )(); meets() }, function( fail_resp ) { fail( "Failed long time test" )(); meets();  }, true );
+	login.short_time( '', function( pass_resp ) { pass( "Passed short time test" )(); meets() }, function( fail_resp ) { fail( "Failed short time test" )(); meets(); }, true );
+	login.short_time( '', function( pass_resp ) { pass( "Passed second short time test" )(); meets() }, function( fail_resp ) { fail( "Failed second short time test" )(); meets(); }, true );
+	login.short_time( '', function( pass_resp ) { pass( "Passed third short time test" )(); meets() }, function( fail_resp ) { fail( "Failed third short time test" )(); meets(); }, true );
+
     }
 
-    //    try {
-    var d = new Date();
-    var t2 = d.getTime();
     do_tests();
-    $.yote.remove_login( 'unit_test_account', 'ut', 'nobody@fenowyn.com', 
-			 pass( "remove login" ), fail( "remove login" ) );
-    var d2 = new Date();
-    $('#tests').append( "<br>tests completed in " + Math.round(d2.getTime() - t2) + " ms" );
+
+    //    try {
     /*
       }
       catch( err ) {

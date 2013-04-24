@@ -3,6 +3,9 @@ package Yote::FileHelper;
 use strict;
 use warnings;
 
+use vars qw($VERSION);
+$VERSION = '0.01';
+
 use base 'Yote::Obj';
 
 use JSON;
@@ -28,16 +31,17 @@ sub Url {
 
 
 sub __ingest {
-
-    my $content_length = $ENV{CONTENT_LENGTH};
+    my $soc = shift;
+    print STDERR Data::Dumper->Dump([\%ENV]);
+    my $content_length = $ENV{CONTENT_LENGTH} || $ENV{'HTTP_CONTENT-LENGTH'} || $ENV{HTTP_CONTENT_LENGTH};
     my( $finding_headers, $finding_content, %content_data, %post_data, %file_helpers, $fn, $content_type );
-    my $boundary_header = $ENV{HTTP_CONTENT_TYPE} || $ENV{CONTENT_TYPE};
+    my $boundary_header = $ENV{HTTP_CONTENT_TYPE} || $ENV{'HTTP_CONTENT-TYPE'} || $ENV{CONTENT_TYPE};
     if( $boundary_header =~ /boundary=(.*)/ ) {
 	my $boundary = $1;
 	my $counter = 0;
 	# find boundary parts
 	while($counter < $content_length) {
-	    $_ = <STDIN>;
+	    $_ = <$soc>;
 	    if( /$boundary/s ) {
 		last if $1;
 		$finding_headers = 1;

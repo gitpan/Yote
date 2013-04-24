@@ -7,24 +7,22 @@ use Yote::WebAppServer;
 
 use Yote::AppRoot;
 use Yote::YoteRoot;
+use Yote::MysqlIO;
 use Yote::Test::TestAppNoLogin;
 use Yote::Test::TestAppNeedsLogin;
 use Yote::Test::TestDeepCloner;
 use Yote::Test::TestNoDeepCloner;
-use Yote::SQLiteIO;
 
 use Data::Dumper;
-use File::Temp qw/ :mktemp /;
-use File::Spec::Functions qw( catdir updir );
+use DBI;
 use Test::More;
 use Test::Pod;
-
 
 use Carp;
 $SIG{ __DIE__ } = sub { Carp::confess( @_ ) };
 
 BEGIN {
-    for my $class (qw/Obj Hash SQLiteIO/) {
+    for my $class (qw/Obj Hash MysqlIO/) {
         use_ok( "Yote::$class" ) || BAIL_OUT( "Unable to load Yote::$class" );
     }
 }
@@ -33,18 +31,22 @@ BEGIN {
 #               init
 # -----------------------------------------------------
 
-my( $fh, $name ) = mkstemp( "/tmp/SQLiteTest.XXXX" );
-$fh->close();
+#my( $uname, $pword ) = ( `whoami`, '' );
+my $dbh = DBI->connect( "DBI:mysql:information_schema" ); #, $uname, $pword );
+my $x = $dbh->selectrow_arrayref( "SELECT user()" );
+
+$dbh->do( "DROP DATABASE yote_test" );
+$dbh->do( "CREATE DATABASE yote_test" );
+
 Yote::ObjProvider::init(
-    datastore      => 'Yote::SQLiteIO',
-    sqlitefile     => $name,
+    datastore      => 'Yote::MysqlIO',
+    database       => 'yote_test',
     );
+
 my $db = $Yote::ObjProvider::DATASTORE->database();
 test_suite( $db );
 
 done_testing();
-
-unlink( $name );
 
 sub query_line {
     my( $db, $query, @args ) = @_;
@@ -412,6 +414,7 @@ sub test_suite {
     is( $res->{l}->get_email(), 'foo@bar.com', "handle for created root account" );
     Yote::ObjProvider::stow_all();
     my $root_acct = Yote::ObjProvider::xpath("/_handles/root");
+    Yote::ObjProvider::commit_transaction();
     unless( $root_acct ) {
         fail( "Root not loaded" );
         BAIL_OUT("cannot continue" );
