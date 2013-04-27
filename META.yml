@@ -17,7 +17,7 @@ name: Yote
 provides:
   Yote:
     file: lib/Yote.pm
-    version: 0.0977
+    version: 0.0978
   Yote::Account:
     file: lib/Yote/Account.pm
     version: 0.01
@@ -68,6 +68,7 @@ provides:
     version: 0.01
   Yote::SimpleLRUCache:
     file: lib/Yote/SimpleLRUCache.pm
+    version: 0.01
   Yote::Test::Hello:
     file: lib/Yote/Test/Hello.pm
     version: 0.01
@@ -85,6 +86,7 @@ provides:
     version: 0.01
   Yote::Util::Admin:
     file: lib/Yote/Util/Admin.pm
+    version: 0.01
   Yote::Util::CMS:
     file: lib/Yote/Util/CMS.pm
     version: 0.01
@@ -116,10 +118,12 @@ requires:
   JSON: 2.53
   Logger::Simple: 2
   MIME::Lite: 3.029
+  Mail::Sender: 0
   MongoDB: 0.503
   WeakRef: 0.01
   forks: 0.34
   forks::shared: 0.34
+  perl: 5.12
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.0977
+version: 0.0978
