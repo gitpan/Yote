@@ -36,7 +36,7 @@ use Yote::ObjProvider;
 
 use vars qw($VERSION);
 
-$VERSION = '0.011';
+$VERSION = '0.02';
 
 # ------------------------------------------------------------------------------------------
 #      * INITIALIZATION *
@@ -241,6 +241,12 @@ sub __transform_data_no_id {
 #      * PUBLIC METHODS *
 # ------------------------------------------------------------------------------------------
 
+sub count {
+    my( $self, $data ) = @_;
+
+    return Yote::ObjProvider::xpath_count( $self->_path_to_root() . "/$data" );
+} #count
+
 sub paginate {
     my( $self, $data, $account ) = @_;
     
@@ -270,6 +276,11 @@ sub paginate_hash {
     return Yote::ObjProvider::paginate_xpath( $self->_path_to_root() . "/$list_name", $number, $start );
 
 } #paginate_hash
+
+#
+# This is actually a no-op, but has the effect of giving the client any objects that have changed since the clients last call.
+#
+sub sync_all {}
 
 
 #
@@ -546,6 +557,10 @@ This method is called each time an object is loaded from the data store.
 
 =over 4
 
+=item count( field_name )
+
+Returns the number of items for the field of this object provided it is an array or hash.
+
 =item paginate
 
 This method takes a list ref with three entries : [field_name, number of items to return, starting point]. 
@@ -571,6 +586,10 @@ The starting point is optional and defaults to 0. Returns a subset of the list t
 field name and attached to this object.
 
 This will throw an error if the value of the field name is defined as something other than a list.
+
+=item sync_all
+
+This method is actually a no-op, but has the effect of syncing the state of client and server.
 
 =item update
 

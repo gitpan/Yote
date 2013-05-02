@@ -335,9 +335,13 @@ sub test_suite {
 
     is_deeply( $root_3->get_obj(), $new_obj, "setting object" );
 
+    is( $root_3->count( 'array' ), 6, 'Array has 6 with count' );
     is_deeply( $root_3->paginate( [ 'array', 3 ] ), [ 'THIS IS AN ARRAY', 'With more than one thing', 'MORE STUFF' ], 'paginate with one argument' );
+    is_deeply( $root_3->paginate_rev( [ 'array', 3 ] ), [ 'MORE STUFF', 'MORE STUFF', 'MORE STUFF' ], 'paginate reverse with one argument' );
     is_deeply( $root_3->paginate( [ 'array', 1, 2 ] ), [ 'MORE STUFF' ], 'paginate with one argument' );
+    is_deeply( $root_3->paginate_rev( [ 'array', 1, 4 ] ), [ 'With more than one thing' ], 'paginate with one argument' );
     is_deeply( $root_3->paginate( [ 'array', 3, 4 ] ), [ 'MORE STUFF','MORE STUFF' ], 'paginate with one argument' );
+    is_deeply( $root_3->paginate_rev( [ 'array', 3, 4 ] ), [ 'With more than one thing', 'THIS IS AN ARRAY' ], 'paginate with one argument' );
 
     is( scalar(@$simple_array), 6, "add_to test array count" );
 
@@ -429,7 +433,7 @@ sub test_suite {
     is( $root_acct->get_handle(), 'root', 'handle set' );
     is( $root_acct->get_email(), 'foo@bar.com', 'email set' );
     isnt( $root_acct->get_password(), 'toor', 'password set' ); #password is encrypted
-    ok( $root_acct->get__is_root(), 'first account is root' );
+    ok( ! $root_acct->get__is_root(), 'first account is not root anyore' );
 
     eval {
         $root->create_login( { h => 'root', p => 'toor', e => 'baz@bar.com' } );
@@ -447,6 +451,16 @@ sub test_suite {
     Yote::ObjProvider::stow_all();
     my $acct = Yote::ObjProvider::xpath("/_handles/toot");
     ok( ! $acct->get__is_root(), 'second account not root' );
+
+    my $rpass = Yote::ObjProvider::encrypt_pass( "realpass", 'realroot' );
+    isnt( $rpass, "realpass", "password was encrypted" );
+    $res = $root->_check_root( 'realroot', $rpass );
+    eval {
+	my $rrl = $root->login( { h => 'realroot', p => 'wrongpass' } );
+    };
+    like( $@, qr/incorrect login/i, "Wrong log in" );
+    my $rrl = $root->login( { h => 'realroot', p => 'realpass' } );
+    ok( $rrl->{t}, "Logged in got token" );
 
 # ------ hello app test -----
     my $t = $root->login( { h => 'toot', p => 'toor' } );

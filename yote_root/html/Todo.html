@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Yote</title>
+    <script src="/yote/js/jquery-latest.js"></script>
+    <script src="/yote/js/jquery.cookie.js"></script>
+    <script src="/yote/js/jquery.base64.min.js"></script>
+    <script src="/yote/js/json2.js"></script>
+
+    <script src="/js/main.js"></script>
+    <script src="/yote/js/yote.js"></script>
+    <script src="/yote/js/yote.util.js"></script>
+    <link href="/yote.css" rel="stylesheet" type="text/css" media="all" />
+    <link href="/css/main.css" rel="stylesheet" type="text/css" media="all" />
+    <script>
+    $().ready(function(){
+
+	make_menus( '#top_nav' );
+
+	$.yote.init();
+	var page_counter = $.yote.fetch_app('Yote::Util::Counter');
+	page_counter.increment( 'ToDo Page',
+				function( count ) { 
+				    $('#counter').empty().append( count );
+				},
+				function( err ) {},
+				1
+			      );
+	attach_login( {
+	    attachpoint         : '#logged_in_status',
+	    message_attachpoint : '#msg_div' 
+	} );
+    });
+    </script>
+  </head>
+
+  <BODY>
+
+    <DIV class="header">
+	<img src="yotelogo.png">
+	<UL id="top_nav" class="nav"></UL>
+        <DIV class="login logged_in" id="logged_in_status"></DIV>
+        <DIV id="msg_div"></DIV>
+    </DIV>
+
+    <SECTION>
+           <DIV class="page-header">
+	<H1>ToDo List</H1>
+      </DIV>
+      <p>
+	The following is a wish list of things to do including bug fixes and new features
+      </p>
+      <ul>
+	<li>Automatically create the root user login account and have its password be a configuration option.</li>
+	<li>Daemonize the yote_server script. The initial attempts failed due to threading issues, but it can be done.</li>
+	<li>Create an account management</li>
+	<li>Create an object browsing page</li>
+	<li>Create an object browsing shell</li>
+	<li>Add FileHelper methods to update the file in question with a new value.</li>
+	<li>Consider changing the set capitaliziation uppercase convention in favor of a list defined in the object. </li>
+	<li>Put together a cron that makes sense.</li>
+      </ul>
+    </SECTION>
+    
+    <footer>
+      This page has been viewed <span id="counter"></span> times.
+    </footer>
+    <script src="/js/local.js"></script>
+  </body>
+</html>
+	

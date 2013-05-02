@@ -41,18 +41,18 @@
             "WeakRef" : "0.01",
             "forks" : "0.34",
             "forks::shared" : "0.34",
-            "perl" : "5.12"
+            "perl" : "v5.12.0"
          }
       }
    },
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.0980"
+         "version" : "0.0981"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       },
       "Yote::AppRoot" : {
          "file" : "lib/Yote/AppRoot.pm",
@@ -80,7 +80,7 @@
       },
       "Yote::Login" : {
          "file" : "lib/Yote/Login.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       },
       "Yote::Messenger" : {
          "file" : "lib/Yote/Messenger.pm",
@@ -96,7 +96,7 @@
       },
       "Yote::Obj" : {
          "file" : "lib/Yote/Obj.pm",
-         "version" : "0.011"
+         "version" : "0.02"
       },
       "Yote::ObjManager" : {
          "file" : "lib/Yote/ObjManager.pm",
@@ -104,7 +104,7 @@
       },
       "Yote::ObjProvider" : {
          "file" : "lib/Yote/ObjProvider.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       },
       "Yote::SQLiteIO" : {
          "file" : "lib/Yote/SQLiteIO.pm",
@@ -146,9 +146,15 @@
          "file" : "lib/Yote/Util/CMS.pm",
          "version" : "0.01"
       },
+      "Yote::Util::ChatBoard" : {
+         "file" : "lib/Yote/Util/ChatBoard.pm"
+      },
       "Yote::Util::Counter" : {
          "file" : "lib/Yote/Util/Counter.pm",
          "version" : "0.01"
+      },
+      "Yote::Util::MadYote" : {
+         "file" : "lib/Yote/Util/MadYote.pm"
       },
       "Yote::Util::MessageBoard" : {
          "file" : "lib/Yote/Util/MessageBoard.pm",
@@ -164,11 +170,11 @@
       },
       "Yote::WebAppServer" : {
          "file" : "lib/Yote/WebAppServer.pm",
-         "version" : "0.082"
+         "version" : "0.083"
       },
       "Yote::YoteRoot" : {
          "file" : "lib/Yote/YoteRoot.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       }
    },
    "release_status" : "stable",
@@ -177,5 +183,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.0980"
+   "version" : "0.0981"
 }
