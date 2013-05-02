@@ -31,8 +31,8 @@ if we are our experiences then we are both sides of them.
     <script>
     $().ready(function(){
 
-	make_menus( '#top_nav' );
 	$.yote.init();
+	make_menus( '#top_nav' );
 	var news_app = $.yote.fetch_app('Yote::Util::Admin');
 	var cms = news_app.get_cms();
 	$( '#news' ).empty().append( cms.content( { path : 'news' } ) );
@@ -49,7 +49,7 @@ if we are our experiences then we are both sides of them.
 	function yote_chat( post_box, chatter_box ) {
 	    var chat = $.yote.fetch_app('Yote::Util::MadYote').get_chat_board();
 	    return {
-		last_logged_in : false,
+		last_logged_in : undefined,
 		post     : function( msg ) {
 		    chat.post( msg );
 		    this.refresh();
@@ -85,13 +85,15 @@ if we are our experiences then we are both sides of them.
 			} );
 		    }
 		    me.last_logged_in = $.yote.is_logged_in();
-		    me.refresh();
 		},
 		refresh  : function() {
-		    chat.sync_all();
-		    if( this.last_logged_in != $.yote.is_logged_in() ) {
+		    if( this.last_logged_in != $.yote.is_logged_in() || typeof this.last_logged_in === 'undefined' ) {
 			this.draw_post_box();
 		    }
+		    console.log( 'BSA :: ' + $( '#username' ).attr( 'disabled' ) );
+		    chat.sync_all();
+
+		    console.log( 'ASA :: ' + $( '#username' ).attr( 'disabled' ) );
 		    var posts = chat.get_posts();
 		    $( chatter_box ).empty();
 		    var now = new Date();
@@ -119,10 +121,10 @@ if we are our experiences then we are both sides of them.
 	    attachpoint         : '#logged_in_status',
 	    message_attachpoint : '#msg_div',
 	    after_login : function() {
-		chat.draw_post_box();
+		chat.refresh();
 	    },
 	    after_logout : function () {
-		chat.draw_post_box();
+		chat.refresh();
 	    }
 	} );
     });

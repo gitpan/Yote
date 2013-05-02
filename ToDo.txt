@@ -10,6 +10,9 @@ FOR Stable Alpha
   * More yote tools
   * Better way to set variables from the client rather than relying on uppercase
   * UI - account change password and request password reset link
+  * Versions in javascript
+  * method to get version to client
+  * add test only requirements to Build.PL
 
 
 #----------- Pre Aril 2013 ----
