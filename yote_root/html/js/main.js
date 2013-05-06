@@ -22,7 +22,7 @@ function make_menus( attach_point ) {
 	    buf += '<LI><A HREF="' + menu_list[ i ][ 1 ] + '">' + menu_list[ i ][ 0 ] + '</A></LI>';
 	}
     }
-    if( $.yote.is_logged_in() && $.yote.get_login().is_root() ) {
+    if( $.yote.is_logged_in() && 1*$.yote.get_login().is_root() ) {
 	for( var i=0; i<admin_menu_list.length; i++ ) {
 	    if( current_page == admin_menu_list[ i ][ 1 ] ) {
 		buf += '<LI><A class="active" HREF="' + admin_menu_list[ i ][ 1 ] + '">' + admin_menu_list[ i ][ 0 ] + '</A></LI>';

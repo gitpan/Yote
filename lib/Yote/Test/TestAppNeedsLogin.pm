@@ -6,6 +6,8 @@ package Yote::Test::TestAppNeedsLogin;
 
 use strict;
 
+use warnings;
+
 use Yote::Obj;
 use Yote::Test::TestAppNoLogin;
 
@@ -13,7 +15,7 @@ use base 'Yote::AppRoot';
 
 use vars qw($VERSION);
 
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 sub _init {
     my $self = shift;
@@ -21,6 +23,13 @@ sub _init {
     $self->get_yote_obj()->set_name( "INITY" );
     $self->set_auto_listy( [ "A", "B", "C" ] );
     $self->set_auto_hashy( { "foo" => "bar", "baz" => "baf" } );
+    $self->set_Text( 'inity' );
+    $self->set_zap( "zappy" );
+}
+
+sub purge_app {
+    my $self = shift;
+    $self->_init();
 }
 
 sub _allows {
@@ -70,12 +79,14 @@ sub nologin_obj {
 }
 
 sub list {
-    my $self = shift;
+    my( $self, $dummy, $acct ) = @_;
+    die "Need account" unless $acct;
     return $self->get_auto_listy();
 }
 
 sub hash {
-    my $self = shift;
+    my( $self, $dummy, $acct ) = @_;
+    die "Need account" unless $acct;
     return $self->get_auto_hashy();
 }
 
@@ -88,8 +99,16 @@ sub array {
 }
 
 
+sub update {
+    my( $self, $data, $acct ) = @_;
+    die "Need account" unless $acct;
+    if( $data->{Text} ) {
+	$self->set_Text( $data->{Text} );
+    }
+}
+
 # @TODO - should not have a sub starting with get_. refactor test
-sub get_hash {
+sub SDFfetch_hash {
     my( $self, $data, $acct_root, $acct ) = @_;
     die "Need account" unless $acct;
     return { hash => "is something like", wid => $self->get_yote_obj() };
@@ -151,6 +170,12 @@ __END__
 =item short_time
 
 =item medium_time
+
+=item purge_app
+
+=item update
+
+=item SDFfetch_hash
 
 =back
 

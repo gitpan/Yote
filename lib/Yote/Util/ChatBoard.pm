@@ -1,9 +1,13 @@
-package Yote::Util::ChatBoard;
+>package Yote::Util::ChatBoard;
 
 use strict;
 use warnings;
 
 use base 'Yote::AppRoot';
+
+use vars qw($VERSION);
+
+$VERSION = '0.01';
 
 sub _init {
     my $self = shift;
@@ -27,6 +31,15 @@ sub post {
     pop @$posts if @$posts > $self->get_size();
     
 } #post
+
+sub remove_post {
+    my( $self, $data, $acct ) = @_;
+    
+    die "Need admin to remove" unless $acct && $acct->get_login()->is_root();
+
+    $self->remove_from_posts( $data );
+
+} #remove_post
 
 sub sync_all {
     my $self = shift;
@@ -56,6 +69,10 @@ Eric Wolf
 =item post( message_or_list )
 
 Post a message to the board. If a user is logged in, the argument is a string message. If not, the message is a list reference where the first argument is the message and the second the name of the poster. The message board does not allow anonymous posting by default. This is controlled by the requires_account switch.
+
+=item remove_post( post )
+
+Removes the given post from this Chat Board. Must be admin or owner to do so.
 
 =item sync_all
 

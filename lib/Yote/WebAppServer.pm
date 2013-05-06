@@ -22,7 +22,7 @@ use Yote::ObjProvider;
 
 use vars qw($VERSION);
 
-$VERSION = '0.083';
+$VERSION = '0.084';
 
 
 my( %prid2result, $singleton );
@@ -421,6 +421,9 @@ sub _process_command {
         my $app         = Yote::ObjProvider::fetch( $app_id ) || Yote::YoteRoot::fetch_root();
 
         my $data        = _translate_data( from_json( MIME::Base64::decode( $command->{d} ) )->{d} );
+	
+	accesslog( "   DATA : " . Data::Dumper->Dump( [ $data ] ) );
+
         my $login       = $app->token_login( $command->{t}, undef, $command->{e} );
 	my $guest_token = $command->{gt};
 	$command->{e}{GUEST_TOKEN} = $guest_token;
@@ -433,6 +436,8 @@ sub _process_command {
 
         my $app_object = Yote::ObjProvider::fetch( $obj_id ) || $app;
         my $action     = $command->{a};
+	
+	die "Access Error" if $action =~ /^([gs]et|add_(once_)?to_|remove_(all_)?from)_/; # set may not be called directly on an object.
         my $account;
         if( $login ) {
             $account = $app->__get_account( $login );

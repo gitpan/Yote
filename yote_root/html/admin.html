@@ -30,9 +30,64 @@ if we are our experiences then we are both sides of them.
 	$.yote.init();
 	make_menus( '#top_nav' );
 
-	var news_app = $.yote.fetch_app('Yote::Util::Admin');
-	var cms = news_app.get_cms();
-	$( '#news' ).empty().append( cms.content( { path : 'news' } ) );
+	var madyote_app = $.yote.fetch_app('Yote::Util::MadYote');
+
+	var chat = madyote_app.get_chat_board();
+
+	$( '#motd_div' ).empty().append( $.yote.util.prep_edit( madyote_app, 'MOTD' ) );
+
+	$.yote.util.implement_edit( madyote_app, 'MOTD' ); //called after the control is placed	
+	
+	var blog = madyote_app.get_news_blog();
+
+	// edit the blog
+	//  show the entries in an editable table
+	//  allow for deletion
+	// have a new entry add at the top
+	
+	$( '#news_div' ).empty().append(
+	    '<div id="new_blog_div"></div><div id="news_list"></div>'
+	);
+
+	$.yote.util.control_table( {
+	    item            : blog,
+	    list_name       : 'posts',
+	    attachpoint     : '#news_list',
+	    remove_function : function( item ) {
+		blog.remove_post( item );
+	    },
+	    column_headers  : [ 'Subject', 'Content', 'Time' ],
+	    columns         : [
+		$.yote.util.col_edit( 'subject' ),
+		$.yote.util.col_edit( 'content' ),
+		function( row ) { var dt = new Date( 1000 * row.get_created_on() ); return dt.toLocaleTimeString(); }
+	    ],
+	    plimit          : 20,
+	    
+	    new_attachpoint : '#new_blog_div',
+	    new_columns     : [ 'subject', 'content' ],
+	    new_column_titles : [ 'Subject', 'Content' ],
+	    new_button        : 'New News',
+	    new_function      : function() {
+		return blog.post( { content : '', subject : '' } )
+	    }
+	} );
+
+	var cv = $.yote.util.col_edit;
+
+	$.yote.util.control_table( {
+	    item           : chat,
+	    list_name      : 'posts',
+	    attachpoint    : '#chat_div',
+	    column_headers : [ 'Name', 'Message', 'Time' ], 
+	    remove_function : function( item ) {
+		chat.remove_post( item );
+	    },
+	    columns        : [ 0, 1, 2 ],
+
+	    //include delete or archive
+	    plimit : 20
+	} );
 
 	var page_counter = $.yote.fetch_app('Yote::Util::Counter');
 	page_counter.increment( 'Admin Page',
@@ -42,14 +97,25 @@ if we are our experiences then we are both sides of them.
 				function( err ) {},
 				1
 			      );
+
+	function check_perms() {
+	    if( $.yote.is_logged_in() && 1*$.yote.get_login().is_root() ) {
+		$( '#mainpanel' ).show();
+		$( '#errpanel' ).hide();
+	    } else {
+		$( '#mainpanel' ).hide();
+		$( '#errpanel' ).show();
+	    } 
+	}
+
 	attach_login( {
 	    attachpoint         : '#logged_in_status',
 	    message_attachpoint : '#msg_div',
-	    after_login : function() {
-	    },
-	    after_logout : function () {
-	    }
+	    after_login  : check_perms,
+	    after_logout : check_perms
 	} );
+
+	check_perms();
     });
     </script>
   </head>
@@ -62,14 +128,15 @@ if we are our experiences then we are both sides of them.
         <DIV class="login logged_in" id="logged_in_status"></DIV>
         <DIV id="msg_div"></DIV>
     </DIV>
+    
+    <DIV id="errpanel" class="err">Must be logged in with a root account to view this page.</div>
 
-    <DIV class="overlesson">
-
-      <DIV class="mainpanel">
+    <DIV class="mainpanel" id="mainpanel">
 
 	<!--
 	    accounts, with pagination and search
-	    edit news
+	    edit motd
+            add and edit news
 	    show apps	    
 	  -->
 
@@ -93,14 +160,22 @@ if we are our experiences then we are both sides of them.
 	    An example of a Yote app is the <A href="/gru/index.html">Animal Learning Game</A>
 	  </P>
 	</SECTION>
-      </DIV>
 
-      <DIV class="notes">
-	Admin Notes
-	<DIV id="post_box"></DIV>
-	<DIV id="chatter"></DIV>
-        <BR>News
-        <DIV id="news"></DIV>
+	<SECTION>
+	  <DIV class="page-header">
+	    <H1>News Control Panel</H1>
+	  </DIV>
+
+          <h3>Edit the Message of the Day</h3>
+	  <p> <SPAN id="motd_div"></SPAN> </p>
+
+	  <h3>Edit News Blog</h3>
+	  <P id="news_div"></P>
+	  <h3>Chat Admin</h3>
+	  <P id="chat_div">
+	  </P>
+	</SECTION>
+	
       </DIV>
 
     </DIV>

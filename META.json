@@ -48,7 +48,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.0982"
+         "version" : "0.0983"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -88,11 +88,11 @@
       },
       "Yote::MongoIO" : {
          "file" : "lib/Yote/MongoIO.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       },
       "Yote::MysqlIO" : {
          "file" : "lib/Yote/MysqlIO.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       },
       "Yote::Obj" : {
          "file" : "lib/Yote/Obj.pm",
@@ -108,7 +108,7 @@
       },
       "Yote::SQLiteIO" : {
          "file" : "lib/Yote/SQLiteIO.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       },
       "Yote::Sample::SecretCollect" : {
          "file" : "lib/Yote/Sample/SecretCollect.pm",
@@ -120,15 +120,15 @@
       },
       "Yote::Test::Hello" : {
          "file" : "lib/Yote/Test/Hello.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       },
       "Yote::Test::TestAppNeedsLogin" : {
          "file" : "lib/Yote/Test/TestAppNeedsLogin.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       },
       "Yote::Test::TestAppNoLogin" : {
          "file" : "lib/Yote/Test/TestAppNoLogin.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       },
       "Yote::Test::TestDeepCloner" : {
          "file" : "lib/Yote/Test/TestDeepCloner.pm",
@@ -145,9 +145,6 @@
       "Yote::Util::CMS" : {
          "file" : "lib/Yote/Util/CMS.pm",
          "version" : "0.01"
-      },
-      "Yote::Util::ChatBoard" : {
-         "file" : "lib/Yote/Util/ChatBoard.pm"
       },
       "Yote::Util::Counter" : {
          "file" : "lib/Yote/Util/Counter.pm",
@@ -170,7 +167,7 @@
       },
       "Yote::WebAppServer" : {
          "file" : "lib/Yote/WebAppServer.pm",
-         "version" : "0.083"
+         "version" : "0.084"
       },
       "Yote::YoteRoot" : {
          "file" : "lib/Yote/YoteRoot.pm",
@@ -183,5 +180,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.0982"
+   "version" : "0.0983"
 }
