@@ -48,7 +48,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.0983"
+         "version" : "0.0984"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -142,8 +142,20 @@
          "file" : "lib/Yote/Util/Admin.pm",
          "version" : "0.01"
       },
+      "Yote::Util::Blog" : {
+         "file" : "lib/Yote/Util/Blog.pm",
+         "version" : "0.02"
+      },
+      "Yote::Util::BlogPost" : {
+         "file" : "lib/Yote/Util/BlogPost.pm",
+         "version" : "0.02"
+      },
       "Yote::Util::CMS" : {
          "file" : "lib/Yote/Util/CMS.pm",
+         "version" : "0.01"
+      },
+      "Yote::Util::ChatBoard" : {
+         "file" : "lib/Yote/Util/ChatBoard.pm",
          "version" : "0.01"
       },
       "Yote::Util::Counter" : {
@@ -167,7 +179,7 @@
       },
       "Yote::WebAppServer" : {
          "file" : "lib/Yote/WebAppServer.pm",
-         "version" : "0.084"
+         "version" : "0.085"
       },
       "Yote::YoteRoot" : {
          "file" : "lib/Yote/YoteRoot.pm",
@@ -180,5 +192,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.0983"
+   "version" : "0.0984"
 }

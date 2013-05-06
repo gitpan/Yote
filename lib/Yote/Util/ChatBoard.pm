@@ -1,4 +1,4 @@
->package Yote::Util::ChatBoard;
+package Yote::Util::ChatBoard;
 
 use strict;
 use warnings;
