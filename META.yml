@@ -17,10 +17,10 @@ name: Yote
 provides:
   Yote:
     file: lib/Yote.pm
-    version: 0.0984
+    version: 0.0985
   Yote::Account:
     file: lib/Yote/Account.pm
-    version: 0.02
+    version: 0.03
   Yote::AppRoot:
     file: lib/Yote/AppRoot.pm
     version: 0.085
@@ -66,6 +66,8 @@ provides:
   Yote::Sample::SecretCollect:
     file: lib/Yote/Sample/SecretCollect.pm
     version: 0.01
+  Yote::Sample::SimpleTodo:
+    file: lib/Yote/Sample/SimpleToDo.pm
   Yote::SimpleLRUCache:
     file: lib/Yote/SimpleLRUCache.pm
     version: 0.01
@@ -118,7 +120,7 @@ provides:
     version: 0.085
   Yote::YoteRoot:
     file: lib/Yote/YoteRoot.pm
-    version: 0.02
+    version: 0.03
 requires:
   Crypt::Passwd::XS: 0.601
   DBD::SQLite: 1.35
@@ -137,4 +139,4 @@ requires:
   perl: v5.12.0
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.0984
+version: 0.0985

@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use vars qw($VERSION);
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 use base 'Yote::Messenger';
 
@@ -17,6 +17,11 @@ sub upload_avatar {
     }
     die "incorrect password";
 }
+
+sub is_root {
+    my $self = shift;
+    return $self->get_login()->get__is_root();
+} #is_root
 
 1;
 
@@ -42,6 +47,10 @@ The Yote::Account object is a container intended to store any data that is relev
 =item upload_avatar
 
 This is called with a file uploaded POST where the file input name is 'avatar_file'.
+
+=item is_root
+
+Called to reveal if the login behind this account is a root login.
 
 =back
 
