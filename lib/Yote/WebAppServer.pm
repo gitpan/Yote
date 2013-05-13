@@ -22,7 +22,7 @@ use Yote::ObjProvider;
 
 use vars qw($VERSION);
 
-$VERSION = '0.085';
+$VERSION = '0.087';
 
 
 my( %prid2result, $singleton );
@@ -93,9 +93,9 @@ sub process_http_request {
 
     while( my $hdr = <$soc> ) {
 	$hdr =~ s/\s*$//s;
-	my( $key, $val ) = split /:\s*/, $hdr;
-	$ENV{ "HTTP_" . uc( $key ) } = $val;
 	last unless $hdr =~ /\S/;
+	my( $key, $val ) = ( $hdr =~ /^([^:]+):(.*)/ );
+	$ENV{ "HTTP_" . uc( $key ) } = $val;
     }
 
     my $content_length = $ENV{CONTENT_LENGTH};
@@ -123,13 +123,13 @@ sub process_http_request {
     #
 
     my( $verb, $uri, $proto ) = split( /\s+/, $req );
+    my $rest;
+    ( $uri, $rest ) = ( $uri =~ /([^&?#]+)([&?#]?.*)/ );
 
     $uri ||= '/index.html';
 
     $ENV{PATH_INFO} = $uri;
     $ENV{REQUEST_METHOD} = $verb;
-
-    accesslog( "GOT URI '$uri'" );
 
     ### ******* $uri **********
 
@@ -157,9 +157,6 @@ sub process_http_request {
 	    $obj_id      = pop( @path );
 	    $app_id      = pop( @path ) || Yote::ObjProvider::first_id();
 	}
-
-
-	accesslog( "$path_start/$app_id/$obj_id/$action/ uri from [ $ENV{REMOTE_ADDR} ][ $ENV{HTTP_REFERER} ]" );
 
         my $command = {
             a  => $action,
@@ -212,7 +209,8 @@ sub process_http_request {
     } #if a command on an object
 
     else { #serve up a web page
-	accesslog( "$uri from [ $ENV{REMOTE_ADDR} ]" );
+	accesslog( "$uri from [ $ENV{REMOTE_ADDR} ][ $ENV{HTTP_REFERER} ]" );
+
 	my $root = $self->{args}{webroot};
 	my $dest = '/' . join('/',@path);
 
@@ -224,6 +222,7 @@ sub process_http_request {
 	    }
 	} 
 	if( open( IN, "<$root/$dest" ) ) {
+
 	    print $soc "HTTP/1.0 200 OK\015\012";
 	    my $binary = 0;
 	    if( $dest =~ /\.js$/i ) {
@@ -253,7 +252,7 @@ sub process_http_request {
                 print $soc $buf;
             }
             close( IN );
-	    accesslog( "200 : $dest");
+	    #accesslog( "200 : $dest");
 	} else {
 	    accesslog( "404 NOT FOUND : $@,$! $root/$dest");
 	    $self->do404();
@@ -428,7 +427,7 @@ sub _process_command {
 
         my $data        = _translate_data( from_json( MIME::Base64::decode( $command->{d} ) )->{d} );
 	
-	accesslog( "   DATA : " . Data::Dumper->Dump( [ $data ] ) );
+	#accesslog( "   DATA : " . Data::Dumper->Dump( [ $data ] ) );
 
         my $login       = $app->token_login( $command->{t}, undef, $command->{e} );
 	my $guest_token = $command->{gt};
@@ -483,7 +482,7 @@ sub _process_command {
     $resp = to_json( $resp );
 
     ### SEND BACK $resp
-    accesslog( "SEND BACK : $resp" );
+    #accesslog( "SEND BACK : $resp" );
 
     #
     # Send return value back to the caller if its waiting for it.
