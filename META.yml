@@ -17,7 +17,7 @@ name: Yote
 provides:
   Yote:
     file: lib/Yote.pm
-    version: 0.0988
+    version: 0.0989
   Yote::Account:
     file: lib/Yote/Account.pm
     version: 0.03
@@ -35,7 +35,7 @@ provides:
     version: 0.01
   Yote::FileHelper:
     file: lib/Yote/FileHelper.pm
-    version: 0.011
+    version: 0.012
   Yote::Hash:
     file: lib/Yote/Hash.pm
     version: 0.01
@@ -47,30 +47,31 @@ provides:
     version: 0.01
   Yote::MongoIO:
     file: lib/Yote/MongoIO.pm
-    version: 0.02
+    version: 0.03
   Yote::MysqlIO:
     file: lib/Yote/MysqlIO.pm
-    version: 0.02
+    version: 0.03
   Yote::Obj:
     file: lib/Yote/Obj.pm
-    version: 0.02
+    version: 0.03
   Yote::ObjManager:
     file: lib/Yote/ObjManager.pm
     version: 0.01
   Yote::ObjProvider:
     file: lib/Yote/ObjProvider.pm
-    version: 0.02
+    version: 0.03
   Yote::SQLiteIO:
     file: lib/Yote/SQLiteIO.pm
-    version: 0.02
+    version: 0.03
   Yote::Sample::SecretCollect:
     file: lib/Yote/Sample/SecretCollect.pm
     version: 0.01
   Yote::Sample::SimpleTodo:
     file: lib/Yote/Sample/SimpleToDo.pm
+    version: 0.02
   Yote::SimpleLRUCache:
     file: lib/Yote/SimpleLRUCache.pm
-    version: 0.01
+    version: 0.02
   Yote::Test::Hello:
     file: lib/Yote/Test/Hello.pm
     version: 0.02
@@ -97,7 +98,7 @@ provides:
     version: 0.02
   Yote::Util::CMS:
     file: lib/Yote/Util/CMS.pm
-    version: 0.01
+    version: 0.02
   Yote::Util::ChatBoard:
     file: lib/Yote/Util/ChatBoard.pm
     version: 0.01
@@ -106,6 +107,7 @@ provides:
     version: 0.01
   Yote::Util::MadYote:
     file: lib/Yote/Util/MadYote.pm
+    version: 0.02
   Yote::Util::MessageBoard:
     file: lib/Yote/Util/MessageBoard.pm
     version: 0.01
@@ -117,10 +119,10 @@ provides:
     version: 0.01
   Yote::WebAppServer:
     file: lib/Yote/WebAppServer.pm
-    version: 0.087
+    version: 0.088
   Yote::YoteRoot:
     file: lib/Yote/YoteRoot.pm
-    version: 0.03
+    version: 0.04
 requires:
   Crypt::Passwd::XS: 0.601
   DBD::SQLite: 1.35
@@ -129,7 +131,6 @@ requires:
   Email::Valid: 0.19
   File::UStore: 0.12
   JSON: 2.53
-  Logger::Simple: 2
   MIME::Lite: 3.029
   Mail::Sender: 0
   MongoDB: 0.503
@@ -139,4 +140,4 @@ requires:
   perl: v5.12.0
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.0988
+version: 0.0989

@@ -13,7 +13,6 @@ WriteMakefile
                    'Email::Valid' => '0.19',
                    'File::UStore' => '0.12',
                    'JSON' => '2.53',
-                   'Logger::Simple' => '2',
                    'MIME::Lite' => '3.029',
                    'Mail::Sender' => 0,
                    'MongoDB' => '0.503',
