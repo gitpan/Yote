@@ -17,7 +17,7 @@ name: Yote
 provides:
   Yote:
     file: lib/Yote.pm
-    version: 0.0989
+    version: 0.0990
   Yote::Account:
     file: lib/Yote/Account.pm
     version: 0.03
@@ -119,7 +119,7 @@ provides:
     version: 0.01
   Yote::WebAppServer:
     file: lib/Yote/WebAppServer.pm
-    version: 0.088
+    version: 0.089
   Yote::YoteRoot:
     file: lib/Yote/YoteRoot.pm
     version: 0.04
@@ -140,4 +140,4 @@ requires:
   perl: v5.12.0
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.0989
+version: 0.0990
