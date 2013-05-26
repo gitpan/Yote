@@ -4,7 +4,7 @@
  * Copyright (C) 2012 Eric Wolf
  * This module is free software; it can be used under the terms of the artistic license
  *
- * Version 0.01
+ * Version 0.021
  */
 $.yote.util = {
     ids:0,
@@ -583,24 +583,35 @@ $.yote.util = {
 		var new_column_titles  = this.args[ 'new_column_titles' ] || new_columns;
 		var new_function       = this.args[ 'new_function' ];
 		var new_button         = this.args[ 'new_button' ] || 'New';
-		
+
 		var after_render   = this.args[ 'after_render' ] || function(x) {};
 		var table_extra    = this.args[ 'table_extra' ];
+		var suppress_table = this.args[ 'suppress_table' ] || false;
 		var remove_fun     = this.args[ 'remove_function' ];
-		
+
 		// calculated
 		var count          = item.count( list_name );
-		
-		var tab = $.yote.util.make_table( table_extra );
+
+		var buf = '';
+
+		if( ! suppress_table ) {
+		    var tab = $.yote.util.make_table( table_extra );
+		}
 
 		if( new_attachpoint ) {
 		    var bf = 'New<BR>';
-		    
+
 		    var txts = [];
 		    for( var i=0; i < new_columns.length; i++ ) {
-			bf += new_columns[ i ] + ' : <INPUT TYPE="TEXT" id="_new_' + item.id + 
-			    '_' + new_columns[ i ] + '"><BR>';
-			txts.push( '#_new_' + item.id + '_' + new_columns[ i ] );
+			var nc = new_columns[ i ];
+			var field = typeof nc === 'object' ? nc.field : nc;
+			var id = '_new_' + item.id + '_' + field;
+			if( typeof nc === 'object' ) {
+			    bf += nc.html( id );
+			} else {
+			    bf += nc + ' : <INPUT TYPE="TEXT" id="' + id + '"><BR>';
+			}
+			txts.push( '#' + id );
 		    }
 		    bf += '<BUTTON type="BUTTON" id="_new_' + item.id + '_b">' + new_button + '</BUTTON>';
 		    $( new_attachpoint ).empty().append( bf );
@@ -611,15 +622,17 @@ $.yote.util = {
 			action : (function(it) { return function() {
 			    var newitem = new_function();
 			    for( var i=0; i < new_columns.length; i++ ) {
-				var val = $( '#_new_' + it.id + '_' + new_columns[ i ] ).val();
-				newitem.set( new_columns[ i ], val );
+				var nc = new_columns[ i ];
+				var field = typeof nc === 'object' ? nc.field : nc;
+				var val = $( '#_new_' + it.id + '_' + field ).val();
+				newitem.set( field, val );
 			    }
 			    me.refresh();
 			} } )(item)
 		    } );
 		} //new attacher
-		
-		if( column_headers ) {
+
+		if( column_headers && ! suppress_table ) {
 		    var ch = [];
 		    for( var i=0; i < column_headers.length; i++ ) {
 			ch.push( column_headers[ i ] );
@@ -629,32 +642,62 @@ $.yote.util = {
 		    }
 		    tab.add_header_row( ch );
 		}
-		
+
 		var items = paginate_type == 'hash' ?
 		    item.paginate_hash( [ list_name, plimit + 1, me.start ] ) :
-		    paginate_order == 'forward' ? item.paginate( [ list_name, plimit + 1, me.start ] ) : 
+		    paginate_order == 'forward' ? item.paginate( [ list_name, plimit + 1, me.start ] ) :
 		    item.paginate_rev( [ list_name, plimit + 1, me.start ] );
-		
+
 		var max = items.length() > plimit ? plimit : items.length();
-		
-		for( var i = 0 ; i < max ; i++ ) {
-		    var item = items.get( i );
-		    var row = [];
-		    for( var j = 0 ; j < columns.length; j++ ) {
-			row.push( typeof columns[ j ] == 'function' ?
-				  columns[ j ]( item, true ) : 
-				  typeof columns[ j ] == 'object' ?
-				  columns[ j ][ 'render' ]( item )
-				  : item.get( columns[ j ] )
-				);
+
+		if( paginate_type == 'hash' ) {
+
+		    var keys = items.keys();
+
+		    for( var i in keys ) {
+			var key = keys[ i ];
+			var item = items.get( key );
+			var row = [];
+			for( var j = 0 ; j < columns.length; j++ ) {
+			    row.push( typeof columns[ j ] == 'function' ?
+				      columns[ j ]( item, true ) :
+				      typeof columns[ j ] == 'object' ?
+				      columns[ j ][ 'render' ]( item )
+				      : item.get( columns[ j ] )
+				    );
+			}
+			if( remove_fun ) {
+			    row.push( '<BUTTON type="BUTTON" id="remove_' + item.id + '_b">Delete</BUTTON>' );
+			}
+			tab.add_row( row );
 		    }
-		    if( remove_fun ) {
-			row.push( '<BUTTON type="BUTTON" id="remove_' + item.id + '_b">Delete</BUTTON>' );
+		}
+		else {
+		    for( var i = 0 ; i < max ; i++ ) {
+			var item = items.get( i );
+			var row = [];
+			for( var j = 0 ; j < columns.length; j++ ) {
+			    row.push( typeof columns[ j ] == 'function' ?
+				      columns[ j ]( item, true ) :
+				      typeof columns[ j ] == 'object' ?
+				      columns[ j ][ 'render' ]( item )
+				      : item.get( columns[ j ] )
+				    );
+			}
+			if( remove_fun && ! suppress_table ) {
+			    row.push( '<BUTTON type="BUTTON" id="remove_' + item.id + '_b">Delete</BUTTON>' );
+			}
+			if( suppress_table ) {
+			    buf += row.join('');
+			}
+			else {
+			    tab.add_row( row );
+			}
 		    }
-		    tab.add_row( row );
 		}
 
-		var buf = tab.get_html();
+		buf += suppress_table ? '' : tab.get_html();
+
 		if( me.start > 0 || items.length() > plimit ) {
 		    buf += '<br>';
 		    buf += '<BUTTON type="button" id="to_start_b">&lt;&lt;</BUTTON>';
@@ -670,12 +713,12 @@ $.yote.util = {
 		    var b = me.start - plimit;
 		    if( b < 0 ) b = 0;
 		    $( '#back_b' ).click(function() { me.start = b; me.refresh(); } );
-		} 
+		}
 		else {
 		    $( '#to_start_b' ).attr( 'disabled', 'disabled' );
 		    $( '#back_b' ).attr( 'disabled', 'disabled' );
 		}
-		
+
 		if( items.length() > plimit ) {
 		    var e = me.start + plimit;
 		    if( e > count ) {
@@ -689,27 +732,53 @@ $.yote.util = {
 		    $( '#forward_b' ).attr( 'disabled', 'disabled' );
 		}
 
-		for( var i = 0 ; i < max ; i++ ) {
-		    var item = items.get( i );
-		    for( var j = 0 ; j < columns.length; j++ ) {
-			if( typeof columns[ j ] == 'function' ) {
-			    columns[ j ]( item, false );
+		if( paginate_type == 'hash' ) {
+		    for( var i in keys ) {
+			var key = keys[ i ];
+			var item = items.get( key );
+			for( var j = 0 ; j < columns.length; j++ ) {
+			    if( typeof columns[ j ] == 'function' ) {
+				columns[ j ]( item, false );
+			    }
+			    else if( typeof columns[ j ] == 'object' ) {
+				columns[ j ][ 'after_render' ]( item, function( newstart ) { me.refresh(); } );
+			    }
 			}
-			else if( typeof columns[ j ] == 'object' ) {
-			    columns[ j ][ 'after_render' ]( item, function( newstart ) { me.refresh(); } );
+			if( remove_fun ) {
+			    $( '#remove_' + item.id + '_b' ).click((function(it) { return function() {
+				remove_fun( it );
+				var to = me.start - 1;
+				if( to < 0 ) to = 0;
+				me.start = to;
+				me.refresh();
+			    } } )( item ) );
 			}
-		    }
-		    if( remove_fun ) {
-			$( '#remove_' + item.id + '_b' ).click((function(it) { return function() {
-			    remove_fun( it );
-			    var to = me.start - 1;
-			    if( to < 0 ) to = 0;
-			    me.start = to;
-			    me.refresh();
+		    } //each row again
+
+		}
+		else {
+		    for( var i = 0 ; i < max ; i++ ) {
+			var item = items.get( i );
+			for( var j = 0 ; j < columns.length; j++ ) {
+			    if( typeof columns[ j ] == 'function' ) {
+				columns[ j ]( item, false );
+			    }
+			    else if( typeof columns[ j ] == 'object' ) {
+				columns[ j ][ 'after_render' ]( item, function( newstart ) { me.refresh(); } );
+			    }
+			}
+			if( remove_fun ) {
+			    $( '#remove_' + item.id + '_b' ).click((function(it) { return function() {
+				remove_fun( it );
+				var to = me.start - 1;
+				if( to < 0 ) to = 0;
+				me.start = to;
+				me.refresh();
 			} } )( item ) );
-		    }
-		} //each row again
-		
+			}
+		    } //each row again
+		}
+
 		after_render( items );
 	    }
 	};
