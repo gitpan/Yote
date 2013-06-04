@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use vars qw($VERSION);
-$VERSION = '0.0992';
+$VERSION = '0.0993';
 
 use Carp;
 use File::Path;
@@ -136,6 +136,8 @@ mongo db is the fastest, but sqlite will always work.',
 	}
     }
 
+    $newconfig{ port } = _ask( "Port to run yote server on?", undef, 80 );
+
     # this is as secure as the file permissions of the config file, and as secure as the data store is itself.
     $newconfig{ root_account  } = _ask( "Root Account name", undef, 'root' );
     $newconfig{ root_password } = Yote::ObjProvider::encrypt_pass( _ask( "Root Account Password" ), $newconfig{ root_account } );
@@ -164,7 +166,7 @@ sub get_args {
 	r  => 'root',
 	);
     my %argnames = map { $_ => 1 } values %argmap;
-    my %required = map { $_ => 1 } qw/engine store yote_root root_account root_password/;
+    my %required = map { $_ => 1 } qw/engine store yote_root root_account root_password port/;
 
     # ---------  run variables  -----------------
 
@@ -172,7 +174,6 @@ sub get_args {
     my $cmd;
 
     # ---------  get command line arguments ---------
-
     while ( @ARGV ) {
 	my $arg = shift @ARGV;
 	if ( $arg =~ /^--(.*)=(.*)/ ) {
@@ -202,7 +203,7 @@ sub get_args {
 	    s/\#.*//;
 	    next unless /\S/;
 	    if ( /\s*(\S+)\s*=\s*(.*)\s*$/ ) {
-		$config{ lc( $1 ) } = $2;
+		$config{ lc( $1 ) } ||= $2;
 	    } else {
 		chop;
 		warn "Bad line in config file : '$_'";
@@ -222,7 +223,7 @@ sub get_args {
 	_log "No configuration file exists. Asking user to get values for one.\n";
 	my $newconfig = _create_configuration( $yote_root_dir );
 	for my $key ( keys %$newconfig ) {
-	    $config{ $key } = $newconfig->{ $key };
+	    $config{ $key } ||= $newconfig->{ $key };
 	}
     } #had to write first config file
 

@@ -9,7 +9,7 @@ use Yote::Util::ChatBoard;
 use Yote::Util::Blog;
 
 use vars qw($VERSION);
-$VERSION = '0.02';
+$VERSION = '0.021';
 
 sub _init {
 
@@ -39,6 +39,28 @@ sub update {
 
 } #update
 
+sub suggestion_box {
+    my( $self, $text, $acct, $env ) = @_;
+    
+    $self->add_to__suggestion_box( 
+	Yote::Obj->new( {
+	    from         => $acct ? $acct->get_login()->get_handle() : $env->{REMOTE_ADDR},
+	    is_from_acct => defined( $acct ),
+	    message      => $text
+			} )
+	);
+
+} #suggestion_box
+
+sub remove_suggestion {
+    my( $self, $sugg, $acct, $env ) = @_;
+    
+    if( $acct->get_login()->is_root() ) {
+	$self->remove_from__suggestion_box( $sugg );
+    }
+
+} #remove_suggestion
+
 1;
 
 __END__
@@ -46,6 +68,14 @@ __END__
 =head1 PUBLIC API METHODS
 
 =over 4
+
+=item remove_suggestion
+
+Takes a suggestion object as a parameter and removes it from the suggestion box list.
+
+=item suggestion_box
+
+Takes text as its parameter. This adds that text to the suggestion box. This stores it with the account handle or the ip address.
 
 =item update( hashref )
 

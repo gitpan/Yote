@@ -47,7 +47,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.0992"
+         "version" : "0.0993"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -167,7 +167,7 @@
       },
       "Yote::Util::MadYote" : {
          "file" : "lib/Yote/Util/MadYote.pm",
-         "version" : "0.02"
+         "version" : "0.021"
       },
       "Yote::Util::MessageBoard" : {
          "file" : "lib/Yote/Util/MessageBoard.pm",
@@ -196,5 +196,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.0992"
+   "version" : "0.0993"
 }
