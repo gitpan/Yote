@@ -18,6 +18,7 @@ WriteMakefile
                    'MongoDB' => '0.503',
                    'Test::More' => 0,
                    'Test::Pod' => 0,
+                   'Thread::Queue' => '2.12',
                    'WeakRef' => '0.01',
                    'forks' => '0.34',
                    'forks::shared' => '0.34'
