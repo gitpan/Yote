@@ -4,7 +4,7 @@
       "Eric Wolf (coyocanid@gmail.com)"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.4003, CPAN::Meta::Converter version 2.112621",
+   "generated_by" : "Module::Build version 0.4004, CPAN::Meta::Converter version 2.130880",
    "license" : [
       "perl_5"
    ],
@@ -16,8 +16,8 @@
    "prereqs" : {
       "build" : {
          "requires" : {
-            "Test::More" : 0,
-            "Test::Pod" : 0
+            "Test::More" : "0",
+            "Test::Pod" : "0"
          }
       },
       "configure" : {
@@ -35,7 +35,7 @@
             "File::UStore" : "0.12",
             "JSON" : "2.53",
             "MIME::Lite" : "3.029",
-            "Mail::Sender" : 0,
+            "Mail::Sender" : "0",
             "MongoDB" : "0.503",
             "Thread::Queue" : "2.12",
             "WeakRef" : "0.01",
@@ -48,7 +48,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.0995"
+         "version" : "0.0996"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -197,5 +197,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.0995"
+   "version" : "0.0996"
 }

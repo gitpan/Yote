@@ -1,3 +1,8 @@
+2013-06-12  Eric Wolf  <coyocanid@gmail.com>
+
+	* VERSION 0.0996
+	* added number of threads as a configuration value
+
 2013-06-09  wolf  <coyocanid@gmail.com>
 
 	* VERSION 0.0994
