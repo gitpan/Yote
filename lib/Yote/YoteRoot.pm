@@ -18,6 +18,7 @@ use base 'Yote::AppRoot';
 our $HANDLE_CACHE = {};
 our $EMAIL_CACHE = {};
 
+$Yote::YoteRoot::ROOT_INIT = 0;
 
 # ------------------------------------------------------------------------------------------
 #      * INIT METHODS *
@@ -29,8 +30,17 @@ sub _init {
     $self->set__emails({});
     $self->set__crond( new Yote::Cron() );
     $self->set__application_lib_directories( [] );
+    $self->set___ALLOWS( {} );
+    $self->set___ALLOWS_REV( {} );
+    $self->set___DIRTY( {} );
 } #_init
 
+sub _load {
+    my $self = shift;
+    $self->get___ALLOWS_REV( {} );
+    $self->get___ALLOWS( {} );
+    $self->get___DIRTY( {} );    
+} #_load
 
 # ------------------------------------------------------------------------------------------
 #      * PUBLIC METHODS *
@@ -66,7 +76,7 @@ sub create_login {
             die "password required";
         }
 
-	$EMAIL_CACHE->{$email}   = 1 if $email;
+	$EMAIL_CACHE->{$email}      = 1 if $email;
 	$HANDLE_CACHE->{$lc_handle} = 1;
 
         my $new_login = new Yote::Login();
@@ -123,11 +133,13 @@ sub fetch_app_by_class {
 # Returns this root object.
 #
 sub fetch_root {
+    $Yote::YoteRoot::ROOT_INIT = 1;
     my $root = Yote::ObjProvider::fetch( Yote::ObjProvider::first_id() );
     unless( $root ) {
 	$root = new Yote::YoteRoot();
 	Yote::ObjProvider::stow( $root );
     }
+    $Yote::YoteRoot::ROOT_INIT = 0;
     return $root;
 }
 
@@ -140,7 +152,7 @@ sub guest_token {
     $Yote::ObjProvider::IP_TO_GUEST_TOKEN->{$ip} = {$token => time()}; # @TODO - make sure this and the LOGIN_OBJECTS cache is purged regularly. cron maybe?
     $Yote::ObjProvider::GUEST_TOKEN_OBJECTS->{$token} = {};  #memory leak? @todo - test this
 
-    # @TODO write a Cache class to hold onto objects, with an interface like fetch( obj_id, login, guest_token )
+    Yote::ObjManager::clear_login( undef, $token );
 
     return $token;
 } #guest_token
@@ -152,11 +164,13 @@ sub guest_token {
 #
 sub login {
     my( $self, $data, $dummy, $env ) = @_;
-
+    print Yote::WebAppServer::iolog( "LOGINTRY : " . Data::Dumper->Dump([$data]) );
     if( $data->{h} ) {
 	my $lc_h = lc( $data->{h} );
 	my $ip = $env->{ REMOTE_ADDR };
         my $login = $self->_hash_fetch( '_handles', $lc_h );
+    print Yote::WebAppServer::iolog( "LOGIN $lc_h : " . Data::Dumper->Dump([$login]) );
+	print STDERR Data::Dumper->Dump([$login, Yote::ObjProvider::encrypt_pass( $data->{p}, $login->get_handle()),"LOGIN"]);
         if( $login && ($login->get__password() eq Yote::ObjProvider::encrypt_pass( $data->{p}, $login->get_handle()) ) ) {
 	    Yote::ObjManager::clear_login( $login, $env->{GUEST_TOKEN} );
             return { l => $login, t => $self->_create_token( $login, $ip ) };

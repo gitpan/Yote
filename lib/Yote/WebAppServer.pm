@@ -1,12 +1,12 @@
 package Yote::WebAppServer;
 
-# forks should be placed before any other use
 use forks;
-use forks::shared; 
+use forks::shared;
 
 use strict;
 use warnings;
 no warnings 'uninitialized';
+
 
 use Data::Dumper;
 use MIME::Base64;
@@ -22,15 +22,26 @@ use Yote::ObjProvider;
 
 use vars qw($VERSION);
 
-$VERSION = '0.092';
+$VERSION = '0.093';
 
-
+# %prid2result stores process id to a json encoded string result
 my( %prid2result, $singleton );
 share( %prid2result );
 
-use Thread::Queue;
+# %oid2pid stores object id to process id that is locking it
+# %oid2waitingpid stores object id to the process id of the process waiting for that object. This exists for deadlock detection and resolution.
+#   The resolution scheme is for the requesting process to unlock (and possibly save) objects that it has locked that are being requested
+#    by an other thread that has locked an item this thread is waiting on.
+# 
+my( %oid2pid, %oid2waitingpid, %dirty );
+share( %oid2pid );
+share( %oid2waitingpid );
+share( %dirty );
 
+use Thread::Queue;
+ 
 my $cmd_queue = Thread::Queue->new();
+
 
 
 # ------------------------------------------------------------------------------------------
@@ -65,6 +76,7 @@ sub do404 {
 sub iolog {
     my( $msg ) = @_;
     my $t = strftime "%Y-%m-%d %H:%M:%S", gmtime;
+#    print STDERR "[$$ ".time()."]$msg\n";
     print $Yote::WebAppServer::IO "$t : $msg\n";
 }
 
@@ -78,6 +90,109 @@ sub accesslog {
     my( $msg ) = @_;
     my $t = strftime "%Y-%m-%d %H:%M:%S", gmtime;
     print $Yote::WebAppServer::ACCESS "$t : $msg\n";
+}
+
+sub locked_by_me {
+    my( $self, $obj_id ) = @_;
+    return $self->{LOCKED}{$obj_id};
+}
+
+sub lock_object {
+    my( $self, $obj_id ) = @_;
+    return if $obj_id eq Yote::ObjProvider::first_id();
+#    print STDERR "[$$ ".time()."] LOCK REQ $obj_id \n";
+    while( 1 ) {
+	lock( %oid2pid );
+	my $locked_by_pid = $oid2pid{ $obj_id };
+	if( $locked_by_pid && $locked_by_pid != $$ ) {
+	    my( @locked_objs );
+
+	    {
+		lock( %oid2waitingpid );
+
+		# check for deadlock here before the cond_wait
+		for my $oid ( keys %{ $self->{LOCKED} || {} } ) {
+		    # check if a different process is locking this object but waiting on 
+		    # something this process has locked
+		    # check if this object is dirty. If it is, abort?
+		    if( Yote::ObjProvider::__is_dirty( $oid ) ) {
+			$self->unlock_objects( keys %{ $self->{LOCKED} } );
+			Yote::ObjProvider::flush( map { Yote::ObjProvider::__is_dirty( $_ ) } keys %{ $self->{LOCKED} } );
+			die "__DEADLOCK__";
+		    }
+		    if( $oid2waitingpid{$oid} == $locked_by_pid ) {
+			push @locked_objs, $oid;
+			$oid2pid{ $oid } = $locked_by_pid;
+		    }
+		}
+	    }
+
+	    if( @locked_objs ) { #these objects could cause a deadlock
+		$self->unlock_objects( @locked_objs );
+		for my $oid ( @locked_objs, $obj_id ) {
+		    $self->lock_object( $oid );
+		}
+		return;
+	    }
+	    else {	    
+		{
+		    lock( %oid2waitingpid );
+		    # insert the waiting on right here
+		    $oid2waitingpid{$obj_id} = $$;
+		}
+		cond_wait( %oid2pid );
+	    }
+	}
+	else {
+	    $oid2pid{ $obj_id } = $$;
+	    $self->{LOCKED}{ $obj_id } = 1;
+#	    print STDERR "[$$ ".time()."] FINISHED LOCKING $obj_id \n";
+	    return;
+	}
+    }
+} #lock_object
+
+sub unlock_objects {
+    my( $self, @objs ) = @_;
+    lock( %oid2pid );
+    for my $obj_id ( @objs ) {
+	delete $oid2pid{ $obj_id };
+    }
+    cond_signal( %oid2pid );
+}
+
+sub check_locked_for_dirty {
+    my( $self  ) = @_;
+    lock( %dirty );
+    # LOCKED is not picking up everything that is dirty :(
+    for my $key ( keys %{ $self->{LOCKED} || {} } ) {
+	if( Yote::ObjProvider::__is_dirty( $key ) ) {
+	    $dirty{ $key } = time();
+#	    print STDERR "[$$ ".time()."] SET DIRTY : $key ( at time $dirty{ $key } )\n";
+	} #else { print STDERR "[$$ ".time()."] NOT DIRTY : $key \n"; }
+    }
+}
+
+sub check_last_dirty_time {
+    my( $self, $obj_id ) = @_;
+    my $time;
+    {
+	lock( %dirty );
+	$time = $dirty{ $obj_id };
+    }
+    return $time;
+}
+
+sub unlock_all {
+    my( $self  ) = @_;
+    lock( %oid2pid );
+    for my $key ( keys %{ $self->{LOCKED} || {} } ) {
+	if( $oid2pid{ $key } == $$ ) {
+	    delete $oid2pid{ $key };
+	}
+    }
+    cond_signal( %oid2pid );
+    $self->{LOCKED} = {};
 }
 
 #
@@ -141,7 +256,7 @@ sub process_http_request {
     my( @path ) = grep { $_ ne '' && $_ ne '..' } split( /\//, $uri );
     my( @return_headers );
     if( $path[0] eq '_' || $path[0] eq '_u' ) { # _ is normal yote io, _u is upload file
-	iolog( $uri );
+	iolog( "\n$uri" );
 	errlog( $uri );
 	my $path_start = shift @path;
 
@@ -213,6 +328,7 @@ sub process_http_request {
 	    print $soc join( "\n", @return_headers )."\n\n";
             print $soc "{\"msg\":\"Added command\"}";
         }
+	
     } #if a command on an object
 
     elsif( $path[0] eq '_c' ) {
@@ -222,7 +338,7 @@ sub process_http_request {
 
     else { #serve up a web page
 	accesslog( "$uri from [ $ENV{REMOTE_ADDR} ][ $ENV{HTTP_REFERER} ]" );
-	iolog( "Request\n\t$uri" );
+	iolog( $uri );
 
 	my $root = $self->{args}{webroot};
 	my $dest = '/' . join('/',@path);
@@ -334,6 +450,7 @@ sub start_server {
     #my $cron_thread = threads->new( sub { $self->_crond( $cron->{ID} ); } );
     #$self->{cron_thread} = $cron_thread;
 
+    # make sure the filehelper knows where the data directory is
 
     # update @INC library list
     my $paths = $root->get__application_lib_directories([]);
@@ -345,21 +462,43 @@ sub start_server {
 
     for( 1 .. $self->{args}{threads} ) {
 	$self->_start_server_thread;
-    } #creating 5 threads
+    } #creating threads
 
-    $self->{watchdog_thread} = threads->new(
-	sub {
-	    while( 1 ) {
-		sleep( 5 );
-		$self->{threads} = [ grep { $_->is_running } @{$self->{threads}}];
-		while( @{$self->{threads}} < $self->{args}{threads} ) {
-		    $self->_start_server_thread;
-		}
+    # a singleton thread for now
+    # make this into more threads as that happens
+    my $processing_threads = $self->{ args }{ processing_threads };
+    
+    if( $processing_threads > 1 ) {
+	Yote::ObjProvider::make_server( $self );
+	for( 1 .. $processing_threads ) {
+	    threads->new( sub {
+		print "Starting processing thread $$\n";
+		$self->_poll_commands();
+			  } );
+	}
+	while( 1 ) {
+	    sleep( 5 );
+	    $self->{threads} = [ grep { $_->is_running } @{$self->{threads}}];
+	    while( @{$self->{threads}} < $self->{args}{threads} ) {
+		$self->_start_server_thread;
 	    }
-	} );
-
-    _poll_commands();
-
+	}
+    }  #just one processing thread
+    else {
+	$self->{watchdog_thread} = threads->new(
+	    sub {
+		while( 1 ) {
+		    sleep( 5 );
+		    $self->{threads} = [ grep { $_->is_running } @{$self->{threads}}];
+		    while( @{$self->{threads}} < $self->{args}{threads} ) {
+			$self->_start_server_thread;
+		    }
+		}
+	    } );
+	
+	$self->_poll_commands();
+    }
+	
     _stop_threads();
 
    Yote::ObjProvider::disconnect();
@@ -386,13 +525,14 @@ sub _start_server_thread {
 		  unless( $self->{lsn} ) {
 		      threads->exit();
 		  }
+
 		  open( $Yote::WebAppServer::IO,      '>>', "$Yote::WebAppServer::LOG_DIR/io.log" ) 
 		      && $Yote::WebAppServer::IO->autoflush;
 		  open( $Yote::WebAppServer::ACCESS,  '>>', "$Yote::WebAppServer::LOG_DIR/access.log" )
 		      && $Yote::WebAppServer::ACCESS->autoflush;
 		  open( $Yote::WebAppServer::ERR,     '>>', "$Yote::WebAppServer::LOG_DIR/error.log" )
 		      && $Yote::WebAppServer::ERR->autoflush;
-		  
+
 		  while( my $fh = $self->{lsn}->accept ) {
 		      $ENV{ REMOTE_ADDR } = $fh->peerhost;
 		      $self->process_http_request( $fh );
@@ -401,7 +541,6 @@ sub _start_server_thread {
 	      } ) #new thread
 	);
 } #_start_server_thread
-
 
 sub _crond {
     my( $self, $cron_id ) = @_;
@@ -428,19 +567,17 @@ sub _crond {
 # Run by a thread that constantly polls for commands.
 #
 sub _poll_commands {
-
+    my $self = shift;
     while(1) {
-	_process_command( $cmd_queue->dequeue() );
-	Yote::ObjProvider::start_transaction();
-	Yote::ObjProvider::stow_all();
-	Yote::ObjProvider::commit_transaction();
+	$self->_process_command( $cmd_queue->dequeue() );
     } #endlees loop
 
 } #_poll_commands
 
 sub _process_command {
-    my( $req ) = @_;
+    my( $self, $req ) = @_;
     my( $command, $procid ) = @$req;
+    
     my $wait = $command->{w};
 
     my $resp;
@@ -453,7 +590,7 @@ sub _process_command {
 
         my $data        = _translate_data( from_json( MIME::Base64::decode( $command->{d} ) )->{d} );
 	
-	iolog( "  * DATA IN  : " . Data::Dumper->Dump( [ $data ] ) );
+	iolog( "  * DATA IN $$ : " . Data::Dumper->Dump( [ $data ] ) );
 
         my $login       = $app->token_login( $command->{t}, undef, $command->{e} );
 	my $guest_token = $command->{gt};
@@ -498,21 +635,33 @@ sub _process_command {
 		}
 	    }
 	} #if there was a dirty delta
-        $resp = $dirty_data ? { r => $app_object->__obj_to_response( $ret, $login, $guest_token ), d => $dirty_data } : { r => $app_object->__obj_to_response( $ret, $login, $guest_token ) };
+        $resp = $dirty_data ? { r => __obj_to_response( $ret, $login, $guest_token ), d => $dirty_data } : { r => __obj_to_response( $ret, $login, $guest_token ) };
     };
     if( $@ ) {
 	my $err = $@;
+	if( $err =~ /^__DEADLOCK__/ ) {
+	    iolog( "DEADLOCK TO RETRY $procid : $@" );
+	    # if a deadlock condition was detected. back out of any changes and retry
+	    $cmd_queue->enqueue( [ $command, $procid ] );
+	    return 0;
+	}
 	$err =~ s/at \/\S+\.pm.*//s;
         errlog( "ERROR : $@" );
 	iolog( "ERROR : $@" );
         $resp = { err => $err, r => '' };
     }
-
+    
     $resp = to_json( $resp );
 
-    ### SEND BACK $resp
-    iolog( " * DATA BACK : $resp" );
+    $self->check_locked_for_dirty();
+    Yote::ObjProvider::start_transaction();
+    Yote::ObjProvider::stow_all();
+    Yote::ObjProvider::flush_all_volatile();
+    Yote::ObjProvider::commit_transaction();
+    $self->unlock_all();
 
+    ### SEND BACK $resp
+    iolog( " * DATA BACK $$ : $resp" );
     #
     # Send return value back to the caller if its waiting for it.
     #
@@ -621,6 +770,96 @@ sub _translate_data {
 	return Yote::ObjProvider::fetch( $val );
     }
 } #_translate_data
+
+#
+# Converts scalar, yote object, hash or array to data for returning.
+#
+sub __obj_to_response {
+    my( $to_convert, $login, $guest_token ) = @_;
+    my $ref = ref($to_convert);
+    my $use_id;
+    if( $ref ) {
+        my( $m, $d );
+        if( $ref eq 'ARRAY' ) {
+            my $tied = tied @$to_convert;
+            if( $tied ) {
+                $d = $tied->[1];
+                $use_id = Yote::ObjProvider::get_id( $to_convert );
+		for my $entry (@$d) {
+		    next unless $entry;
+		    if( index( $entry, 'v' ) != 0 ) {
+			Yote::ObjManager::register_object( $entry, $login ? $login->{ID} : $guest_token );
+		    }
+		}
+            } else {
+                $d = __transform_data_no_id( $to_convert, $login, $guest_token );
+            }
+        } 
+        elsif( $ref eq 'HASH' ) {
+            my $tied = tied %$to_convert;
+            if( $tied ) {
+                $d = $tied->[1];
+                $use_id = Yote::ObjProvider::get_id( $to_convert );
+		for my $entry (values %$d) {
+		    next unless $entry;
+		    if( index( $entry, 'v' ) != 0 ) {
+			Yote::ObjManager::register_object( $entry, $login ? $login->{ID} : $guest_token );
+		    }
+		}
+            } else {
+                $d = __transform_data_no_id( $to_convert, $login, $guest_token );
+            }
+        } 
+        else {
+            $use_id = Yote::ObjProvider::get_id( $to_convert );
+            $d = { map { $_ => $to_convert->{DATA}{$_} } grep { $_ && $_ !~ /^_/ } keys %{$to_convert->{DATA}}};
+	    for my $vl (values %$d) {
+		if( index( $vl, 'v' ) != 0 ) {
+		    Yote::ObjManager::register_object( $vl, $login ? $login->{ID} : $guest_token );
+		}
+	    }
+	    $m = Yote::ObjProvider::package_methods( $ref );
+        }
+
+	Yote::ObjManager::register_object( $use_id, $login ? $login->{ID} : $guest_token ) if $use_id;
+	return $m ? { c => $ref, id => $use_id, d => $d, 'm' => $m } : { c => $ref, id => $use_id, d => $d };
+    } # if a reference
+    return "v$to_convert";
+} #__obj_to_response
+
+#
+# Transforms data structure but does not assign ids to non tied references.
+#
+sub __transform_data_no_id {
+    my( $item, $login, $guest_token ) = @_;
+    if( ref( $item ) eq 'ARRAY' ) {
+        my $tied = tied @$item;
+        if( $tied ) {
+	    my $id =  Yote::ObjProvider::get_id( $item ); 
+	    Yote::ObjManager::register_object( $id, $login ? $login->{ID} : $guest_token );
+            return $id;
+        }
+        return [map { __obj_to_response( $_, $login, $guest_token ) } @$item];
+    }
+    elsif( ref( $item ) eq 'HASH' ) {
+        my $tied = tied %$item;
+        if( $tied ) {
+	    my $id =  Yote::ObjProvider::get_id( $item ); 
+	    Yote::ObjManager::register_object( $id, $login ? $login->{ID} : $guest_token );
+            return $id;
+        }
+        return { map { $_ => __obj_to_response( $item->{$_}, $login, $guest_token ) } keys %$item };
+    }
+    elsif( ref( $item ) ) {
+        my $id = Yote::ObjProvider::get_id( $item ); 
+	Yote::ObjManager::register_object( $id, $login ? $login->{ID} : $guest_token );
+	return $id;
+    }
+    else {
+        return "v$item"; #scalar case
+    }
+} #__transform_data_no_id
+
 
 1;
 
