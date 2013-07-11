@@ -1,11 +1,14 @@
 package Yote;
 
+use forks;
+use forks::shared;
+
 use strict;
 use warnings;
 
 use vars qw($VERSION);
 
-$VERSION = '0.1002';
+$VERSION = '0.1003';
 
 use Carp;
 use File::Path;
@@ -24,8 +27,7 @@ sub _print_use {
                     --password=engine-password 
                     --port=yote-server-port
                     --store=filename|mongo-db|mysq-db
-                    --threads=number-of-serving-processes
-                    --processing_threads=number-of-processing-processes
+                    --threads=number-of-server-processes
                     --user=engine-username 
                     --yote_root=yote-root-directory
                           START|STOP|RESTART
@@ -145,8 +147,7 @@ sub _get_configuration {
     }
 
     $newconfig{ port } = _ask( "Port to run yote server on?", undef, 80 );
-    $newconfig{ threads } = _ask( "Number of server threads : ", undef, 10 );
-    $newconfig{ processing_threads } = _ask( "Number of processing threads :", undef, 4 );
+    $newconfig{ threads } = _ask( "Number of server processes :", undef, 4 );
 
     # this is as secure as the file permissions of the config file, and as secure as the data store is itself.
     $newconfig{ root_account  } = _ask( "Root Account name", undef, 'root' );
@@ -180,14 +181,13 @@ sub get_args {
 	u  => 'user',
 	r  => 'yote_root',
 	t  => 'threads',
-	T  => 'processing_threads',
 	);
     my %noval = (  #arguments that do not take a value
 		   help     => 1,
 		   generate => 1,
 	);
     my %argnames = map { $_ => 1 } values %argmap;
-    my %required = map { $_ => 1 } qw/engine store yote_root root_account root_password port threads processing_threads/;
+    my %required = map { $_ => 1 } qw/engine store yote_root root_account root_password port threads/;
 
     # ---------  run variables  -----------------
 
@@ -197,7 +197,7 @@ sub get_args {
     # ---------  get command line arguments ---------
     while ( @ARGV ) {
 	my $arg = shift @ARGV;
-	if ( $arg =~ /^--(.*)(=(.*))?/ ) {
+	if ( $arg =~ /^--([^=]*)(=(.*))?/ ) {
 	    _soft_exit( "Unknown argument '$arg'" ) unless $argnames{ $1 };
 	    $config{ $1 } = $noval{ $1 } ? 1 : $3; 
 	} elsif ( $arg =~ /^-(.*)/ ) {

@@ -13,12 +13,11 @@ WriteMakefile
                    'Email::Valid' => '0.19',
                    'File::UStore' => '0.12',
                    'JSON' => '2.53',
-                   'MIME::Lite' => '3.029',
+                   'MIME::Base64' => 0,
                    'Mail::Sender' => 0,
                    'MongoDB' => '0.503',
                    'Test::More' => 0,
                    'Test::Pod' => 0,
-                   'Thread::Queue' => '2.12',
                    'WeakRef' => '0.01',
                    'forks' => '0.34',
                    'forks::shared' => '0.34'

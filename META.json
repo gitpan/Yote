@@ -34,10 +34,11 @@
             "Email::Valid" : "0.19",
             "File::UStore" : "0.12",
             "JSON" : "2.53",
-            "MIME::Lite" : "3.029",
+            "MIME::Base64" : "0",
             "Mail::Sender" : "0",
             "MongoDB" : "0.503",
-            "Thread::Queue" : "2.12",
+            "Test::More" : "0",
+            "Test::Pod" : "0",
             "WeakRef" : "0.01",
             "forks" : "0.34",
             "forks::shared" : "0.34",
@@ -48,7 +49,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.1002"
+         "version" : "0.1003"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -69,6 +70,10 @@
       "Yote::Cron" : {
          "file" : "lib/Yote/Cron.pm",
          "version" : "0.011"
+      },
+      "Yote::DummyCache" : {
+         "file" : "lib/Yote/DummyCache.pm",
+         "version" : "0.01"
       },
       "Yote::FileHelper" : {
          "file" : "lib/Yote/FileHelper.pm",
@@ -184,7 +189,7 @@
       },
       "Yote::WebAppServer" : {
          "file" : "lib/Yote/WebAppServer.pm",
-         "version" : "0.094"
+         "version" : "0.095"
       },
       "Yote::YoteRoot" : {
          "file" : "lib/Yote/YoteRoot.pm",
@@ -197,5 +202,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.1002"
+   "version" : "0.1003"
 }
