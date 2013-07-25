@@ -4,7 +4,7 @@
       "Eric Wolf (coyocanid@gmail.com)"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.4004, CPAN::Meta::Converter version 2.130880",
+   "generated_by" : "Module::Build version 0.4007, CPAN::Meta::Converter version 2.131560",
    "license" : [
       "perl_5"
    ],
@@ -49,7 +49,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.1003"
+         "version" : "0.1004"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -97,7 +97,7 @@
       },
       "Yote::MysqlIO" : {
          "file" : "lib/Yote/MysqlIO.pm",
-         "version" : "0.031"
+         "version" : "0.032"
       },
       "Yote::Obj" : {
          "file" : "lib/Yote/Obj.pm",
@@ -202,5 +202,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.1003"
+   "version" : "0.1004"
 }
