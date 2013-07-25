@@ -17,13 +17,13 @@ name: Yote
 provides:
   Yote:
     file: lib/Yote.pm
-    version: 0.1004
+    version: 0.1005
   Yote::Account:
     file: lib/Yote/Account.pm
     version: 0.03
   Yote::AppRoot:
     file: lib/Yote/AppRoot.pm
-    version: 0.086
+    version: 0.087
   Yote::Array:
     file: lib/Yote/Array.pm
     version: 0.01
@@ -50,13 +50,13 @@ provides:
     version: 0.01
   Yote::MongoIO:
     file: lib/Yote/MongoIO.pm
-    version: 0.031
+    version: 0.032
   Yote::MysqlIO:
     file: lib/Yote/MysqlIO.pm
     version: 0.032
   Yote::Obj:
     file: lib/Yote/Obj.pm
-    version: 0.06
+    version: 0.07
   Yote::ObjManager:
     file: lib/Yote/ObjManager.pm
     version: 0.01
@@ -145,4 +145,4 @@ requires:
   perl: v5.12.0
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.1004
+version: 0.1005
