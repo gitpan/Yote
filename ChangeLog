@@ -1,3 +1,20 @@
+2013-07-28  Eric Wolf  <eric@DobreDen>
+
+	* VERSION 0.1007
+	* added paginate, a catch all method for list and hash pagination. It allows for search and sort
+	* control_table major work. Works with new paginate, has settings for automatic search
+	* moved MongoIO, MysqlIO and SQLiteIO to IO subpackage
+	* yote_server has arguments to reset password and change configuration
+
+2013-07-25  Eric Wolf  <eric@DobreDen>
+
+	* VERSION 0.1006
+	* fixed javascript bug where uploads were not being set properly for set_foo property calls.
+	* added YOTE_ROOT/lib directory, which is automatically in the classpath yote uses.
+	* min width for javascript util edit boxes
+	* fixed bug where fail and pass functions were not being called properly for property set calls.
+
+
 2013-07-24  Eric Wolf  <eric@DobreDen>
 
 	* VERSION 0.1005

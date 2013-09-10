@@ -8,7 +8,7 @@ build_requires:
 configure_requires:
   Module::Build: 0.40
 dynamic_config: 1
-generated_by: 'Module::Build version 0.4007, CPAN::Meta::Converter version 2.131560'
+generated_by: 'Module::Build version 0.4005, CPAN::Meta::Converter version 2.132140'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -17,7 +17,7 @@ name: Yote
 provides:
   Yote:
     file: lib/Yote.pm
-    version: 0.1005
+    version: 0.1007
   Yote::Account:
     file: lib/Yote/Account.pm
     version: 0.03
@@ -42,30 +42,30 @@ provides:
   Yote::Hash:
     file: lib/Yote/Hash.pm
     version: 0.01
+  Yote::IO::Mongo:
+    file: lib/Yote/IO/Mongo.pm
+    version: 0.033
+  Yote::IO::Mysql:
+    file: lib/Yote/IO/Mysql.pm
+    version: 0.032
+  Yote::IO::SQLite:
+    file: lib/Yote/IO/SQLite.pm
+    version: 0.032
   Yote::Login:
     file: lib/Yote/Login.pm
     version: 0.02
   Yote::Messenger:
     file: lib/Yote/Messenger.pm
     version: 0.01
-  Yote::MongoIO:
-    file: lib/Yote/MongoIO.pm
-    version: 0.032
-  Yote::MysqlIO:
-    file: lib/Yote/MysqlIO.pm
-    version: 0.032
   Yote::Obj:
     file: lib/Yote/Obj.pm
-    version: 0.07
+    version: 0.071
   Yote::ObjManager:
     file: lib/Yote/ObjManager.pm
     version: 0.01
   Yote::ObjProvider:
     file: lib/Yote/ObjProvider.pm
-    version: 0.07
-  Yote::SQLiteIO:
-    file: lib/Yote/SQLiteIO.pm
-    version: 0.031
+    version: 0.071
   Yote::Sample::SecretCollect:
     file: lib/Yote/Sample/SecretCollect.pm
     version: 0.01
@@ -122,7 +122,7 @@ provides:
     version: 0.01
   Yote::WebAppServer:
     file: lib/Yote/WebAppServer.pm
-    version: 0.095
+    version: 0.097
   Yote::YoteRoot:
     file: lib/Yote/YoteRoot.pm
     version: 0.051
@@ -145,4 +145,4 @@ requires:
   perl: v5.12.0
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.1005
+version: 0.1007

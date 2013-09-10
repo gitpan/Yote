@@ -1,4 +1,4 @@
-package Yote::MysqlIO;
+package Yote::IO::Mysql;
 
 #
 # This stows and fetches G objects from a database store and provides object ids.
@@ -162,12 +162,14 @@ sub hash_insert {
     return;
 } #hash_insert
 
+# return single item from a list
 sub list_fetch {
     my( $self, $list_id, $idx ) = @_;
     my( $val, $ref_id ) = $self->_selectrow_array( "SELECT value, ref_id FROM field WHERE obj_id=? AND field=?", $list_id, $idx );
     return $ref_id || "v$val";
 } 
 
+# return single item from a hash
 sub hash_fetch {
     my( $self, $hash_id, $key ) = @_;
     my( $val, $ref_id ) = $self->_selectrow_array( "SELECT value, ref_id FROM field WHERE obj_id=? AND field=?", $hash_id, $key );
@@ -304,56 +306,84 @@ sub start_transaction {
     die $self->{DBH}->errstr() if $self->{DBH}->errstr();
 }
 
-#
-# Returns a hash of paginated items
-# 
-sub paginate_hash {
-    my( $self, $obj_id, $paginate_length, $paginate_start ) = @_;
-
+sub paginate {
+    my( $self, $obj_id, $args ) = @_;
 
     my $PAG = '';
-    if( defined( $paginate_start ) ) {
-	$PAG = "LIMIT $paginate_start";
-	if( $paginate_length ) {
-	    $PAG .= ",$paginate_length"
-	}
-    }    
-
-    my $res = $self->_selectall_arrayref( "SELECT field, ref_id, value FROM field WHERE obj_id=? ORDER BY field $PAG", $obj_id );
-
-    my %ret;
-    for my $row (@$res) {
-	$ret{$row->[0]} = $row->[1] || "v$row->[2]";
-    }
-    return \%ret
-} #paginate_hash
-
-
-#
-# Returns a hash of paginated items that belong to the list. Note that this 
-# does not preserve indexes ( for example, if the list has two rows, and first index in the database is 3, the list returned is still [ 'val1', 'val2' ]
-#   rather than [ undef, undef, undef, 'val1', 'val2' ]
-#
-sub paginate_list {
-    my( $self, $obj_id, $paginate_length, $paginate_start, $reverse ) = @_;
-
-    my $PAG = '';
-    if( defined( $paginate_length ) ) {
-	if( $paginate_start ) {
-	    $PAG = "LIMIT $paginate_start,$paginate_length";
+    if( defined( $args->{ limit } ) ) {
+	if( $args->{ skip } ) {
+	    $PAG = " LIMIT $args->{ skip },$args->{ limit }";
 	} else {
-	    $PAG = "LIMIT $paginate_length";
+	    $PAG = " LIMIT $args->{ limit }";
 	}
     }    
 
-    my $res = $self->_selectall_arrayref( "SELECT field, ref_id, value FROM field WHERE obj_id=? ORDER BY cast( field as decimal )" .
-					  ( $reverse ? 'DESC ' : '' ) . " $PAG", $obj_id );
-    my @ret;
-    for my $row (@$res) {
-	push @ret, $row->[1] || "v$row->[2]";
+    my( $orstr, @params ) = ( '', $obj_id );
+    my $search_terms = $args->{ search_terms };
+    my $search_fields = $args->{ search_fields };
+    if( $search_terms ) {
+	if( $search_fields ) {
+	    my( @ors );
+	    for my $field ( @$search_fields ) {
+		for my $term (@$search_terms) {
+		    push @ors, " (f.field=? AND f.value LIKE ?) ";
+		    push @params, $field, "\%$term\%";
+		}
+	    }
+	    $orstr = @ors > 0 ? " WHERE " . join( ' OR ', @ors )  : '';
+	}
+	else {
+	    $orstr = " AND value IN (".join('',map { '?' } @$search_terms ).")";
+	    push @params, map { "\%$_\%" } @$search_terms;
+	}
     }
-    return \@ret
-} #paginate_list
+
+    my( $type ) = $self->_selectrow_array( "SELECT class FROM objects WHERE id=?", $obj_id );
+    my $query;
+    if( $args->{ sort_fields } ) {
+	my $sort_fields = $args->{ sort_fields };
+	my $reversed_orders = $args->{ reversed_orders } || [];
+	$query = "SELECT bar.field,fi.obj_id,".join(',', map { "GROUP_CONCAT( CASE WHEN fi.field='".$_."' THEN value END )" } @$sort_fields )." FROM field fi, ( SELECT foo.field,foo.ref_id AS ref_id FROM (SELECT field,ref_id FROM field WHERE obj_id=? ) as foo LEFT JOIN field f ON ( f.obj_id=foo.ref_id ) $orstr GROUP BY 1,2) as bar WHERE fi.obj_id=bar.ref_id GROUP BY 1,2 ORDER BY " . join( ',' , map { (3+$_) . ( $reversed_orders->[ $_ ] ? ' DESC' : '' )} (0..$#$sort_fields) ) . $PAG;
+    }
+    elsif( $search_fields ) {
+
+	$query = "SELECT bar.field,fi.obj_id,bar.value FROM field fi, ( SELECT foo.field,foo.ref_id AS ref_id,foo.value AS value FROM ( SELECT field,ref_id,value FROM field WHERE obj_id=? ) as foo LEFT JOIN field f ON ( f.obj_id=foo.ref_id ) $orstr GROUP BY 1,2) as bar WHERE fi.obj_id=bar.ref_id GROUP BY 1,2 ";
+	if( $type eq 'ARRAY' ) {
+	    $query .= ' ORDER BY cast( bar.field as unsigned ) ';
+	}
+	else {
+	    $query .= ' ORDER BY bar.field ';
+	}
+	$query .= ' DESC' if $args->{ reverse };
+	$query .= $PAG;	
+    }
+    else {
+	$query = "SELECT field,ref_id,value FROM field WHERE obj_id=?";
+	if( $type eq 'ARRAY' ) {
+	    if( $args->{ sort } ) {
+		$query .= ' ORDER BY value ';
+	    }
+	    else {
+		$query .= ' ORDER BY cast( field as unsigned ) ';
+	    }
+	}
+	else {
+	    $query .= ' ORDER BY field ';
+	}
+	$query .= ' DESC' if $args->{ reverse };
+	$query .= $PAG;	
+    }
+    my $ret = $self->_selectall_arrayref( $query, @params );
+#    print STDERR Data::Dumper->Dump([$query,\@params,$ret]);
+    if( $args->{return_hash} ) {
+	if( $type eq 'ARRAY' ) {
+	    return { map { ($args->{ skip }+$_) => $ret->[$_][1] || 'v'.$ret->[$_][2] } (0..$#$ret) };
+	}
+	return { map { $_->[0] => $_->[1] || 'v'.$_->[2] } @$ret };
+    }
+    return [map { $_->[1] || 'v'.$_->[2] } @$ret ];    
+
+} #paginate
 
 
 #
@@ -554,13 +584,22 @@ Returns the max ID in the yote system. Used for testing.
 
 =item new
 
-=item paginate_hash( hash_id, length, start )
+=item paginate( container_id, args )
 
-Returns a paginated hash reference
+Returns a paginated list or hash. Arguments are 
 
-=item paginate_list( list_id, length, start )
+=over 4
 
-Returns a paginated list reference
+* search_fields - a list of fields to search for in collections of yote objects
+* search_terms - a list of terms to search for
+* sort_fields - a list of fields to sort by for collections of yote objects
+* reversed_orders - a list of true or false values corresponding to the sort_fields list. A true value means that field is sorted in reverse
+* limit - maximum number of entries to return
+* skip - skip this many entries before returning the list
+* return_hash - return the result as a hashtable rather than as a list
+* reverse - return the result in reverse order
+
+=back
 
 =item recycle_object( obj_id )
 

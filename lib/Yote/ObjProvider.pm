@@ -25,7 +25,7 @@ our $FIRST_ID;
 
 use vars qw($VERSION);
 
-$VERSION = '0.07';
+$VERSION = '0.071';
 
 
 # ------------------------------------------------------------------------------------------
@@ -39,12 +39,12 @@ sub new {
 
 sub init {
     my $args = ref( $_[0] ) ? $_[0] : { @_ };
-    my $datapkg = 'Yote::SQLiteIO';
+    my $datapkg = 'Yote::IO::SQLite';
     if( $args->{engine} eq 'mongo' ) {
-	$datapkg = 'Yote::MongoIO';
+	$datapkg = 'Yote::IO::Mongo';
     }
     elsif( $args->{engine} eq 'mysql' ) {
-	$datapkg = 'Yote::MysqlIO';
+	$datapkg = 'Yote::IO::Mysql';
     }
     eval( "require $datapkg" );
     $DATASTORE = $datapkg->new( $args );
@@ -273,22 +273,14 @@ sub package_methods {
     return $methods;
 } #package_methods
 
-#
-# Get around paginating a list without having to read in the whole thing at once.
-#
-sub paginate_list {
-    my( $obj_id, $paginate_length, $paginate_start, $rev ) = @_;
-    return [ map { xform_out( $_ ) } @{ $DATASTORE->paginate_list( $obj_id, $paginate_length, $paginate_start, $rev ) } ];
-} #paginate_list
-
-#
-# Get around paginating a list without having to read in the whole thing at once.
-#
-sub paginate_hash {
-    my( $obj_id, $paginate_length, $paginate_start ) = @_;
-    my $hash = $DATASTORE->paginate_hash( $obj_id, $paginate_length, $paginate_start );
-    return { map { $_ => xform_out( $hash->{$_} ) } keys %$hash };
-} #paginate_list
+sub paginate {
+    my( $obj_id, $args ) = @_;
+    if( $args->{ return_hash } ) {
+	my $res = $DATASTORE->paginate( $obj_id, $args );
+	return { map { $_ => xform_out( $res->{$_} ) } keys %$res };
+    }
+    return [ map { xform_out( $_ ) } @{ $DATASTORE->paginate( $obj_id, $args ) } ];
+} #paginate
 
 #
 # Deep clone this object. This will clone any yote object that is not an AppRoot.
@@ -604,6 +596,26 @@ This is just used when multiple processes will be activatig the same data share.
 
 This method returns a list of the public API methods attached to the given package name. This excludes the automatic getters and setters that are part of yote objects.
 
+
+=item paginate( obj_id, args )
+
+Returns a paginated list or hash that is attached to the object specified by obj_id. Arguments are 
+
+=over 4
+
+* name - name of data structure attached to this object.
+* search_fields - a list of fields to search for in collections of yote objects
+* search_terms - a list of terms to search for
+* sort_fields - a list of fields to sort by for collections of yote objects
+* reversed_orders - a list of true or false values corresponding to the sort_fields list. A true value means that field is sorted in reverse
+* limit - maximum number of entries to return
+* skip - skip this many entries before returning the list
+* return_hash - return the result as a hashtable rather than as a list
+* reverse - return the result in reverse order
+
+=back
+
+
 =item paginate_hash( hash_id, length, start )
 
 Returns a paginated hash reference
@@ -623,6 +635,10 @@ Recycles all objects in the range given if they cannot trace back a path to root
 =item reset_changed( )
 
 This is a helper method that clears out a changed hash. The hash stores objects that become dirty until reset changed is called again.
+
+=item search_list
+
+Returns a paginated search list
 
 =item start_transaction( )
 

@@ -16,13 +16,14 @@ use JSON;
 use POSIX qw(strftime);
 
 use Yote::AppRoot;
+use Yote::ConfigData;
 use Yote::ObjManager;
 use Yote::FileHelper;
 use Yote::ObjProvider;
 
 use vars qw($VERSION);
 
-$VERSION = '0.095';
+$VERSION = '0.097';
 
 # %oid2lockdata stores object id to a string containg locking process id, and last saved time.
 #   The resolution scheme is for the requesting process to unlock (and possibly save) objects that it has locked that are being requested
@@ -411,7 +412,7 @@ sub start_server {
 
     # update @INC library list
     my $paths = $root->get__application_lib_directories([]);
-    push @INC, @$paths;
+    push @INC, Yote::ConfigData->config( 'yote_root' ), @$paths;
 
     until( $self->{lsn} ) {
 	$self->{lsn} = new IO::Socket::INET(Listen => 10, LocalPort => $self->{args}{port});
@@ -428,7 +429,7 @@ sub start_server {
     print STDERR "Connected\n";
 
     
-    $self->{threads} = [];
+    $self->{ threads } = {};
 
     Yote::ObjProvider::make_server( $self );
     for( 1 .. $self->{args}{threads} ) {
@@ -437,6 +438,16 @@ sub start_server {
 
     while( 1 ) {
 	sleep( 5 );
+	my $threads = $self->{ threads };
+	for my $thread ( values %$threads ) {
+	    if( $thread->is_joinable() ) {
+		delete $threads->{ $thread->tid() };
+		$thread->join();
+	    }
+	}
+	while( scalar( keys %$threads ) < $self->{ args }{ threads } ) {
+	    $self->_start_server_thread;
+	}
     }
 
     _stop_threads();
@@ -452,34 +463,41 @@ sub start_server {
 sub _stop_threads {
     my $self = shift;
     $self->{watchdog_thread}->kill if $self->{watchdog_thread} && $self->{watchdog_thread}->is_running;
-    for my $thread (@{$self->{threads}}) {
+    for my $thread (values %{$self->{threads}}) {
+	$thread->join if $thread && $thread->is_joinable;
 	$thread->kill if $thread && $thread->is_running;
     }
 }
 
 sub _start_server_thread {
     my $self = shift;
-    push( @{ $self->{threads} },
-	  threads->new(
-	      sub {
-		  unless( $self->{lsn} ) {
-		      threads->exit();
-		  }
 
-		  open( $Yote::WebAppServer::IO,      '>>', "$Yote::WebAppServer::LOG_DIR/io.log" ) 
-		      && $Yote::WebAppServer::IO->autoflush;
-		  open( $Yote::WebAppServer::ACCESS,  '>>', "$Yote::WebAppServer::LOG_DIR/access.log" )
-		      && $Yote::WebAppServer::ACCESS->autoflush;
-		  open( $Yote::WebAppServer::ERR,     '>>', "$Yote::WebAppServer::LOG_DIR/error.log" )
-		      && $Yote::WebAppServer::ERR->autoflush;
-
-		  while( my $fh = $self->{lsn}->accept ) {
-		      $ENV{ REMOTE_ADDR } = $fh->peerhost;
-		      $self->process_http_request( $fh );
-		      $fh->close();
-		  } #main loop
-	      } ) #new thread
-	);
+    my $new_thread = threads->new(
+	sub {
+	    print STDERR "Starting server thread " . threads->tid() . "\n";
+	    $SIG{PIPE} = sub { 
+		print STDERR "Thread $$ got sig pipe. Exiting\n";
+		threads->exit()
+	    };
+	    unless( $self->{lsn} ) {
+		threads->exit();
+	    }
+	    
+	    open( $Yote::WebAppServer::IO,      '>>', "$Yote::WebAppServer::LOG_DIR/io.log" ) 
+		&& $Yote::WebAppServer::IO->autoflush;
+	    open( $Yote::WebAppServer::ACCESS,  '>>', "$Yote::WebAppServer::LOG_DIR/access.log" )
+		&& $Yote::WebAppServer::ACCESS->autoflush;
+	    open( $Yote::WebAppServer::ERR,     '>>', "$Yote::WebAppServer::LOG_DIR/error.log" )
+		&& $Yote::WebAppServer::ERR->autoflush;
+	    
+	    while( my $fh = $self->{lsn}->accept ) {
+		$ENV{ REMOTE_ADDR } = $fh->peerhost;
+		$self->process_http_request( $fh );
+		$fh->close();
+	    } #main loop
+	} ); #new thread
+    $self->{ threads }{ $new_thread->tid() } = $new_thread;
+    
 } #_start_server_thread
 
 sub _crond {
