@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use vars qw($VERSION);
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 use base 'Yote::Obj';
 
@@ -33,6 +33,11 @@ sub is_root {
     my $self = shift;
     return $self->get__is_root();
 } #is_root
+
+sub is_master_root {
+    my $self = shift;
+    return $self->get__is_master_root();    
+}
 
 sub upload_avatar {
     my( $self, $data ) = @_;
@@ -64,6 +69,10 @@ container objects that store state data for the users.
 =item is_root
 
 Returns trus if the account has root privileges.
+
+=item is_master_root
+
+Returns trus if the account is the original root account
 
 =item reset_password
 

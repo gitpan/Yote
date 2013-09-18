@@ -30,13 +30,11 @@ no warnings 'uninitialized';
 #   data may be written to if it starts with a capitol letter
 #
 
-
-use Yote::ObjManager;
 use Yote::ObjProvider;
 
 use vars qw($VERSION);
 
-$VERSION = '0.071';
+$VERSION = '0.072';
 
 # ------------------------------------------------------------------------------------------
 #      * INITIALIZATION *
@@ -47,7 +45,6 @@ sub new {
     my $class = ref($pkg) || $pkg;
 
     my $obj;
-
     if( ref( $id_or_hash ) eq 'HASH' ) {
 	$obj = bless {
 	    ID       => undef,
@@ -68,7 +65,7 @@ sub new {
     }
 
     if( ref( $id_or_hash ) eq 'HASH' ) {
-	for my $key ( %$id_or_hash ) {
+	for my $key ( keys %$id_or_hash ) {
 	    $obj->{DATA}{$key} = Yote::ObjProvider::xform_in( $id_or_hash->{ $key } );
 	}
 	Yote::ObjProvider::dirty( $obj, $obj->{ID} );
@@ -325,7 +322,6 @@ sub AUTOLOAD {
         *$AUTOLOAD = sub {
             my( $self, $val ) = @_;
             my $inval = Yote::ObjProvider::xform_in( $val );
-
             Yote::ObjProvider::dirty( $self, $self->{ID} ) if $self->{DATA}{$fld} ne $inval;
             $self->{DATA}{$fld} = $inval;
 
@@ -339,11 +335,11 @@ sub AUTOLOAD {
         *$AUTOLOAD = sub {
             my( $self, $init_val ) = @_;
             if( ! defined( $self->{DATA}{$fld} ) && defined($init_val) ) {
-                $self->{DATA}{$fld} = Yote::ObjProvider::xform_in( $init_val );
                 if( ref( $init_val ) ) {
                     Yote::ObjProvider::dirty( $init_val, $self->{DATA}{$fld} );
                 }
                 Yote::ObjProvider::dirty( $self, $self->{ID} );
+                $self->{DATA}{$fld} = Yote::ObjProvider::xform_in( $init_val );
             }
             return Yote::ObjProvider::xform_out( $self->{DATA}{$fld} );
         };

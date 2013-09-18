@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use vars qw($VERSION);
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 no warnings 'uninitialized';
 
@@ -78,7 +78,6 @@ sub fetch_dirty {
 
 sub mark_dirty {
     my( $obj_id ) = @_;
-
     if( $Yote::YoteRoot::ROOT_INIT ) {
 	return;
     }
