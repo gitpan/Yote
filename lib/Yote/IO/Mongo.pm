@@ -1,8 +1,8 @@
 package Yote::IO::Mongo;
 
-#
-# This stows and fetches G objects from a database store and provides object ids.
-#
+############################################
+# Storage engine using the Mongo database. #
+############################################
 
 use strict;
 use warnings;
@@ -14,7 +14,7 @@ use MongoDB;
 
 use vars qw($VERSION);
 
-$VERSION = '0.033';
+$VERSION = '0.037';
 
 # ------------------------------------------------------------------------------------------
 #      * INIT METHODS *
@@ -40,9 +40,34 @@ sub new {
 
 sub commit_transaction {}
 
-sub client {
-    return shift->{MONGO_CLIENT};
-}
+#
+# Returns the number of entries in the list of the given id.
+#
+sub count {
+    my( $self, $container_id, $args ) = @_;
+    my $mid = MongoDB::OID->new( value => $container_id );
+    my $obj = $self->{ OBJS }->find_one( { _id => $mid } );
+    if( $args->{search_fields} && $args->{search_terms} ) {
+	my @ors;
+	for my $field ( @{ $args->{ search_fields } } ) {
+	    for my $term ( @{ $args->{ search_terms } } ) {
+		push @ors, { "d.$field" => { '$regex'=> "$term", '$options' => 'i'  } };
+	    }
+	}
+	my $cands = $obj->{ c } eq 'ARRAY' ? [ @{$obj->{ d }} ] : [ values %{$obj->{ d }} ];
+	my $query = {
+	    _id => { '$in' => [ map { MongoDB::OID->new( value => $_ )  } grep { index( $_, 'v' ) != 0 } @$cands] },
+	    '$or' => \@ors,
+	};
+	my $curs = $self->{ OBJS }->find( $query );
+
+	return $self->{ OBJS }->find( $query )->count();
+    }
+    if( $obj->{ c } eq 'ARRAY' ) {
+	return scalar( @{$obj->{ d } } );
+    }
+    return scalar( keys %{$obj->{ d } } );
+} #count
 
 sub database {
     return shift->{ DB };
@@ -80,14 +105,6 @@ sub ensure_datastore {
 } #ensure_datastore
 
 #
-# Returns the first ID that is associated with the root YoteRoot object
-#
-sub first_id {
-    my $self = shift;
-    return $self->{ ROOT_ID };
-} #first_id
-
-#
 # Returns a single object specified by the id. The object is returned as a hash ref with id,class,data.
 #
 sub fetch {
@@ -108,6 +125,14 @@ sub fetch {
 } #fetch
 
 #
+# Returns the first ID that is associated with the root YoteRoot object
+#
+sub first_id {
+    my $self = shift;
+    return $self->{ ROOT_ID };
+} #first_id
+
+#
 # Returns a new ID to assign.
 #
 sub get_id {
@@ -116,89 +141,18 @@ sub get_id {
     return $new_id->{value};
 } #get_id
 
-#
-# Returns true if the given object traces back to the root.
-#
-sub _has_path_to_root {
-    my( $self, $obj_id, $seen ) = @_;
-    return 1 if $obj_id eq $self->first_id();
-    $seen ||= { $obj_id => 1 };
-
-    my $curs = $self->{ OBJS }->find( { r => $obj_id } );
-    while( my $obj = $curs->next ) {
-	my $o_id = $obj->{ _id }{ value };
-	next if $seen->{ $o_id }++;
-	if( $self->_has_path_to_root( $o_id, $seen ) ) {
-	    return 1;
-	}
-    }
-    return 0;
-} #_has_path_to_root
-
-#
-# Returns the number of entries in the list of the given id.
-#
-sub count {
-    my( $self, $container_id ) = @_;
-    my $mid = MongoDB::OID->new( value => $container_id );
-    my $obj = $self->{ OBJS }->find_one( { _id => $mid } );
-    if( $obj->{ c } eq 'ARRAY' ) {
-	return scalar( @{$obj->{ d } } );
-    }
-    return scalar( keys %{$obj->{ d } } );
-} #count
-
-sub list_insert {
-    my( $self, $list_id, $val, $idx ) = @_;
-    my $mid = MongoDB::OID->new( value => $list_id );
-    my $obj = $self->{ OBJS }->find_one( { _id => $mid } );
-    die "list_delete must be called for list" if $obj->{ c } ne 'ARRAY';
-    if( $obj ) {
-	if( defined( $idx ) ) {
-	    splice @{$obj->{ d }}, $idx, 0, $val;
-	} else {
-	    push @{$obj->{ d }}, $val;
-	}
-	$self->{ OBJS }->update( { _id => $mid, }, $obj );
-    }
-    return;
-} #list_insert
 
 sub hash_delete {
     my( $self, $hash_id, $key ) = @_;
     my $mid = MongoDB::OID->new( value => $hash_id );
     my $obj = $self->{ OBJS }->find_one( { _id => $mid } );
-    die "hash_delete must be called for hash" if $obj->{ c } ne 'HASH';
-    delete $obj->{ d }{ $key };
     if( $obj ) {
+	die "hash_delete must be called for hash" if $obj->{ c } ne 'HASH';
+	delete $obj->{ d }{ $key };
 	$self->{ OBJS }->update( { _id => $mid, }, $obj );
     }
     return;
-}
-
-sub list_delete {
-    my( $self, $list_id, $idx ) = @_;
-    my $mid = MongoDB::OID->new( value => $list_id );
-    my $obj = $self->{ OBJS }->find_one( { _id => $mid } );
-    die "list_delete must be called for list" if $obj->{ c } ne 'ARRAY';
-    if( $obj ) {
-	splice @{$obj->{ d }}, $idx, 1;
-	$self->{ OBJS }->update( { _id => $mid, }, $obj );
-    }
-    return;
-}
-
-sub hash_insert {
-    my( $self, $hash_id, $key, $val ) = @_;
-    my $mid = MongoDB::OID->new( value => $hash_id );
-    my $obj = $self->{ OBJS }->find_one( { _id => $mid } );
-    die "hash_insert must be called for hash" if $obj->{ c } ne 'HASH';
-    $obj->{ d }{ $key } = $val;
-    if( $obj ) {
-	$self->{ OBJS }->update( { _id => $mid, }, $obj );
-    }
-    return;
-} #hash_insert
+} #hash_delete
 
 sub hash_fetch {
     my( $self, $hash_id, $key ) = @_;
@@ -206,11 +160,57 @@ sub hash_fetch {
     my $hash = $self->{ OBJS }->find_one( { _id => MongoDB::OID->new( value => $hash_id ) } );
     return $hash->{ d }->[ $key ] if $hash->{ c } ne 'HASH';
     return $hash->{ d }->{ $key } if $hash;
-} 
+} #hash_fetch
+
+sub hash_has_key {
+    my( $self, $hash_id, $key ) = @_;
+    my $hash = $self->{ OBJS }->find_one( { _id => MongoDB::OID->new( value => $hash_id ) } );
+    return defined( $hash->{ d }->{$key} );
+} #hash_has_key
+
+sub hash_insert {
+    my( $self, $hash_id, $key, $val ) = @_;
+    my $mid = MongoDB::OID->new( value => $hash_id );
+    my $obj = $self->{ OBJS }->find_one( { _id => $mid } );
+    if( $obj ) {
+	die "hash_insert must be called for hash" if $obj->{ c } ne 'HASH';
+	$obj->{ d }{ $key } = $val;
+	if( $obj ) {
+	    $self->{ OBJS }->update( { _id => $mid, }, $obj );
+	}
+    }
+    else {
+	$self->{ OBJS }->insert( { _id => $mid, d => { $key => $val },
+				   c => 'HASH', refs => index( $val, 'v' ) == 0 ? [] :
+				       [ $val ] } );
+    }
+    return;
+} #hash_insert
+
+
+sub list_delete {
+    my( $self, $list_id, $val, $idx ) = @_;
+    my $mid = MongoDB::OID->new( value => $list_id );
+    my $obj = $self->{ OBJS }->find_one( { _id => $mid } );
+    if( $obj ) {
+	die "list_delete must be called for list" if $obj->{ c } ne 'ARRAY';
+	my $actual_index;
+	if( $val ) {
+	    ( $actual_index ) = grep { $obj->{d}[$_] eq $val } ( 0..$#{$obj->{d}} );
+	} else {
+	    $actual_index = $idx;
+	}
+	if( defined( $actual_index ) ) {
+	    splice @{$obj->{ d }}, $actual_index, 1;
+	    $self->{ OBJS }->update( { _id => $mid, }, $obj );
+	}
+    }
+    return;
+} #list_delete
+
 
 sub list_fetch {
     my( $self, $list_id, $idx ) = @_;
-
     my $list = $self->{ OBJS }->find_one( { _id => MongoDB::OID->new( value => $list_id ) } );
 
     return undef unless $list;
@@ -221,37 +221,29 @@ sub list_fetch {
     
 
     return $list->{ d }->[ $idx ] if $list;
-} 
+}  #list_fetch
 
-sub hash_has_key {
-    my( $self, $hash_id, $key ) = @_;
-    my $hash = $self->{ OBJS }->find_one( { _id => MongoDB::OID->new( value => $hash_id ) } );
-    return defined( $hash->{ d }->{$key} );
-}
-
-
-sub recycle_object {
-    my( $self, $obj_id ) = @_;
-    $self->{ OBJS }->remove( { _id => MongoDB::OID->new( value => $obj_id ) } );
-    # not going to remove the referenced links from a recycled object, as those links
-    # by definition show up in other recycleable objects.
-} #recycle_object
-
-sub recycle_objects {
-    my $self = shift;
-
-    my $cursor = $self->{ OBJS }->find();
-
-    my $rec_count = 0;
-    while( my $obj = $cursor->next ) {
-	my $id = $obj->{ _id }{ value };
-	unless( $self->_has_path_to_root( $id ) ) {
-	    $self->recycle_object( $id );
-	    $rec_count++;
+sub list_insert {
+    my( $self, $list_id, $val, $idx ) = @_;
+    my $mid = MongoDB::OID->new( value => $list_id );
+    my $obj = $self->{ OBJS }->find_one( { _id => $mid } );
+    if( $obj ) { 
+	die "list_insert must be called for list" if $obj->{ c } ne 'ARRAY';
+	if( $obj ) {
+	    if( defined( $idx ) && $idx <= @{$obj->{d}} ) {
+		splice @{$obj->{ d }}, $idx > @{$obj->{d}} ? scalar(@{$obj->{d}}) : $idx, 0, $val;
+	    }
+	    else {
+		push @{$obj->{ d }}, $val;
+	    }
+	    $self->{ OBJS }->update( { _id => $mid, }, $obj );
 	}
     }
-    return $rec_count;
-} #recycle_object
+    else {
+	$self->stow( $list_id, 'ARRAY', [ $val ] );
+    }
+    return;
+} #list_insert
 
 sub paginate {
     my( $self, $obj_id, $args ) = @_;
@@ -285,7 +277,7 @@ sub paginate {
 	}
 
 
-	if( $search_fields ) { #search fields must be objects
+	if( $search_fields && $search_terms) { #search fields must be objects
 	    my @ors;
 	    for my $field ( @$search_fields ) {
 		for my $term ( @$search_terms ) {
@@ -390,14 +382,32 @@ sub paginate {
 
 } #paginate
 
+sub recycle_object {
+    my( $self, $obj_id ) = @_;
+    $self->{ OBJS }->remove( { _id => MongoDB::OID->new( value => $obj_id ) } );
+    # not going to remove the referenced links from a recycled object, as those links
+    # by definition show up in other recycleable objects.
+} #recycle_object
+
+sub recycle_objects {
+    my $self = shift;
+
+    my $cursor = $self->{ OBJS }->find( { l => { '$gt' => 0 } } );
+
+    my $rec_count = 0;
+    while( my $obj = $cursor->next ) {
+	my $id = $obj->{ _id }{ value };
+	unless( $self->_has_path_to_root( $id ) ) {
+	    $self->recycle_object( $id );
+	    $rec_count++;
+	}
+    }
+    return $rec_count;
+} #recycle_object
+
+
 sub start_transaction {}
 
-sub stow_all {
-    my( $self, $objs ) = @_;
-    for my $objd ( @$objs ) {
-	$self->stow( @$objd );
-    }
-} #stow_all
 
 sub stow {
     my( $self, $id, $class, $data ) = @_;
@@ -426,6 +436,7 @@ sub stow {
 				     d   => $data,
 				     c   => $class,
 				     r   => \@refs,
+				     l   => time, #last updated
 				 } );
     }
     else {
@@ -433,10 +444,18 @@ sub stow {
 					     d   => $data,
 					     c   => $class,
 					     r   => \@refs,
+					     l   => time, #last updated
 					   } );
     }
     return;
 } #stow
+
+sub stow_all {
+    my( $self, $objs ) = @_;
+    for my $objd ( @$objs ) {
+	$self->stow( @$objd );
+    }
+} #stow_all
 
 # ------------------------------------------------------------------------------------------
 #      * PRIVATE METHODS *
@@ -456,33 +475,48 @@ sub _connect {
     $self->{DB} = $self->{MONGO_CLIENT}->get_database( $args->{ store } || 'yote' );
 } #_connect
 
+#
+# Returns true if the given object traces back to the root. Objects that have not been completely
+# written to disk are considered to have a path to root ( at least a potential one ).
+#
+sub _has_path_to_root {
+    my( $self, $obj_id, $seen ) = @_;
+    return 1 if $obj_id eq $self->first_id();
+    $seen ||= { $obj_id => 1 };
+
+    my $curs = $self->{ OBJS }->find( { r => $obj_id } );
+    while( my $obj = $curs->next ) {
+	return 1 unless $obj->{ l } > 0;
+	my $o_id = $obj->{ _id }{ value };
+	next if $seen->{ $o_id }++;
+	if( $self->_has_path_to_root( $o_id, $seen ) ) {
+	    return 1;
+	}
+    }
+    return 0;
+} #_has_path_to_root
+
 
 1;
 __END__
 
 =head1 NAME
 
-Yote::SQLiteIO - A SQLite persistance engine for Yote.
+Yote::IO::Mongo - A Mongo persistance engine for Yote.
 
 =head1 DESCRIPTION
 
-This can be installed as a singleton of Yote::ObjProvider and does the actual storage and retreival of Yote objects.
-
-The interaction the developer will have with this may be specifying its intialization arguments.
+Yote::ObjProvider can be configured to use this engine. This is not meant to be used or accessed directly; this can be considered a private class.
 
 =head1 CONFIGURATION
 
-The package name is used as an argument to the Yote::ObjProvider package which also takes the configuration parameters for Yote::SQLiteIO.
+The package name is used as an argument to the Yote::ObjProvider package which also takes the configuration parameters for Yote::IO::Mongo.
 
-Yote::ObjProvider::init( datastore => 'Yote::SQLiteIO', db => 'yote_db', uname => 'yote_db_user', pword => 'yote_db_password' );
+Yote::ObjProvider::init( engine => 'Yote::IO::Mongo', engine_port => 27017, store => 'yote_db', user => 'yote_db_user', password => 'yote_db_password' );
 
 =head1 PUBLIC METHODS
 
 =over 4
-
-=item client
-
-Return the mongo client object
 
 =item commit_transaction( )
 
@@ -581,6 +615,8 @@ Stows all objects that are marked as dirty. This is called automatically by the 
 =head1 AUTHOR
 
 Eric Wolf
+coyocanid@gmail.com
+http://madyote.com
 
 =head1 LICENSE AND COPYRIGHT
 

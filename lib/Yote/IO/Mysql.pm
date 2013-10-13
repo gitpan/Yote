@@ -13,7 +13,7 @@ use DBI;
 
 use vars qw($VERSION);
 
-$VERSION = '0.032';
+$VERSION = '0.034';
 
 use constant {
     DATA => 2,
@@ -76,6 +76,7 @@ sub ensure_datastore {
         objects => q~CREATE TABLE `objects` (
                      `id` int(11) NOT NULL AUTO_INCREMENT,
                      `class` varchar(255) DEFAULT NULL,
+                     `last_updated` timestamp,
                      `recycled` tinyint DEFAULT 0,
                       PRIMARY KEY (`id`)
                       ) ENGINE=InnoDB DEFAULT CHARSET=latin1~
@@ -114,8 +115,23 @@ sub ensure_datastore {
 # Returns the number of entries in the list of the given id.
 #
 sub count {
-    my( $self, $container_id ) = @_;
-    my( $count ) = $self->_selectrow_array( "SELECT count(*) FROM field WHERE obj_id=?",  $container_id );
+    my( $self, $container_id, $args ) = @_;
+    my $count;
+    if( $args->{search_fields} && $args->{search_terms} ) {
+	my( @ors );
+	my( @params ) = $container_id;
+	for my $field ( @{$args->{search_fields}} ) {
+	    for my $term (@{$args->{search_terms}}) {
+		push @ors, " (f.field=? AND f.value LIKE ?) ";
+		push @params, $field, "\%$term\%";
+	    }
+	}
+	my $orstr = @ors > 0 ? " WHERE " . join( ' OR ', @ors )  : '';
+	( $count ) = $self->_selectrow_array( "SELECT count(*) FROM (SELECT bar.field,fi.obj_id FROM field fi, ( SELECT foo.field,foo.ref_id AS ref_id,foo.value AS value FROM ( SELECT field,ref_id,value FROM field WHERE obj_id=? ) as foo LEFT JOIN field f ON ( f.obj_id=foo.ref_id ) $orstr GROUP BY 1,2) as bar WHERE fi.obj_id=bar.ref_id GROUP BY 1,2) foo", @params );
+    } #if count with search
+    else {
+	( $count ) = $self->_selectrow_array( "SELECT count(*) FROM field WHERE obj_id=?",  $container_id );
+    }
     die $self->{DBH}->errstr() if $self->{DBH}->errstr();
 
     return $count;
@@ -123,14 +139,30 @@ sub count {
 
 sub list_insert {
     my( $self, $list_id, $val, $idx ) = @_;
-    unless( defined( $idx ) ) {
-	( $idx ) = $self->{DBH}->selectrow_array( "SELECT 1 + max( field ) FROM field WHERE obj_id=?", {}, $list_id );
-    } else {
-	my( $occupied ) = $self->{DBH}->selectrow_array( "SELECT count(*) FROM field WHERE obj_id=? AND field=?", {}, $list_id, $idx );
-	if( $occupied ) {
-	    $self->{DBH}->selectrow_array( "UPDATE field SET field=field+1 WHERE obj_id=? AND field >= ?", {}, $list_id, $idx );
+    my( $last_idx ) = $self->{DBH}->selectrow_array( "SELECT max( cast( field as unsigned ) ) FROM field WHERE obj_id=?", {}, $list_id );
+    if( defined( $idx ) ) { 
+	if( !defined( $last_idx ) ) {
+	    $idx = 0;
+	}
+	elsif( $idx > $last_idx ) {
+	    $idx = $last_idx + 1;
+	}
+	else {
+	    my( $occupied ) = $self->{DBH}->selectrow_array( "SELECT count(*) FROM field WHERE obj_id=? AND field=?", {}, $list_id, $idx );
+	    if( $occupied ) {
+		$self->{DBH}->do( "UPDATE field SET field=field+1 WHERE obj_id=? AND field >= ?", {}, $list_id, $idx );
+	    }
 	}
     }
+    else {
+	if( defined( $last_idx ) ) {
+	    $idx = $last_idx + 1;
+	} 
+	else {
+	    $idx = 0;
+	}
+    }
+
     if( index( $val, 'v' ) == 0 ) {
 	$self->_do( "INSERT INTO field (obj_id,field,value) VALUES (?,?,?)", $list_id, $idx, substr( $val, 1 )  );
     } else {
@@ -146,13 +178,19 @@ sub hash_delete {
 }
 
 sub list_delete {
-    my( $self, $list_id, $idx ) = @_;
-    $self->_do( "DELETE FROM field WHERE obj_id=? AND field=?", $list_id, $idx );
+    my( $self, $list_id, $val, $idx ) = @_;
+    my( $actual_index ) = $val ? 
+	$self->_selectrow_array( "SELECT field FROM field WHERE obj_id=? AND ( value=? OR ref_id=? )", $list_id, $val, $val ) :
+	$idx;
+
+    $self->_do( "DELETE FROM field WHERE obj_id=? AND field=?", $list_id, $actual_index );
+    $self->_do( "UPDATE field SET field=field-1 WHERE obj_id=? AND field > ?", $list_id, $actual_index );
     return;
 }
 
 sub hash_insert {
     my( $self, $hash_id, $key, $val ) = @_;
+    $self->_do( "DELETE FROM field WHERE obj_id=? AND field=?", $hash_id, $key );
     if( index( $val, 'v' ) == 0 ) {
 	$self->_do( "INSERT INTO field (obj_id,field,value) VALUES (?,?,?)", $hash_id, $key, substr( $val, 1 )  );
     } else {
@@ -214,7 +252,7 @@ sub first_id {
 sub fetch {
     my( $self, $id ) = @_;
 
-    my( $class ) = $self->{DBH}->selectrow_array( "SELECT class FROM objects WHERE id=?", {}, $id );
+    my( $class ) = $self->{DBH}->selectrow_array( "SELECT class FROM objects WHERE recycled=0 AND last_updated IS NOT NULL AND id=?", {}, $id );
     print STDERR Data::Dumper->Dump(["db __LINE__",$self->{DBH}->errstr()]) if $self->{DBH}->errstr();
 
     return unless $class;
@@ -275,8 +313,10 @@ sub _has_path_to_root {
     my( $self, $obj_id, $seen ) = @_;
     return 1 if $obj_id == 1;
     $seen ||= { $obj_id => 1 };
-    my $res = $self->_selectall_arrayref( "SELECT obj_id FROM field WHERE ref_id=?", $obj_id );
-    for my $o_id (map { $_->[0] } @$res) {
+    my $res = $self->_selectall_arrayref( "SELECT obj_id,last_updated FROM field f,objects o WHERE o.id=obj_id AND ref_id=?", $obj_id );
+    for my $res ( @$res ) {
+	return 1 unless $res->[1];
+	my $o_id = $res->[0];
 	next if $seen->{ $o_id }++;
 	if( $self->_has_path_to_root( $o_id, $seen ) ) {
 	    return 1;
@@ -432,6 +472,7 @@ sub stow_all {
 sub stow {
     my( $self, $id, $class, $data ) = @_;
 
+    $self->{DBH}->do("UPDATE objects SET last_updated=now() WHERE id=?", {}, $id );
     if( $class eq 'ARRAY') {
 	$self->{DBH}->do( "DELETE FROM field WHERE obj_id=?", {}, $id );
 	print STDERR Data::Dumper->Dump(["db __LINE__",$self->{DBH}->errstr()]) if $self->{DBH}->errstr();
@@ -514,19 +555,17 @@ __END__
 
 =head1 NAME
 
-Yote::MysqlIO - A mysql persistance engine for Yote. 
+Yote::IO::Mysql - A mysql persistance engine for Yote. 
 
 =head1 DESCRIPTION
 
-This is deprecated and has not been further developed. It may be brought up to par with ObjProvider.
-
-This can be installed as a singleton of Yote::ObjProvider and does the actual storage and retreival of Yote objects.
+Persistance engine that uses mysql as a store.
 
 =head1 CONFIGURATION
 
-The package name is used as an argument to the Yote::ObjProvider package which also takes the configuration parameters for Yote::MysqlIO.
+The package name is used as an argument to the Yote::ObjProvider package which also takes the configuration parameters for Yote::IO::Mysql.
 
-Yote::ObjProvider::init( datastore => 'Yote::MysqlIO', db => 'yote_db', uname => 'yote_db_user', pword => 'yote_db_password' );
+Yote::ObjProvider::init( datastore => 'Yote::IO::Mysql', db => 'yote_db', uname => 'yote_db_user', pword => 'yote_db_password' );
 
 =head1 PUBLIC METHODS
 
@@ -624,6 +663,8 @@ Stows all objects that are marked as dirty. This is called automatically by the 
 =head1 AUTHOR
 
 Eric Wolf
+coyocanid@gmail.com
+http://madyote.com
 
 =head1 LICENSE AND COPYRIGHT
 

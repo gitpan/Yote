@@ -107,6 +107,52 @@ sub _absorb {
     return $updated_count;
 } #_absorb
 
+# adds the items to the list attached to this object with the given name.
+sub _add_to {
+    my( $self, $listname, @data ) = @_;
+    my $list_id = $self->{DATA}{$listname};
+    if( $list_id ) {
+	Yote::ObjManager::mark_dirty( $list_id );
+    }
+    else {
+	my $func = "set_$listname";
+	$self->$func( [] );
+    }
+    $list_id ||= $self->{DATA}{$listname};
+    for my $d (@data) {
+	Yote::ObjProvider::list_insert( $list_id, $d );
+    }
+    my $list = $Yote::ObjProvider::DIRTY->{ $list_id } || $Yote::ObjProvider::WEAK_REFS->{ $list_id };
+    if( $list ) {
+	push @$list, @data;
+    }
+    return;
+} #_add_to
+
+sub _insert_at {
+    my( $self, $listname, $item, $idx ) = @_;
+    my $list_id = $self->{DATA}{$listname};
+    if( $list_id ) {
+	Yote::ObjManager::mark_dirty( $list_id );
+    }
+    else {
+	my $func = "set_$listname";
+	$self->$func( [] );
+    }
+    $list_id ||= $self->{DATA}{$listname};
+    Yote::ObjProvider::list_insert( $list_id, $item, $idx );
+    my $list = $Yote::ObjProvider::DIRTY->{ $list_id } || $Yote::ObjProvider::WEAK_REFS->{ $list_id };
+    if( $list ) {
+	if( @$list <= $idx ) {
+	    push @$list, $item;
+	}
+	else {
+	    splice @$list, $idx, 0, $item;
+	}
+    }
+    return;
+} #_insert_at
+
 # returns true if the object passsed in is the same as this one.
 sub _is {
     my( $self, $obj ) = @_;
@@ -126,29 +172,58 @@ sub _get_id {
     return Yote::ObjProvider::get_id( $obj );
 } #_get_id
 
+# anyone may read and write public ( not starting with _ ) fields.
+sub _check_access {
+    my( $self, $account, $write_access, $name ) = @_;
+    return ( $account && $account->get_login()->is_root() ) || index( $name, '_' ) != 0;
+} #_check_access
+
+# anyone may read and write public ( not starting with _ ) fields.
+sub _check_access_update {
+    my( $self, $account, $write_access, $data ) = @_;
+    for my $key ( keys %$data ) {
+	return 0 unless $self->_check_access( $account, $write_access, $key );
+    }
+    return 1;
+} #_check_access
+
 sub _count {
-    my( $self, $container_name ) = @_;
-    return Yote::ObjProvider::count( $self->{DATA}{$container_name} );
-}
-
-sub _list_insert {
-    my( $self, $listname, $val, $idx ) = @_;
-    return Yote::ObjProvider::list_insert( $self->{DATA}{$listname}, $val, $idx );
-}
-
-sub _list_delete {
-    my( $self, $listname, $idx ) = @_;
-    return Yote::ObjProvider::list_delete( $self->{DATA}{$listname}, $idx );
-}
+    my( $self, $args ) = @_;
+    if( ref( $args ) ) {
+	return Yote::ObjProvider::count( $self->{DATA}{$args->{name}}, $args );
+    }
+    return Yote::ObjProvider::count( $self->{DATA}{$args} );
+} #_count
 
 sub _hash_delete {
     my( $self, $hashname, $key ) = @_;
-    return Yote::ObjProvider::hash_delete( $self->{DATA}{$hashname}, $key );
-}
+    Yote::ObjManager::mark_dirty( $self->{DATA}{$hashname} );
+    my $ret = Yote::ObjProvider::hash_delete( $self->{DATA}{$hashname}, $key );
+
+    my $hash = $Yote::ObjProvider::DIRTY->{ $self->{DATA}{$hashname} } || $Yote::ObjProvider::WEAK_REFS->{ $self->{DATA}{$hashname} };
+    if( $hash ) {
+	delete $hash->{ $key };
+    }
+
+    return $ret;
+} #_hash_delete
 
 sub _hash_insert {
     my( $self, $hashname, $key, $val ) = @_;
-    return Yote::ObjProvider::hash_insert( $self->{DATA}{$hashname}, $key, $val );
+    if( $self->{DATA}{$hashname} ) {
+	# mark dirty here in case there are outstanding instances of that hash?
+	Yote::ObjManager::mark_dirty( $self->{DATA}{$hashname} );
+
+	my $ret = Yote::ObjProvider::hash_insert( $self->{DATA}{$hashname}, $key, $val );
+	my $hash = $Yote::ObjProvider::DIRTY->{ $self->{DATA}{$hashname} } || $Yote::ObjProvider::WEAK_REFS->{ $self->{DATA}{$hashname} };
+	if( $hash ) {
+	    $hash->{ $key }= $val;
+	}
+	return $ret;
+    }
+    my $fun = "set_$hashname";
+    $self->$fun( { $key => $val } );
+    return;
 } #_hash_insert
 
 sub _hash_fetch {
@@ -156,20 +231,61 @@ sub _hash_fetch {
     return Yote::ObjProvider::hash_fetch( $self->{DATA}{$hashname}, $key );
 }
 
+sub _list_delete {
+    my( $self, $listname, $idx ) = @_;
+    my $list_id = $self->{DATA}{$listname};
+    return unless $list_id;
+    Yote::ObjProvider::list_delete( $list_id, $idx );
+    my $list = $Yote::ObjProvider::DIRTY->{ $list_id } || $Yote::ObjProvider::WEAK_REFS->{ $list_id };
+    if( $list ) {
+	splice @$list, $idx, 1;
+    }
+    return;
+} #_list_delete
+
 sub _list_fetch {
     my( $self, $listname, $key ) = @_;
     return Yote::ObjProvider::list_fetch( $self->{DATA}{$listname}, $key );
 }
+
+sub _lock {
+    my $self = shift;
+    return Yote::ObjProvider::lock( $self->{ID}, $self );
+} #lock
+
+sub _unlock {
+    my $self = shift;
+    return Yote::ObjProvider::unlock( $self->{ID} );
+} #_unlock
 
 sub _hash_has_key {
     my( $self, $hashname, $key ) = @_;
     return Yote::ObjProvider::hash_has_key( $self->{DATA}{$hashname}, $key );
 }
 
+sub _paginate {
+    my( $self, $args ) = @_;
+    return Yote::ObjProvider::paginate( $self->{DATA}{$args->{name}}, $args );
+} #_paginate
+
 sub _power_clone {
     my( $self, $replacements ) = @_;
     return Yote::ObjProvider::power_clone( $self, $replacements );
 }
+
+sub _remove_from {
+    my( $self, $listname, @data ) = @_;
+    Yote::ObjManager::mark_dirty( $self->{DATA}{$listname} );
+    for my $d (@data) {
+	Yote::ObjProvider::remove_from( $self->{DATA}{$listname}, $d );
+    }
+    my $list = $Yote::ObjProvider::DIRTY->{ $self->{DATA}{$listname} } || $Yote::ObjProvider::WEAK_REFS->{ $self->{DATA}{$listname} };
+    if( $list ) {
+	for( my $i=0; $i < @$list; $i++ ) {
+	    splice @$list, $i, 1 if grep { $list->[$i] eq $_ } @data;
+	}
+    }    
+} #_remove_from
 
 #
 # Private method to update the hash give. Returns if things were made dirty.
@@ -179,63 +295,105 @@ sub _update {
     my( $self, $datahash, @fieldlist ) = @_;
 
     my $dirty;
-    for my $fld ( @fieldlist ) {
-	my $set = "set_$fld";
-	my $get = "get_$fld";
-	if( defined( $datahash->{ $fld } ) ) {
+    if( @fieldlist ) {
+	for my $fld ( @fieldlist ) {
+	    my $set = "set_$fld";
+	    my $get = "get_$fld";
+	    if( defined( $datahash->{ $fld } ) ) {
+		$dirty = $dirty || $self->$get() eq $datahash->{ $fld };
+		$self->$set( $datahash->{ $fld });
+	    }
+	}
+    }
+    else {
+	# catch anything tossed in that does not start with underscore
+	for my $fld ( keys %$datahash ) {
+	    my $set = "set_$fld";
+	    my $get = "get_$fld";
 	    $dirty = $dirty || $self->$get() eq $datahash->{ $fld };
-	    $self->$set( $datahash->{ $fld });
+	    $self->$set( $datahash->{ $fld } );
 	}
     }
     return $dirty;
 } #_update
 
 # ------------------------------------------------------------------------------------------
-#      * UTILITY METHODS *
-# ------------------------------------------------------------------------------------------
-
-#
-# These methods are not part of the public API
-#
-
-
-# ------------------------------------------------------------------------------------------
 #      * PUBLIC METHODS *
 # ------------------------------------------------------------------------------------------
 
+
+sub add_to {
+    my( $self, $args, $account ) = @_;
+    die "Access Error" unless $self->_check_access( $account, 1, $args->{ name } );
+    my( $listname, $items ) = @$args{'name','items'};
+    return $self->_add_to( $listname, @$items );
+} #add_to
+
 sub count {
     my( $self, $data, $account ) = @_;
-
-    if( index( $data, '_' ) == 0 && ! $account->get_login()->is_root() && ! ref( $account->get_login() ) ne 'Yote::Login' ) {
-	die "permissions error";
-    }
+    die "Access Error" unless $self->_check_access( $account, 0, ref( $data ) ? $data->{ name } : $data );
     return $self->_count( $data );
 } #count
 
-sub _paginate {
-    my( $self, $args ) = @_;
-    return Yote::ObjProvider::paginate( $self->{DATA}{$args->{name}}, $args );
-} #_paginate
+sub delete_key {
+    my( $self, $args, $account ) = @_;
+    die "Access Error" unless $self->_check_access( $account, 1, $args->{ name } );
+    my( $listname, $key ) = @$args{'name','key'};
+    return $self->_hash_delete( $args->{name}, $key );
+} #delete_key
+
+sub hash {
+    my( $self, $args, $account ) = @_;
+    die "Access Error" unless $self->_check_access( $account, 1, $args->{ name } );
+    my( $name, $key, $val ) = @$args{'name','key','value'};
+
+    return $self->_hash_insert( $name, $key, $val );
+} #hash
+
+sub insert_at {
+    my( $self, $args, $account ) = @_;
+    die "Access Error" unless $self->_check_access( $account, 1, $args->{ name } );
+    my( $listname, $idx, $item ) = @$args{'name','index','item'};
+    return $self->_insert_at( $listname, $item, $idx );
+} #insert_at
+
+sub list_delete {
+    my( $self, $args, $account ) = @_;
+    die "Access Error" unless $self->_check_access( $account, 1, $args->{ name } );
+    return $self->_list_delete( $args->{name}, $args->{index} );
+} #list_delete
+
+sub list_fetch {
+    my( $self, $args, $account ) = @_;
+    die "Access Error" unless $self->_check_access( $account, 0, $args->{ name } );
+    return $self->_list_fetch( $args->{name}, $args->{index} );
+} #list_fetch
 
 sub paginate {
     my( $self, $args, $account ) = @_;
-    if( index( $args->{name}, '_' ) == 0 && ! $account->get_login()->is_root() && ! ref( $account->get_login() ) ne 'Yote::Login' ) {
-	die "permissions error";
-    }
+    die "Access Error" unless $self->_check_access( $account, 0, $args->{ name } );
     return Yote::ObjProvider::paginate( $self->{DATA}{ $args->{name} }, $args );
 } #paginate
+
+sub remove_from {
+    my( $self, $args, $account ) = @_;
+    die "Access Error" unless $self->_check_access( $account, 1, $args->{ name } );
+    my( $listname, $items ) = @$args{'name','items'};
+    return $self->_remove_from( $listname, @{$items||[]} );
+} #remove_from
 
 #
 # This is actually a no-op, but has the effect of giving the client any objects that have changed since the clients last call.
 #
 sub sync_all {}
 
-
 #
 # Stub method to apply update to an object. Throws an error by default. Override and call _update with input data and a list of allowed fields to update.
 #
 sub update {
-    die "Disallows update";
+    my( $self, $data, $acct ) = @_;
+    die "Access Error" unless $self->_check_access_update( $acct, 1, $data );
+    return $self->_update( $data );
 } #update
 
 
@@ -336,7 +494,7 @@ sub AUTOLOAD {
             my( $self, $init_val ) = @_;
             if( ! defined( $self->{DATA}{$fld} ) && defined($init_val) ) {
                 if( ref( $init_val ) ) {
-                    Yote::ObjProvider::dirty( $init_val, $self->{DATA}{$fld} );
+                    Yote::ObjProvider::dirty( $init_val, Yote::ObjProvider::get_id( $init_val ) );
                 }
                 Yote::ObjProvider::dirty( $self, $self->{ID} );
                 $self->{DATA}{$fld} = Yote::ObjProvider::xform_in( $init_val );
@@ -494,14 +652,41 @@ This method is called each time an object is loaded from the data store.
 
 =over 4
 
+=item add_to( { name => '', items => [] } )
+
+Adds the items to the list attached to this object specified by name.
+
 =item count( field_name )
 
 Returns the number of items for the field of this object provided it is an array or hash.
 
+=item delete_key( { name => '', key => '' } )
+
+Removes the key from the hash attached to this object specified by name.
+
+=item hash( { name => '', key => '', value => item } )
+
+Hashes the item to the key to the hash attached to this object specified by name.
+
+=item insert_at( { name => '', index => '', item => item } )
+
+Insert the item at the index to the list attached to this object specified by name.
+
+=item list_delete( { name => '', index => '' } )
+
+Removes the item at the index postion from the list attached to this object specified by name.
+
+=item list_fetch( { name => '', index => '' } )
+
+Returns item at the index postion from the list attached to this object specified by name.
 
 =item paginate( args )
 
-Returns a paginated list or hash. Arguments are 
+Returns a paginated list or hash. Arguments are
+
+=item remove_from( { name => '', items => [] } )
+
+Removes the items ( by value ) from the list attached to this object specified by name.
 
 =over 4
 
@@ -533,10 +718,14 @@ It takes a hash ref filled with field name value pairs and updates the values th
 =head1 AUTHOR
 
 Eric Wolf
+coyocanid@gmail.com
+http://madyote.com
 
 =head1 LICENSE AND COPYRIGHT
 
 Copyright (C) 2011 Eric Wolf
+
+
 
 This module is free software; it can be used under the same terms as perl
 itself.

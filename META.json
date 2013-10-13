@@ -27,6 +27,7 @@
       },
       "runtime" : {
          "requires" : {
+            "Aspect" : "1.04",
             "Crypt::Passwd::XS" : "0.601",
             "DBD::SQLite" : "1.35",
             "DBI" : "1.625",
@@ -48,11 +49,11 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.1008"
+         "version" : "0.1010"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
-         "version" : "0.04"
+         "version" : "0.05"
       },
       "Yote::AppRoot" : {
          "file" : "lib/Yote/AppRoot.pm",
@@ -60,22 +61,11 @@
       },
       "Yote::Array" : {
          "file" : "lib/Yote/Array.pm",
-         "version" : "0.01"
-      },
-      "Yote::Cache" : {
-         "file" : "lib/Yote/Cache.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       },
       "Yote::Cron" : {
          "file" : "lib/Yote/Cron.pm",
-         "version" : "0.012"
-      },
-      "Yote::CronEntry" : {
-         "file" : "lib/Yote/CronEntry.pm"
-      },
-      "Yote::DummyCache" : {
-         "file" : "lib/Yote/DummyCache.pm",
-         "version" : "0.01"
+         "version" : "0.014"
       },
       "Yote::FileHelper" : {
          "file" : "lib/Yote/FileHelper.pm",
@@ -83,27 +73,27 @@
       },
       "Yote::Hash" : {
          "file" : "lib/Yote/Hash.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       },
       "Yote::IO::Mongo" : {
          "file" : "lib/Yote/IO/Mongo.pm",
-         "version" : "0.033"
+         "version" : "0.037"
       },
       "Yote::IO::Mysql" : {
          "file" : "lib/Yote/IO/Mysql.pm",
-         "version" : "0.032"
+         "version" : "0.034"
       },
       "Yote::IO::SQLite" : {
          "file" : "lib/Yote/IO/SQLite.pm",
-         "version" : "0.033"
+         "version" : "0.035"
+      },
+      "Yote::IO::TestUtil" : {
+         "file" : "lib/Yote/IO/TestUtil.pm",
+         "version" : "0.001"
       },
       "Yote::Login" : {
          "file" : "lib/Yote/Login.pm",
-         "version" : "0.03"
-      },
-      "Yote::Messenger" : {
-         "file" : "lib/Yote/Messenger.pm",
-         "version" : "0.01"
+         "version" : "0.04"
       },
       "Yote::Obj" : {
          "file" : "lib/Yote/Obj.pm",
@@ -121,16 +111,15 @@
          "file" : "lib/Yote/PerfAspect.pm",
          "version" : "0.01"
       },
+      "Yote::RootObj" : {
+         "file" : "lib/Yote/RootObj.pm"
+      },
       "Yote::Sample::SecretCollect" : {
          "file" : "lib/Yote/Sample/SecretCollect.pm",
          "version" : "0.01"
       },
       "Yote::Sample::SimpleTodo" : {
          "file" : "lib/Yote/Sample/SimpleToDo.pm",
-         "version" : "0.02"
-      },
-      "Yote::SimpleLRUCache" : {
-         "file" : "lib/Yote/SimpleLRUCache.pm",
          "version" : "0.02"
       },
       "Yote::Test::Hello" : {
@@ -153,45 +142,8 @@
          "file" : "lib/Yote/Test/TestNoDeepCloner.pm",
          "version" : "0.01"
       },
-      "Yote::Util::Admin" : {
-         "file" : "lib/Yote/Util/Admin.pm",
-         "version" : "0.01"
-      },
-      "Yote::Util::Blog" : {
-         "file" : "lib/Yote/Util/Blog.pm",
-         "version" : "0.02"
-      },
-      "Yote::Util::BlogPost" : {
-         "file" : "lib/Yote/Util/BlogPost.pm",
-         "version" : "0.02"
-      },
-      "Yote::Util::CMS" : {
-         "file" : "lib/Yote/Util/CMS.pm",
-         "version" : "0.02"
-      },
-      "Yote::Util::ChatBoard" : {
-         "file" : "lib/Yote/Util/ChatBoard.pm",
-         "version" : "0.01"
-      },
-      "Yote::Util::Counter" : {
-         "file" : "lib/Yote/Util/Counter.pm",
-         "version" : "0.01"
-      },
-      "Yote::Util::MadYote" : {
-         "file" : "lib/Yote/Util/MadYote.pm",
-         "version" : "0.021"
-      },
-      "Yote::Util::MessageBoard" : {
-         "file" : "lib/Yote/Util/MessageBoard.pm",
-         "version" : "0.01"
-      },
-      "Yote::Util::Tag" : {
-         "file" : "lib/Yote/Util/Tag.pm",
-         "version" : "0.01"
-      },
-      "Yote::Util::Wiki" : {
-         "file" : "lib/Yote/Util/Wiki.pm",
-         "version" : "0.01"
+      "Yote::UserObj" : {
+         "file" : "lib/Yote/UserObj.pm"
       },
       "Yote::WebAppServer" : {
          "file" : "lib/Yote/WebAppServer.pm",
@@ -208,5 +160,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.1008"
+   "version" : "0.1010"
 }

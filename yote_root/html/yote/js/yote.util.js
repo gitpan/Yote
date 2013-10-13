@@ -9,6 +9,24 @@
 $.yote.util = {
     ids:0,
 
+    format_date: function( date, format ) {
+	if( format ) {
+	    var buf = '';
+	    for( var i=0; i<format.length; i++) {
+		var chara = format.charAt( i );
+		if( chara == 'Y' ) buf += date.getUTCFullYear();
+		else if( chara == 'M' ) buf += (1 + date.getUTCMonth()) > 9 ? 1 + date.getUTCMonth() : '0' + ( 1 + date.getUTCMonth() );
+		else if( chara == 'D' ) buf += date.getUTCDate()    > 9 ? date.getUTCDate()    : '0' + date.getUTCDate();
+		else if( chara == 's' ) buf += date.getUTCSeconds() > 9 ? date.getUTCSeconds() : '0' + date.getUTCSeconds();
+		else if( chara == 'h' ) buf += date.getUTCHours()   > 9 ? date.getUTCHours()   : '0' + date.getUTCHours(); 
+		else if( chara == 'm' ) buf += date.getUTCMinutes() > 9 ? date.getUTCMinutes() : '0' + date.getUTCMinutes();
+		else buf += chara;
+	    }
+	    return buf;
+	}
+	return date.toUTCString();
+    },
+
     button_actions:function( args ) {
 	var but         = args[ 'button' ];
 	var action      = args[ 'action' ] || function(){};
@@ -63,7 +81,6 @@ $.yote.util = {
 	    } } } )(act,on_escape) );
 
 	$( but ).click( act );
-
 	check_ready();
 
 	return check_ready;
@@ -96,10 +113,12 @@ $.yote.util = {
 
 	var apply_edit = function() {
 	    var val = $( '#' + txt_id ).val();
-	    item.set( field, val );
+	    if( on_edit_function ) 
+		on_edit_function(val); 
+	    else
+		item.set( field, val );
 	    stop_edit();
-	    if( on_edit_function ) { on_edit_function(); }
-	}
+	} //apply_edit
 
 	var go_edit = function() {
 	    var rows = 2;
@@ -656,6 +675,7 @@ $.yote.util = {
 	    /* PAGINATION */
 	    start		: 0,                                      // pagination start
 	    plimit		: args[ 'plimit' ] || 10,                 // paginatoin limit
+	    show_count          : typeof args[ 'show_count' ] === 'undefined' ? true : args[ 'show_count' ],
 
 	    search_fun		: args[ 'search_function' ],              // optional alternate search function. Uses the default. which is search_list
 	    search_on		: args[ 'search_on' ],                    // List of what search fields to use for the item. This may or may not be used by the item's search function depending on how it is defined. If this is included, search will be activated.
@@ -665,6 +685,7 @@ $.yote.util = {
 	    list_name		: args[ 'list_name' ],                     //   name of list attached to item
 	    paginate_type	: args[ 'paginate_type' ] || 'list',       //   list or hash
 	    paginate_order	: args[ 'paginate_order' ] || 'forward',   //   forward or backwards
+	    is_admin            : args[ 'is_admin' ] || false,
 
 	    /* HTML */
 	    attachpoint		: args[ 'attachpoint' ],                   // selector that this control table will empty then fill with itself
@@ -681,7 +702,7 @@ $.yote.util = {
 	    /* STYLE */
 	    prefix_classname    : args[ 'prefix_classname' ],              // Each element, like table, row, header, description gets its own class.
 	                                                                   // If prefix_classname is foo, the table would get the 'foo_table' class.
-	        /* classes : ( each of these will be there, as well as classes with prefix_classname replacing ct. 
+	        /* classes : ( each of these will be there, as well as classes with prefix_classname replacing _ct. 
                                For example, if prefix_classname="foo", there would be a foo_title and a _ct_title class )
                       _ct_title _ct_description _ct_search_div _ct_table _ct_new_title _ct_new_description _ct_new_item_table
 		      _ct_new_item_row _ct_new_item_cell _ct_new_item_field _ct_new_item_btn _ct_row _ct_cell _ct_header _ct_delete_btn
@@ -689,6 +710,7 @@ $.yote.util = {
 		*/
 	    
 	    /* ACTIONS */
+	    after_load          : args[ 'after_load' ],                                   // this function is run once the first time the table is loaded.
 	    after_render	: args[ 'after_render' ]   || function(list_of_items) {}, // run this function after rendering. It takes a single argument : list_of_items
 	    show_when_empty     : args[ 'show_when_empty' ],                              // run this function if there were no items found for pagination. Function shold
 	                                                                                  // return html that goes _IN PLACE_ of the table. Expects search item list as single parameter and passes the list of search terms as the single argument.
@@ -702,16 +724,16 @@ $.yote.util = {
 	                                                                                  //     field - a string that may be anything as long as it is unique to this particular call to control_table
 	                                                                                  //     render - a function that takes an id as an argument and returns html 
 	                                                                                  //     after_render - a function called after the html is in the dom. Takes id as an argument
-	                                                                                  //     on_create - a function called after the item has been created. Takes the new item as an argument
+	                                                                                  //     on_create - a function called after the item has been created. Takes the new item and the control id as arguments.
 	    new_column_titles	: args[ 'new_column_titles' ] || args[ 'new_columns' ],   // Titles for the data fields
 	    new_function	: args[ 'new_function' ],                                 // function that return a new item for this pagination. Takes a hash ref of preoperties
 	    after_new_fun	: args[ 'after_new_function' ],                           // function this is run after new_function and takes a single argument : the newly created thing.
-	    new_set_values      : args[ 'new_set_values' ] || false,                      // If true, the new function will try and set the values after creation.
 	    new_button		: args[ 'new_button' ] || 'New',                          // text that appears on the create new item button. Default is 'New'
 	    new_title		: args[ 'new_title' ],                                    // title for the new items widget that appears on top of it. If it is defined, it is put in a span with <prefix_classname>_new_title class
 	    new_description	: args[ 'new_description' ],                              // description for new items for the widget that appears under the title. If it is defined, it is put in a span with <prefix_classname>_new_description class
 
-	    remove_fun		: args[ 'remove_function' ],                // an optional function to remove an item from this list. Takes the item as an argument. If this is present, one more column will be created for the row : delete
+	    include_remove      : args[ 'include_remove' ],   // If true, one more column will be created for the row : delete
+	    remove_fun		: args[ 'remove_function' ],  // optional function to remove an item from this list. Takes the item and the item index (or key) as arguments.
 	    remove_btn_txt	: args[ 'remove_button_text' ] || 'Delete', // Text that goes on the remove button. Default is 'Delete'.
 	    remove_column_txt	: args[ 'remove_column_text' ] || 'Delete', // Text that goes on the remove column header. Default is 'Delete'.
 
@@ -749,16 +771,14 @@ $.yote.util = {
 			    } else {
 				return it.item.paginate( { name : it.list_name, limit : it.plimit + 1, skip : it.start, 
 							   search_fields : it.search_on, search_terms : it.terms,
-							   return_hash : it.paginate_type != 'list',
-							   reverse : it.paginate_order != 'forward' } );
+							   return_hash : it.paginate_type != 'list' ? 1 : 0,
+							   reverse : it.paginate_order != 'forward' ? 1 : 0 } );
 			    }
 			}
 		    }
 		    else {
 			paginate_function = function() {
-			    console.log( [ "PAG", it.item ] );
-
-			    return it.item.paginate( { name : it.list_name, limit : it.plimit + 1, return_hash : it.paginate_type != 'list', skip : it.start, reverse : it.paginate_order != 'forward' } );
+			    return it.item.paginate( { name : it.list_name, limit : it.plimit + 1, return_hash : it.paginate_type != 'list' ? 1 : 0, skip : it.start, reverse : it.paginate_order != 'forward' ? 1 : 0 } );
 			}
 		    }
 		} )( me );
@@ -790,59 +810,50 @@ $.yote.util = {
 		    bf    += me.new_description ? '<div class="' + me._classes( '_new_description' ) + '">' + me.new_description + '</div>' : '';
 
 		    var txts = [];
-		    var tbl = $.yote.util.make_table( me._classes_array( '_new_item_table' ) );
+		    var tbl = $.yote.util.make_table( me._classes_array( 'new_item_table' ) );
 		    for( var i=0; i < me.new_columns.length; i++ ) {
 			var nc = me.new_columns[ i ];
 			var field = typeof nc === 'object' ? nc.field : nc;
-			var id = '_new_' + me.item.id + '_' + field;
+			var id = '_new_' + me.ct_id + '_' + me.item.id + '_' + field;
 			if( typeof nc === 'object' ) {
-			    tbl.add_row( [ me.new_column_titles[ i ], nc.render( id ) ], me._classes_array( '_new_item_row' ), me._classes_array( '_new_item_cell' ) );
+			    tbl.add_row( [ me.new_column_titles[ i ], nc.render( id ) ], me._classes_array( 'new_item_row' ), me._classes_array( 'new_item_cell' ) );
 			} else {
-			    tbl.add_param_row( [ me.new_column_titles[ i ], '<INPUT TYPE="TEXT" class="' + me._classes( '_new_item_field' ) + '" id="' + id + '">' ], me._classes_array( '_new_item_row' ), me._classes_array( '_new_item_cell' ) );
+			    tbl.add_param_row( [ me.new_column_titles[ i ], '<INPUT TYPE="TEXT" class="' + me._classes( '_new_item_field' ) + '" id="' + id + '">' ], me._classes_array( 'new_item_row' ), me._classes_array( 'new_item_cell' ) );
 			}
 			txts.push( '#' + id );
 		    }
 		    bf += tbl.get_html();
-		    bf += '<BUTTON type="BUTTON" class="' + me.prefix_classname + '_new_item_btn _ct_new_item_btn" id="_new_' + me.item.id + '_b">' + me.new_button + '</BUTTON>';
+		    bf += '<BUTTON type="BUTTON" class="' + me.prefix_classname + '_new_item_btn _ct_new_item_btn" id="_new_' + me.ct_id + '_' + me.item.id + '_b">' + me.new_button + '</BUTTON>';
 		    $( me.new_attachpoint ).empty().append( bf );
 
 
 		    for( var i=0; i < me.new_columns.length; i++ ) {
 			var nc = me.new_columns[ i ];
-			if( typeof nc === 'object' ) {
-			    nc.after_render( '_new_' + me.item.id + '_' + nc.field );
+			if( typeof nc === 'object' && nc[ 'after_render' ] ) {
+			    nc.after_render( '_new_' + me.ct_id + '_' + me.item.id + '_' + nc.field );
 			}
 		    }
 
 		    $.yote.util.button_actions( {
-			button : '#_new_' + me.item.id + '_b',
+			button : '#_new_' + me.ct_id +'_' + me.item.id + '_b',
 			texts  : txts,
 			required : me.new_columns_required,
 			action : (function(it) { return function() {
-			    var newitem;
-			    if( me.new_set_values ) {
-				newitem = it.new_function();
-				for( var i=0; i < it.new_columns.length; i++ ) {
-				    var nc = it.new_columns[ i ];
-				    if( typeof nc === 'object' ) {
-					nc.on_create( newitem );
-				    }
-				    else {
-					var val = $( '#_new_' + it.item.id + '_' + nc ).val();
-					newitem.set( nc, val );
-				    }
+			    var newitem = it.new_function ? it.new_function() : it.is_admin ? $.yote.fetch_root().new_root_obj() : $.yote.fetch_root().new_obj();
+			    for( var i=0; i < it.new_columns.length; i++ ) {
+				var nc = it.new_columns[ i ];
+
+				var field = typeof nc === 'object' ? nc.field : nc;
+				var id = '_new_' + me.ct_id + '_' + me.item.id + '_' + field;
+				if( typeof nc === 'object' ) {
+				    nc.on_create( newitem, id );
 				}
-			    }
-			    else {
-				var vals = {};
-				for( var i=0; i < it.new_columns.length; i++ ) {
-				    var nc = it.new_columns[ i ];
-				    if( typeof nc !== 'object' ) {
-					vals[ nc ] = $( '#_new_' + it.item.id + '_' + nc ).val();
-				    }
+				else {
+				    var val = $( '#' + id  ).val();
+				    newitem.set( nc, val );
 				}
-				newitem = it.new_function( vals );
-			    } 
+			    } //each column
+			    it.item.add_to( { name : it.list_name, items : [ newitem ] } );
 			    if( it.after_new_fun ) {
 				it.after_new_fun( newitem );
 			    }
@@ -856,20 +867,21 @@ $.yote.util = {
 		    for( var i=0; i < me.column_headers.length; i++ ) {
 			ch.push( me.column_headers[ i ] );
 		    }
-		    if( me.remove_fun ) {
+		    if( me.include_remove ) {
 			ch.push( me.remove_column_txt );
 		    }
-		    tab.add_header_row( ch, me._classes_array( '_row' ), me._classes_array( '_cell' ) );
+		    tab.add_header_row( ch, me._classes_array( 'row' ), me._classes_array( 'cell' ) );
 		}
 
 		var items = paginate_function();
-
 		var max = items.length() > me.plimit ? me.plimit : items.length();
 		
-		if( max == count ) {	   
-		    buf += '<BR>Showing all items<BR>';
-		} else {
-		    buf += '<BR>Showing ' + max + ' of ' + count + ' items<BR>';
+		if( me.show_count ) {
+		    if( max == count ) {	   
+			buf += '<BR>Showing all items<BR>';
+		    } else {
+			buf += '<BR>Showing ' + max + ' of ' + count + ' items<BR>';
+		    }
 		}
 		if( me.paginate_type == 'hash' ) {
 		    
@@ -894,14 +906,14 @@ $.yote.util = {
 					  : item.get( me.columns[ j ] )
 					);
 			    }
-			    if( me.remove_fun ) {
-				row.push( '<BUTTON type="BUTTON" id="remove_' + item.id + '_b">' + me.remove_btn_txt + '</BUTTON>' );
+			    if( me.include_remove ) {
+				row.push( '<BUTTON type="BUTTON" id="remove_' + me.ct_id + '_' + item.id + '_b">' + me.remove_btn_txt + '</BUTTON>' );
 			    }
 			    if( me.suppress_table ) {
 				buf += row.join('');
 			    }
 			    else {
-				tab.add_row( row, me._classes_array( '_row' ), me._classes_array( '_cell' ) );			
+				tab.add_row( row, me._classes_array( 'row' ), me._classes_array( 'cell' ) );			
 			    }
 			}
 		    }
@@ -914,18 +926,18 @@ $.yote.util = {
 			    row.push( typeof me.columns[ j ] == 'function' ?
 				      me.columns[ j ]( item, true ) :
 				      typeof me.columns[ j ] == 'object' ?
-				      me.columns[ j ][ 'render' ]( item )
+				      me.columns[ j ][ 'render' ]( item, me.start + i )
 				      : item.get( me.columns[ j ] )
 				    );
 			}
-			if( me.remove_fun && ! me.suppress_table ) {
-			    row.push( '<BUTTON class="' + me._classes( '_delete_btn' ) + '" type="BUTTON" id="remove_' + item.id + '_b">' + me.remove_btn_txt + '</BUTTON>' );
+			if( me.include_remove && ! me.suppress_table ) {
+			    row.push( '<BUTTON class="' + me._classes( '_delete_btn' ) + '" type="BUTTON" id="remove_' + me.ct_id + '_' + i + '_b">' + me.remove_btn_txt + '</BUTTON>' );
 			}
 			if( me.suppress_table ) {
 			    buf += row.join('');
 			}
 			else {
-			    tab.add_row( row, me._classes_array( '_row' ), me._classes_array( '_cell' ) );
+			    tab.add_row( row, me._classes_array( 'row' ), me._classes_array( 'cell' ) );
 			}
 		    }
 		} //list pagination
@@ -938,24 +950,24 @@ $.yote.util = {
 		    
 		    if( me.start > 0 || items.length() > me.plimit ) {
 			buf += '<br>';
-			buf += '<BUTTON class="' + me._classes( '_to_start_btn' ) + '" type="button" id="to_start_b">&lt;&lt;</BUTTON>';
-			buf += ' <BUTTON class="' + me._classes( '_back_btn' ) + '" type="button" id="back_b">&lt;</BUTTON>';
-			buf += '<BUTTON class="' + me._classes( '_forward_btn' ) + '" type="button" id="forward_b">&gt;</BUTTON>';
-			buf += ' <BUTTON class="' + me._classes( '_to_end_btn' ) + '" type="button" id="to_end_b">&gt;&gt;</BUTTON>';
+			buf += '<BUTTON class="' + me._classes( '_to_start_btn' ) + '" type="button" id="to_start_' + me.ct_id + '_b">&lt;&lt;</BUTTON>';
+			buf += ' <BUTTON class="' + me._classes( '_back_btn' ) + '" type="button" id="back_' + me.ct_id + '_b">&lt;</BUTTON>';
+			buf += '<BUTTON class="' + me._classes( '_forward_btn' ) + '" type="button" id="forward_' + me.ct_id + '_b">&gt;</BUTTON>';
+			buf += ' <BUTTON class="' + me._classes( '_to_end_btn' ) + '" type="button" id="to_end_' + me.ct_id + '_b">&gt;&gt;</BUTTON>';
 		    }
 		}
 
 		$( me.attachpoint ).empty().append( buf );
 
 		if( me.start > 0 ) {
-		    $( '#to_start_b' ).click(function() { me.start = 0; me.refresh(); } );
+		    $( '#to_start_' + me.ct_id + '_b' ).click(function() { me.start = 0; me.refresh(); } );
 		    var b = me.start - me.plimit;
 		    if( b < 0 ) b = 0;
-		    $( '#back_b' ).click(function() { me.start = b; me.refresh(); } );
+		    $( '#back_' + me.ct_id + '_b' ).click(function() { me.start = b; me.refresh(); } );
 		}
 		else {
-		    $( '#to_start_b' ).attr( 'disabled', 'disabled' );
-		    $( '#back_b' ).attr( 'disabled', 'disabled' );
+		    $( '#to_start_' + me.ct_id + '_b' ).attr( 'disabled', 'disabled' );
+		    $( '#back_' + me.ct_id + '_b' ).attr( 'disabled', 'disabled' );
 		}
 
 		if( items.length() > me.plimit ) {
@@ -963,12 +975,12 @@ $.yote.util = {
 		    if( e > count ) {
 			e = count - me.plimit;
 		    }
-		    $( '#forward_b' ).click(function() { me.start = e; me.refresh() } );
-		    $( '#to_end_b' ).click(function() { me.start = count - me.plimit; me.refresh(); } );
+		    $( '#forward_' + me.ct_id + '_b' ).click(function() { me.start = e; me.refresh() } );
+		    $( '#to_end_' + me.ct_id + '_b' ).click(function() { me.start = count - me.plimit; me.refresh(); } );
 		}
 		else {
-		    $( '#to_end_b' ).attr( 'disabled', 'disabled' );
-		    $( '#forward_b' ).attr( 'disabled', 'disabled' );
+		    $( '#to_end_' + me.ct_id + '_b' ).attr( 'disabled', 'disabled' );
+		    $( '#forward_' + me.ct_id + '_b' ).attr( 'disabled', 'disabled' );
 		}
 
 		if( me.search_on ) {
@@ -993,15 +1005,13 @@ $.yote.util = {
 		}
 
 		if( me.paginate_type == 'hash' ) {
-		    console.log( [ "KEYS", keys ] );
 		    for( var i in keys ) {
 			var key = keys[ i ];
 			var item = items.get( key );
-			console.log( [ "KEYVAL", key,item ] );
 			if( typeof me.columns[ 0 ] == 'function' ) {
 			    me.columns[ 0 ]( item, false, key );
 			}
-			else if( typeof me.columns[ 0 ] == 'object' ) {
+			else if( typeof me.columns[ 0 ] == 'object' && me.columns[ 0 ][ 'after_render' ] ) {
 			    me.columns[ 0 ][ 'after_render' ]( item, key );//, function( newstart, key ) { me.refresh(); } );
 			}
 
@@ -1009,18 +1019,22 @@ $.yote.util = {
 			    if( typeof me.columns[ j ] == 'function' ) {
 				me.columns[ j ]( item, false, key );
 			    }
-			    else if( typeof me.columns[ j ] == 'object' ) {
+			    else if( typeof me.columns[ j ] == 'object'  && me.columns[ j ][ 'after_render' ] ) {
 				me.columns[ j ][ 'after_render' ]( item, key );//function( newstart, key ) { me.refresh(); } );
 			    }
 			}
-			if( me.remove_fun ) {
-			    $( '#remove_' + item.id + '_b' ).click((function(it) { return function() {
-				me.remove_fun( it );
+			if( me.include_remove ) {
+			    $( '#remove_' + me.ct_id + '_' + i + '_b' ).click((function(it,idx) { return function() {
+				if( me.remove_fun ) {
+				    me.remove_fun( it, me.start + idx );
+				} else { 
+				    me.item.remove_from( { name : me.list_name, items : [ it ] } );
+				}
 				var to = me.start - 1;
 				if( to < 0 ) to = 0;
 				me.start = to;
 				me.refresh();
-			    } } )( item ) );
+			    } } )( item, i ) );
 			}
 		    } //each row again
 
@@ -1032,18 +1046,22 @@ $.yote.util = {
 			    if( typeof me.columns[ j ] == 'function' ) {
 				me.columns[ j ]( item, false );
 			    }
-			    else if( typeof me.columns[ j ] == 'object' ) {
-				me.columns[ j ][ 'after_render' ]( item, function( newstart ) { me.refresh(); } );
+			    else if( typeof me.columns[ j ] == 'object'  && me.columns[ j ][ 'after_render' ] ) {
+				me.columns[ j ][ 'after_render' ]( item, me.start + i );
 			    }
 			}
-			if( me.remove_fun ) {
-			    $( '#remove_' + item.id + '_b' ).click((function(it) { return function() {
-				me.remove_fun( it );
+			if( me.include_remove ) {
+			    $( '#remove_' + me.ct_id + '_' + i + '_b' ).click((function(it,idx) { return function() {
+				if( me.remove_fun ) {
+				    me.remove_fun( it, me.start + idx );
+				} else { 
+				    me.item.remove_from( { name : me.list_name, items : [ it ] } );
+				}
 				var to = me.start - 1;
 				if( to < 0 ) to = 0;
 				me.start = to;
 				me.refresh();
-			} } )( item ) );
+			} } )( item, i ) );
 			}
 		    } //each row again
 		}
@@ -1056,6 +1074,7 @@ $.yote.util = {
 	    } //refresh
 	}; //define cgt
 	ct.refresh();
+	if( ct.after_load ) ct.after_load();
 
 	return ct;
     } //control_table

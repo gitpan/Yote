@@ -265,6 +265,7 @@ $().ready(function(){
 
 	    // testing pagination
 	    var pag = hello_app.list_paginator( 'foo_array', 5 );
+
 	    is( pag.full_size, 26, "26 letters of the alphabet" );
 	    is( pag.get( 0 ), "A", "first letter" );
 	    is( pag.page_size, 5, "Size of 5" );

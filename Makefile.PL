@@ -6,6 +6,7 @@ WriteMakefile
   'NAME' => 'Yote',
   'VERSION_FROM' => 'lib/Yote.pm',
   'PREREQ_PM' => {
+                   'Aspect' => '1.04',
                    'Crypt::Passwd::XS' => '0.601',
                    'DBD::SQLite' => '1.35',
                    'DBI' => '1.625',

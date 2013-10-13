@@ -1,17 +1,55 @@
 package Yote::Cron;
 
+#######################################################################################################
+# This module is not meant to be used directly. It is activated automatically as part of the service. #
+#######################################################################################################
+
+
 use strict;
 use warnings;
 no warnings 'uninitialized';
 
 use vars qw($VERSION);
-$VERSION = '0.012';
+$VERSION = '0.014';
 
 use DateTime;
 
-use Yote::CronEntry;
+use base 'Yote::RootObj';
 
-use base 'Yote::Obj';
+##################
+# Public Methods #
+##################
+
+sub add_entry {
+    my( $self, $entry, $acct ) = @_;
+    $self->add_to_entries( $entry );
+    $self->_update_entry( $entry );
+    return $entry;
+} #add_entry
+
+sub entries {
+    my $self = shift;
+    my $now_running = _time();
+    my( $e ) = @{ $self->get_entries() };
+    return [grep { $_->get_enabled() && $_->get_next_time() && $now_running >= $_->get_next_time() } @{ $self->get_entries() }];
+} #entries
+
+
+sub mark_done {
+    my( $self, $entry, $acct ) = @_;
+    die "Access Error" unless $acct->is_root();
+    return $self->_mark_done( $entry );
+}
+
+sub update_entry {
+    my( $self, $entry, $acct ) = @_;
+    
+    return $self->_update_entry( $entry );
+} #update_entry
+
+###################
+# Private Methods #
+###################
 
 # cron entries will have the following fields :
 #  * script - what to run
@@ -19,82 +57,92 @@ use base 'Yote::Obj';
 #       * repeat_infinite - true if this will always be repeated
 #       * repeat_times - a number of times to repeat this; this decrements
 #       * repeat_interval - how many seconds to repeat this
-#       * repeat_special - something like 'first tuesday of the month or something like that' ( can deal with this much later )
 #  * scheduled_times - a list of epoc times this cron should be run
 #  * next_time - epoc time this should be run next
 #  * last_run - time this was last run
 
 sub _init {
     my $self = shift;
-    $self->add_to_entries( new Yote::CronEntry( {
+    my $first_cron = new Yote::RootObj( {
 	name   => 'recycler',
 	enabled => 1,
-	script => 'my $recycled = Yote::ObjProvider::recycle_objects(); print STDERR Data::Dumper->Dump(["Recycled $recycled Objects"]);',
+	script => 'use Data::Dumper; my $recycled = Yote::ObjProvider::recycle_objects(); print STDERR Data::Dumper->Dump(["Recycled $recycled Objects"]);',
 	repeats => [
-	    { repeat_times => 1, repeat_interval => 140000 },
+	    { repeat_interval => 140000, repeat_infinite => 1, repeat_times => 0 },
 	    ],
 	    
-					  } ) );
+					} );
+    $self->add_to_entries( $first_cron );
+    $self->_update_entry( $first_cron );
+
 } #_init
 
-sub mark_done {
-    my( $self, $entry, $acct ) = @_;
-    die "Access Error" unless $acct->is_root();
-    my $ran_at = time;
+sub _mark_done {
+    my( $self, $entry ) = @_;
+    my $ran_at = _time();
     my $next_time;
     $entry->set_last_run( $ran_at );
     my $repeats = $entry->get_repeats();
     if( $repeats ) {
-	for my $rep (@$repeats) {
+	my( @repeats ) = @$repeats;
+	for( my $i=$#repeats; $i>=0; $i-- ) {
+	    my $rep = $repeats[$i];
 	    if( $rep->{ next_time } <= $ran_at ) {
 		if( $rep->{ repeat_infinite } ) {
-		    $rep->{ next_time } = $ran_at + $rep->{ repeat_interval };
-		    $next_time ||= $rep->{ next_time };
-		    $next_time = $rep->{ next_time } if $next_time > $rep->{ next_time };
+		    $rep->{ next_time } = $rep->{ next_time } + $rep->{ repeat_interval };
+		    $rep->{ next_time } = $ran_at + $rep->{ repeat_interval } if $rep->{ next_time } <= $ran_at;
 		}
-		else {
-		    $rep->{ repeat_times }--;
-		    if( $rep->{ repeat_times } ) {
+		elsif( $rep->{ next_time } <= $ran_at ) {
+		    if( --$rep->{ repeat_times } > 0 ) {
 			$rep->{ next_time } = $ran_at + $rep->{ repeat_interval };
-			$next_time ||= $rep->{ next_time };
-			$next_time = $rep->{ next_time } if $next_time > $rep->{ next_time };
+		    }
+		    else {
+			splice @$repeats, $i, 1;
+			$rep->{ next_time } = 0;
 		    }
 		}
 	    }
-	    else {
-		$next_time ||= $rep->{ next_time };
-		$next_time = $rep->{ next_time } if $next_time > $rep->{ next_time };
-	    }
+	    $next_time = $rep->{ next_time } && $next_time >= $rep->{ next_time } ? $next_time :  $rep->{ next_time };
 	}
     } #if repeats
-    if( $entry->{ scheduled_times } ) {
-	$entry->{ scheduled_times } = [ grep { $_->{ next_time } <= $ran_at } @{ $entry->{ scheduled_times } } ];
-	for my $entry ( @{ $entry->{ scheduled_times } } ) {
-	    $next_time ||= ( $entry );
-	    if( $next_time > $entry ) {
-		$next_time = $entry;
+    my $times = $entry->get_scheduled_times();
+    if( $times ) {
+	my( @times ) = @$times;
+ 	for( my $i=$#times; $i>=0; $i-- ) {
+	    my $sched = $times[$i];
+	    if( $sched <= $ran_at ) {
+		splice @$times, $i, 1;
+	    }
+	    elsif( $sched > $ran_at ) {
+		$next_time = $sched < $next_time ? $sched : $next_time;
 	    }
 	}
     }
-
     $entry->set_next_time( $next_time );
     unless( $next_time ) {
 	$self->remove_from_entries( $entry );
 	$self->add_to_completed_entries( $entry );
     }
-} #mark_done
+} #_mark_done
 
-sub add_entry {
-    my( $self, $entry, $acct ) = @_;
-    $self->add_to_entries( $entry );
+#
+# Time is moved to its own sub in order to allow for modification for testing.
+#
+sub _time {
+    return time;
+} #_time
+
+sub _update_entry {
+    my( $self, $entry ) = @_;
     my $repeats = $entry->get_repeats();
-    my $added_on = time;
+    my $added_on = _time();
     my $next_time;
     if( $repeats ) {
 	for my $rep (@$repeats) {
+	    next unless $rep->{ repeat_infinite } || $rep->{ repeat_times };
 	    $rep->{ next_time } = ( $added_on + $rep->{ repeat_interval } );
 	    $next_time ||= $rep->{ next_time };
-	    $next_time = $rep->{ next_time } if $next_time > $rep->{ next_time }
+	    $next_time = $rep->{ next_time } if $next_time > $rep->{ next_time };
 	}
     } #if repeats
     if( $entry->{ scheduled_times } ) {
@@ -106,14 +154,8 @@ sub add_entry {
 	}
     }
     $entry->set_next_time( $next_time );
-    die "Entry  must contain a scheduled time or repeated time" unless $entry->get_next_time();
-} #add_entry
-
-sub entries {
-    my $self = shift;
-    my $now_running = time;
-    return grep { $_->get_next_time() && $now_running >= $_->get_next_time() } @{ $self->get_entries() };
-} #entries
+    return $entry;
+} #_update_entry
 
 
 1;
@@ -126,8 +168,8 @@ Yote::Cron
 
 =head1 SYNOPSIS
 
-The Yote::Cron, while it works as design, has a poor enough design that I'm yanking it from 
-production.
+Yote::Cron is a subsystem in Yote that functions like a cron, allowing scripts to be run inside Yote. Rather than use
+config files, this uses Yote objects to control the cron jobs. A cron editor is part of the Yote admin page.
 
 =head1 DESCRIPTION
 
@@ -141,9 +183,7 @@ The Yote::Cron's public methods can only be called by an account with the __is_r
 
 =over 4
 
-=item mark_done
-
-=item add_entry
+=item add_entry( $entry )
 
 Ads an entry to this list. Takes a Yote::Obj that has the following data structure :
 
@@ -154,21 +194,30 @@ Ads an entry to this list. Takes a Yote::Obj that has the following data structu
       * repeat_infinite - true if this will always be repeated
       * repeat_times - a number of times to repeat this; this decrements
       * repeat_interval - how many seconds to repeat this
-      * repeat_special - something like 'first tuesday of the month or something like that' ( can deal with this much later )
  * scheduled times - a list of epoc times this cron should be run
  * next_time - epoc time this should be run next (volatile, should not be set by user)
  * last_run - time this was last run (volatile, should not be set by user)
 
 
-=item entries
+=item entries()
  
-Returns a list of the entries that should be run now.
+Returns a list of the entries that should be run at the time this was called.
+
+=item mark_done( $entry )
+
+Marks this entry as done. This causes any repeat_times to decrement, and removes appropriate scheduled times.
+
+=item update_entry( $entry )
+
+This recalculates the next time this entry will be run.
 
 =back
 
 =head1 AUTHOR
 
 Eric Wolf
+coyocanid@gmail.com
+http://madyote.com
 
 =head1 LICENSE AND COPYRIGHT
 

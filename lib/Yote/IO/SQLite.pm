@@ -15,7 +15,7 @@ use DBI;
 
 use vars qw($VERSION);
 
-$VERSION = '0.033';
+$VERSION = '0.035';
 
 use constant {
     DATA => 2,
@@ -71,8 +71,9 @@ sub ensure_datastore {
         objects => q~CREATE TABLE IF NOT EXISTS objects (
                      id INTEGER PRIMARY KEY,
                      class varchar(255) DEFAULT NULL,
+                     last_updated timestamp,
                      recycled tinyint DEFAULT 0
-                      ); CREATE INDEX IF NOT EXISTS rec ON objects( recycled );~
+                      ); CREATE INDEX IF NOT EXISTS rec ON objects( recycled );~,
         );
     my %index_definitions = (
 	uniq_idx => q~CREATE INDEX IF NOT EXISTS obj_id ON field(obj_id);~,
@@ -101,7 +102,8 @@ sub first_id {
 #
 sub fetch {
     my( $self, $id ) = @_;
-    my( $class ) = $self->_selectrow_array( "SELECT class FROM objects WHERE recycled=0 AND id=?",  $id );
+    my( $class ) = $self->_selectrow_array( "SELECT class FROM objects WHERE recycled=0 AND last_updated IS NOT NULL AND id=?",  $id );
+
     die $self->{DBH}->errstr() if $self->{DBH}->errstr();
 
     return unless $class;
@@ -110,7 +112,7 @@ sub fetch {
 	$obj->[DATA] = [];
 	my $res = $self->_selectall_arrayref( "SELECT field, ref_id, value FROM field WHERE obj_id=?",  $id );
 	die $self->{DBH}->errstr() if $self->{DBH}->errstr();
-	
+
 	for my $row (@$res) {
 	    my( $idx, $ref_id, $value ) = @$row;
 	    $obj->[DATA][$idx] = $ref_id || "v$value";
@@ -120,7 +122,7 @@ sub fetch {
 	$obj->[DATA] = {};
 	my $res = $self->_selectall_arrayref( "SELECT field, ref_id, value FROM field WHERE obj_id=?",  $id );
 	die $self->{DBH}->errstr() if $self->{DBH}->errstr();
-	
+
 	for my $row (@$res) {
 	    my( $field, $ref_id, $value ) = @$row;
 	    $obj->[DATA]{$field} = $ref_id || "v$value";
@@ -149,20 +151,22 @@ sub get_id {
 #
 # Returns true if the given object traces back to the root.
 #
-sub has_path_to_root {
+sub _has_path_to_root {
     my( $self, $obj_id, $seen ) = @_;
     return 1 if $obj_id == 1;
     $seen ||= { $obj_id => 1 };
-    my $res = $self->_selectall_arrayref( "SELECT obj_id FROM field WHERE ref_id=?", $obj_id );
-    for my $o_id (map { $_->[0] } @$res) {
+    my $res = $self->_selectall_arrayref( "SELECT obj_id,last_updated FROM field f,objects o WHERE o.id=obj_id AND ref_id=?", $obj_id );
+    for my $res ( @$res ) {
+	return 1 unless $res->[1];
+	my $o_id = $res->[0];
 	next if $seen->{ $o_id }++;
-	if( $self->has_path_to_root( $o_id, $seen ) ) {
+	if( $self->_has_path_to_root( $o_id, $seen ) ) {
 	    return 1;
 	}
     }
 
     return 0;
-} #has_path_to_root
+} #_has_path_to_root
 
 # returns the max id (mostly used for diagnostics)
 sub max_id {
@@ -175,13 +179,14 @@ sub paginate {
     my( $self, $obj_id, $args ) = @_;
 
     my $PAG = '';
+
     if( defined( $args->{ limit } ) ) {
 	if( $args->{ skip } ) {
 	    $PAG = " LIMIT $args->{ skip },$args->{ limit }";
 	} else {
 	    $PAG = " LIMIT $args->{ limit }";
 	}
-    }    
+    }
 
     my( $orstr, @params ) = ( '', $obj_id );
     my $search_terms = $args->{ search_terms };
@@ -205,6 +210,7 @@ sub paginate {
 
     my $query;
     my( $type ) = $self->_selectrow_array( "SELECT class FROM objects WHERE id=?", $obj_id );
+
     if( $args->{ sort_fields } ) {
 	my $sort_fields = $args->{ sort_fields };
 	my $reversed_orders = $args->{ reversed_orders } || [];
@@ -213,13 +219,13 @@ sub paginate {
     elsif( $search_fields ) {
 	$query = "SELECT bar.field,fi.obj_id,bar.value FROM field fi, ( SELECT foo.field,foo.ref_id AS ref_id,foo.value AS value FROM ( SELECT field,ref_id,value FROM field WHERE obj_id=? ) as foo LEFT JOIN field f ON ( f.obj_id=foo.ref_id ) $orstr GROUP BY 1,2) as bar WHERE fi.obj_id=bar.ref_id GROUP BY 1,2 ";
 	if( $type eq 'ARRAY' ) {
-	    $query .= ' ORDER BY cast( bar.field as int ) ';	    
+	    $query .= ' ORDER BY cast( bar.field as int ) ';
 	}
 	else {
 	    $query .= ' ORDER BY bar.field ';
 	}
 	$query .= ' DESC' if $args->{ reverse };
-	$query .= $PAG;	
+	$query .= $PAG;
     }
     else {
 	$query = "SELECT field,ref_id,value FROM field WHERE obj_id=?";
@@ -235,7 +241,7 @@ sub paginate {
 	    $query .= ' ORDER BY field ';
 	}
 	$query .= ' DESC' if $args->{ reverse };
-	$query .= $PAG;	
+	$query .= $PAG;
     }
     my $ret = $self->_selectall_arrayref( $query, @params );
     if( $args->{return_hash} ) {
@@ -244,7 +250,8 @@ sub paginate {
 	}
 	return { map { $_->[0] => $_->[1] || 'v'.$_->[2] } @$ret };
     }
-    return [map { $_->[1] || 'v'.$_->[2] } @$ret ];    
+
+    return [map { $_->[1] || 'v'.$_->[2] } @$ret ];
 
 } #paginate
 #
@@ -257,10 +264,10 @@ sub recycle_objects {
     $end_id   ||= $self->max_id();
 
     my $recycled;
-    
+
     for( my $id=$start_id; $id <= $end_id; $id++ ) {
 	my $obj = $self->fetch( $id );
-	if( $obj && ( ! $self->has_path_to_root( $id ) ) ) {
+	if( $obj && ( ! $self->_has_path_to_root( $id ) ) ) {
 	    $self->recycle_object( $id );
 	    ++$recycled;
 	}
@@ -283,7 +290,7 @@ sub start_transaction {
 
 sub _stow_now {
     my( $self, $id, $class, $data ) = @_;
-    my(  $updates, $udata ) = $self->__stow_updates( $id, $class, $data );    
+    my(  $updates, $udata ) = $self->__stow_updates( $id, $class, $data );
     for my $upd (@$updates) {
 	$self->_do( @$upd );
 	die $self->{DBH}->errstr() if $self->{DBH}->errstr();
@@ -312,7 +319,7 @@ sub stow_all {
 sub stow {
     my( $self, $id, $class, $data ) = @_;
 
-#    print STDERR "[$$ ".time()."] STOW : $id \n";    
+#    print STDERR "[$$ ".time()."] STOW : $id \n";
 
     unless( $self->{STOW_LATER} ) {
 	return $self->_stow_now( $id, $class, $data );
@@ -355,8 +362,23 @@ sub _engage_queries {
 # Returns the number of entries in the list of the given id.
 #
 sub count {
-    my( $self, $container_id ) = @_;
-    my( $count ) = $self->_selectrow_array( "SELECT count(*) FROM field WHERE obj_id=?",  $container_id );
+    my( $self, $container_id, $args ) = @_;
+    my $count;
+    if( $args->{search_fields} && $args->{search_terms} ) {
+	my( @ors );
+	my( @params ) = $container_id;
+	for my $field ( @{$args->{search_fields}} ) {
+	    for my $term (@{$args->{search_terms}}) {
+		push @ors, " (f.field=? AND f.value LIKE ?) ";
+		push @params, $field, "\%$term\%";
+	    }
+	}
+	my $orstr = @ors > 0 ? " WHERE " . join( ' OR ', @ors )  : '';
+	( $count ) = $self->_selectrow_array( "SELECT count(*) FROM (SELECT bar.field,fi.obj_id FROM field fi, ( SELECT foo.field,foo.ref_id AS ref_id,foo.value AS value FROM ( SELECT field,ref_id,value FROM field WHERE obj_id=? ) as foo LEFT JOIN field f ON ( f.obj_id=foo.ref_id ) $orstr GROUP BY 1,2) as bar WHERE fi.obj_id=bar.ref_id GROUP BY 1,2) foo", @params );
+    } #if count with search
+    else {
+	( $count ) = $self->_selectrow_array( "SELECT count(*) FROM field WHERE obj_id=?",  $container_id );
+    }
     die $self->{DBH}->errstr() if $self->{DBH}->errstr();
 
     return $count;
@@ -364,14 +386,30 @@ sub count {
 
 sub list_insert {
     my( $self, $list_id, $val, $idx ) = @_;
-    unless( defined( $idx ) ) {
-	( $idx ) = $self->{DBH}->selectrow_array( "SELECT 1 + max( field ) FROM field WHERE obj_id=?", {}, $list_id );
-    } else {
-	my( $occupied ) = $self->{DBH}->selectrow_array( "SELECT count(*) FROM field WHERE obj_id=? AND field=?", {}, $list_id, $idx );
-	if( $occupied ) {
-	    $self->{DBH}->selectrow_array( "UPDATE field SET field=field+1 WHERE obj_id=? AND field >= ?", {}, $list_id, $idx );
+    my( $last_idx ) = $self->{DBH}->selectrow_array( "SELECT max( cast( field as int ) ) FROM field WHERE obj_id=?", {}, $list_id );
+    if( defined( $idx ) ) {
+	if( !defined( $last_idx ) ) {
+	    $idx = 0;
+	}
+	elsif( $idx > $last_idx ) {
+	    $idx = $last_idx + 1;
+	}
+	else {
+	    my( $occupied ) = $self->{DBH}->selectrow_array( "SELECT count(*) FROM field WHERE obj_id=? AND field=?", {}, $list_id, $idx );
+	    if( $occupied ) {
+		$self->{DBH}->do( "UPDATE field SET field=field+1 WHERE obj_id=? AND field >= ?", {}, $list_id, $idx );
+	    }
 	}
     }
+    else {
+	if( defined( $last_idx ) ) {
+	    $idx = $last_idx + 1;
+	}
+	else {
+	    $idx = 0;
+	}
+    }
+
     if( index( $val, 'v' ) == 0 ) {
 	$self->_do( "INSERT INTO field (obj_id,field,value) VALUES (?,?,?)", $list_id, $idx, substr( $val, 1 )  );
     } else {
@@ -386,14 +424,10 @@ sub hash_delete {
     return;
 }
 
-sub list_delete {
-    my( $self, $list_id, $idx ) = @_;
-    $self->_do( "DELETE FROM field WHERE obj_id=? AND field=?", $list_id, $idx );
-    return;
-}
 
 sub hash_insert {
     my( $self, $hash_id, $key, $val ) = @_;
+    $self->_do( "DELETE FROM field WHERE obj_id=? AND field=?", $hash_id, $key );
     if( index( $val, 'v' ) == 0 ) {
 	$self->_do( "INSERT INTO field (obj_id,field,value) VALUES (?,?,?)", $hash_id, $key, substr( $val, 1 )  );
     } else {
@@ -403,17 +437,27 @@ sub hash_insert {
     return;
 } #hash_insert
 
+sub list_delete {
+    my( $self, $list_id, $val, $idx ) = @_;
+    my( $actual_index ) = $val ?
+	$self->_selectrow_array( "SELECT field FROM field WHERE obj_id=? AND ( value=? OR ref_id=? )", $list_id, $val, $val ) :
+	$idx;
+    $self->_do( "DELETE FROM field WHERE obj_id=? AND field=?", $list_id, $actual_index );
+    $self->_do( "UPDATE field SET field=field-1 WHERE obj_id=? AND field > ?", $list_id, $actual_index );
+    return;
+}
+
 sub list_fetch {
     my( $self, $list_id, $idx ) = @_;
     my( $val, $ref_id ) = $self->_selectrow_array( "SELECT value, ref_id FROM field WHERE obj_id=? AND field=?", $list_id, $idx );
     return $ref_id || "v$val";
-} 
+}
 
 sub hash_fetch {
     my( $self, $hash_id, $key ) = @_;
     my( $val, $ref_id ) = $self->_selectrow_array( "SELECT value, ref_id FROM field WHERE obj_id=? AND field=?", $hash_id, $key );
     return $ref_id || "v$val";
-} 
+}
 
 sub hash_has_key {
     my( $self, $hash_id, $key ) = @_;
@@ -436,8 +480,10 @@ sub _connect {
 
 sub _do {
     my( $self, $query, @params ) = @_;
-#    print STDERR "Do Query : $query @params\n";
-    return $self->{DBH}->do( $query, {}, @params );
+#    print STDERR "Do Query : $query | @params\n";
+    my $ret = $self->{DBH}->do( $query, {}, @params );
+    die $self->{DBH}->errstr if $self->{DBH}->errstr;
+    return $ret;
 } #_do
 
 sub _selectrow_array {
@@ -459,6 +505,8 @@ sub __stow_updates {
     my( $self, $id, $class, $data ) = @_;
 
     my( @cmds, @cdata );
+
+    push( @cmds, ["UPDATE objects SET last_updated=DateTime('now') WHERE id=?", $id ] );
 
     if( $class eq 'ARRAY') {
 	push( @cmds, ["DELETE FROM field WHERE obj_id=?",  $id ] );
@@ -499,7 +547,7 @@ __END__
 
 =head1 NAME
 
-Yote::SQLiteIO - A SQLite persistance engine for Yote.
+Yote::IO::SQLite - A SQLite persistance engine for Yote.
 
 =head1 DESCRIPTION
 
@@ -509,9 +557,9 @@ The interaction the developer will have with this may be specifying its intializ
 
 =head1 CONFIGURATION
 
-The package name is used as an argument to the Yote::ObjProvider package which also takes the configuration parameters for Yote::SQLiteIO.
+The package name is used as an argument to the Yote::ObjProvider package which also takes the configuration parameters for Yote::IO::SQLiteb.
 
-Yote::ObjProvider::init( datastore => 'Yote::SQLiteIO', db => 'yote_db', uname => 'yote_db_user', pword => 'yote_db_password' );
+Yote::ObjProvider::init( datastore => 'Yote::IO::SQLite', db => 'yote_db', uname => 'yote_db_user', pword => 'yote_db_password' );
 
 =head1 PUBLIC METHODS
 
@@ -545,10 +593,6 @@ Returns the id of the first object in the system, the YoteRoot.
 
 Returns the id for the given hash ref, array ref or yote object. If the argument does not have an id assigned, a new id will be assigned.
 
-=item has_path_to_root( obj_id )
-
-Returns true if the object specified by the id can trace a path back to the root yote object.
-
 =item hash_delete( hash_id, key )
 
 Removes the key from the hash given by the id
@@ -567,7 +611,7 @@ Removes the key from the hash given by the id
 
 Inserts the item into the list with an optional index. If not given, this inserts to the end of the list.
 
-=item max_id( ) 
+=item max_id( )
 
 Returns the max ID in the yote system. Used for testing.
 
@@ -576,7 +620,7 @@ Returns the max ID in the yote system. Used for testing.
 
 =item paginate( container_id, args )
 
-Returns a paginated list or hash. Arguments are 
+Returns a paginated list or hash. Arguments are
 
 =over 4
 
@@ -618,6 +662,8 @@ Stows all objects that are marked as dirty. This is called automatically by the 
 =head1 AUTHOR
 
 Eric Wolf
+coyocanid@gmail.com
+http://madyote.com
 
 =head1 LICENSE AND COPYRIGHT
 
