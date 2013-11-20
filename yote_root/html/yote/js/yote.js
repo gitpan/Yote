@@ -269,7 +269,7 @@ $.yote = {
 		    if( typeof data.d === 'object' ) {
 			for( var oid in data.d ) {
 			    if( root._is_in_cache( oid ) ) {
-				var cached = root.objs[ oid ];
+				var cached = root.objs[ oid + '' ];
 				for( fld in cached._d ) {
 				    //take off old getters/setters
 				    delete cached['get_'+fld];
@@ -418,7 +418,7 @@ $.yote = {
 			    if( typeof resp.d === 'object' ) {
 				for( var oid in resp.d ) {
 				    if( root._is_in_cache( oid ) ) {
-					var cached = root.objs[ oid ];
+					var cached = root.objs[ oid + '' ];
 					for( fld in cached._d ) {
 					    //take off old getters/setters
 					    delete cached['get_'+fld];
@@ -461,8 +461,12 @@ $.yote = {
         return i;
     },
 
-    _create_obj:function(data,app_id) {
+    _create_obj:function(data,app_id) { //creates the javascript proxy object for the perl object.
 	var root = this;
+
+	if( data.id != null && typeof data.id !== 'undefined' && root._is_in_cache( data.id ) ) {
+	    return root.objs[ data.id + '' ];
+	}
 	var retty = (function(x,ai) {
 	    var o = {
 		_app_id:ai,
@@ -610,17 +614,54 @@ $.yote = {
 		if( typeof val === 'object' ) return val;
 		if( typeof val === 'function' ) return val;
 		if( val.substring(0,1) != 'v' ) {
-		    var obj = root.objs[val] || $.yote.fetch_root().fetch(val).get(0);
+		    var obj = root.objs[val+''] || $.yote.fetch_root().fetch(val).get(0);
 		    obj._app_id = this._app_id;
                     return obj;
 		}
 		return val.substring(1);
 	    };
 
+	    o.get_list_handle = function( key ) {
+		// this returns an object that is a handle to a container. It does not load the
+		// container contents at once, but provides get and set that contact the server to load
+		// or set things
+
+		var ret = {
+		    item          : this,
+		    container_key : key,
+		    get           : function( idx ) {
+			return this.item.list_fetch( { name : this.container_key, index : idx } );
+		    },
+		    push          : function( key, val ) {
+			return this.item.insert_at( { name : this.container_key, item : val } );			
+		    }
+		};
+		return ret;
+	    }; //get_list_handle
+
+	    o.get_hash_handle = function( key ) {
+		// this returns an object that is a handle to a container. It does not load the
+		// container contents at once, but provides get and set that contact the server to load
+		// or set things
+		var ret = {
+		    item          : this,
+		    container_key : key,
+		    get           : function( hkey ) {
+			return this.item.hash_fetch( { name : this.container_key, key : hkey } );
+		    },
+		    set           : function( hkey, val ) {
+			return this.item.hash( { name : this.container_key, key : hkey, value : val } );			
+		    }
+		};
+		return ret;
+	    }; //get_hash_handle
+
+
 	    o.set = function( key, val, failh, passh ) {
 		this._stage( key, val );
 		this._send_update( undefined, failh, passh );
 		delete this._staged[ key ];
+		return val;
 	    };
 
 	    // get fields
@@ -712,7 +753,7 @@ $.yote = {
             }; //_send_update
 
 	    if( o.id && o.id.substring(0,1) != 'v' ) {
-		root.objs[o.id] = o;
+		root.objs[o.id+''] = o;
 	    }
 	    return o;
         } )(data,app_id);
@@ -754,7 +795,7 @@ $.yote = {
     }, //_functions_in
 
     _is_in_cache:function(id) {
-        return typeof this.objs[id] === 'object' && this.objs[id] != null;
+        return typeof this.objs[id+''] === 'object' && this.objs[id+''] != null;
     },
 
     _reenable:function() {
@@ -799,7 +840,7 @@ $.yote = {
             return data.substring(1);
         }
         if( this._is_in_cache(data) ) {
-            return this.objs[data];
+            return this.objs[data+''];
         }
         console.log( "Don't know how to translate " + data);
     }, //_untranslate_data

@@ -15,7 +15,7 @@ use warnings;
 
 use vars qw($VERSION);
 
-$VERSION = '0.1010';
+$VERSION = '0.1011';
 
 use Carp;
 use File::Path;
@@ -101,6 +101,7 @@ sub get_args {
     # --------- find yote root directory and configuration file ---------
     my $yote_root_dir = $config{ yote_root } || Yote::ConfigData->config( 'yote_root' );
     $config{ yote_root } = $yote_root_dir;
+    $ENV{YOTE_ROOT} = $yote_root_dir;
 
     if( $config{ help } ) {
 	_soft_exit();
@@ -283,9 +284,8 @@ sub _get_configuration {
 	my $done;
 	until( $done ) {
 	    my( $dir, $store ) = ( _ask( "sqlite filename", undef, $current_config->{ store } ||  'yote.sqlite' ) =~ /(.*\/)?([^\/]+)$/ );
-	    print "$dir, $store\n";
 	    if( $store ) {
-		if( substr( $dir, 0, 1 ) eq '/' ) {
+		if( $dir && substr( $dir, 0, 1 ) eq '/' ) {
 		    if( -d $dir && -w $dir ) {
 			$done = 1;
 			$newconfig{ store } = "$dir$store";
@@ -328,7 +328,7 @@ sub _get_configuration {
 
     # this is as secure as the file permissions of the config file, and as secure as the data store is itself.
     $newconfig{ root_account  } = _ask( "Root Account name", undef, $current_config->{ root_account} || 'root' );
-    $newconfig{ root_password } = Yote::ObjProvider::encrypt_pass( _ask( "Root Account Password", undef, $current_config->{ root_password } ),
+    $newconfig{ root_password } = Yote::ObjProvider::encrypt_pass( _ask( "Root Account Password", undef,  ),
 								   $newconfig{ root_account } );
 
     return \%newconfig;

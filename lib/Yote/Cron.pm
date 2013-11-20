@@ -30,8 +30,7 @@ sub add_entry {
 sub entries {
     my $self = shift;
     my $now_running = _time();
-    my( $e ) = @{ $self->get_entries() };
-    return [grep { $_->get_enabled() && $_->get_next_time() && $now_running >= $_->get_next_time() } @{ $self->get_entries() }];
+    return [grep { $_->get_enabled() && $_->get_next_time() && $now_running >= $_->get_next_time() } @{ $self->get_entries([]) }];
 } #entries
 
 
@@ -68,12 +67,11 @@ sub _init {
 	enabled => 1,
 	script => 'use Data::Dumper; my $recycled = Yote::ObjProvider::recycle_objects(); print STDERR Data::Dumper->Dump(["Recycled $recycled Objects"]);',
 	repeats => [
-	    { repeat_interval => 140000, repeat_infinite => 1, repeat_times => 0 },
+	    new Yote::Obj( { repeat_interval => 2333, repeat_infinite => 1, repeat_times => 0 } ),
 	    ],
 	    
 					} );
-    $self->add_to_entries( $first_cron );
-    $self->_update_entry( $first_cron );
+    $self->add_entry( $first_cron );
 
 } #_init
 
@@ -87,22 +85,23 @@ sub _mark_done {
 	my( @repeats ) = @$repeats;
 	for( my $i=$#repeats; $i>=0; $i-- ) {
 	    my $rep = $repeats[$i];
-	    if( $rep->{ next_time } <= $ran_at ) {
-		if( $rep->{ repeat_infinite } ) {
-		    $rep->{ next_time } = $rep->{ next_time } + $rep->{ repeat_interval };
-		    $rep->{ next_time } = $ran_at + $rep->{ repeat_interval } if $rep->{ next_time } <= $ran_at;
+	    if( $rep->get_next_time() <= $ran_at ) {
+		if( $rep->get_repeat_infinite() ) {
+		    $rep->set_next_time( $rep->get_next_time() + $rep->get_repeat_interval() );
+		    $rep->set_next_time( $ran_at + $rep->get_repeat_interval() ) if $rep->get_next_time() <= $ran_at;
 		}
-		elsif( $rep->{ next_time } <= $ran_at ) {
-		    if( --$rep->{ repeat_times } > 0 ) {
-			$rep->{ next_time } = $ran_at + $rep->{ repeat_interval };
+		elsif( $rep->get_next_time() <= $ran_at ) {
+		    $rep->set_repeat_times( $rep->get_repeat_times() - 1 );
+		    if( $rep->get_repeat_times() > 0 ) {
+			$rep->set_next_time( $ran_at + $rep->get_repeat_interval() );
 		    }
 		    else {
 			splice @$repeats, $i, 1;
-			$rep->{ next_time } = 0;
+			$rep->set_next_time( 0 );
 		    }
 		}
 	    }
-	    $next_time = $rep->{ next_time } && $next_time >= $rep->{ next_time } ? $next_time :  $rep->{ next_time };
+	    $next_time = $rep->get_next_time() && $next_time >= $rep->get_next_time() ? $next_time :  $rep->get_next_time();
 	}
     } #if repeats
     my $times = $entry->get_scheduled_times();
@@ -120,16 +119,16 @@ sub _mark_done {
     }
     $entry->set_next_time( $next_time );
     unless( $next_time ) {
-	$self->remove_from_entries( $entry );
-	$self->add_to_completed_entries( $entry );
+	$entry->set_enabled( 0 );
     }
 } #_mark_done
 
 #
 # Time is moved to its own sub in order to allow for modification for testing.
+# Returns time in minutes
 #
 sub _time {
-    return time;
+    return time/60;
 } #_time
 
 sub _update_entry {
@@ -139,17 +138,19 @@ sub _update_entry {
     my $next_time;
     if( $repeats ) {
 	for my $rep (@$repeats) {
-	    next unless $rep->{ repeat_infinite } || $rep->{ repeat_times };
-	    $rep->{ next_time } = ( $added_on + $rep->{ repeat_interval } );
-	    $next_time ||= $rep->{ next_time };
-	    $next_time = $rep->{ next_time } if $next_time > $rep->{ next_time };
+	    next unless $rep->get_repeat_infinite() || $rep->get_repeat_times();
+	    $rep->set_next_time( $added_on + $rep->get_repeat_interval() );
+	    $next_time ||= $rep->get_next_time();
+	    $next_time = $rep->get_next_time() if $next_time > $rep->get_next_time();
 	}
     } #if repeats
-    if( $entry->{ scheduled_times } ) {
-	$entry->{ scheduled_times } = [ grep { $_ <= $added_on } @{ $entry->{ scheduled_times } } ];
-	for my $sched ( @{ $entry->{ scheduled_times } } ) {
-	    $sched->{ next_time } = ( $added_on + $sched );
-	    $next_time ||= $sched;
+    my $times = $entry->get_scheduled_times();
+    if( $times ) {
+	for( my $i=$#$times; $i >= 0; $i-- ) {
+	    splice( @$times, $i, 1 ) unless $times->[$i] > $added_on;
+	}
+	for my $sched ( @$times ) {
+	    $next_time ||= ( $added_on + $sched );
 	    $next_time = $sched if $sched < $next_time;
 	}
     }

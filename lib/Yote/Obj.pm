@@ -172,10 +172,13 @@ sub _get_id {
     return Yote::ObjProvider::get_id( $obj );
 } #_get_id
 
-# anyone may read and write public ( not starting with _ ) fields.
+# anyone may read and edit public ( not starting with _ ) fields.
+# only root may chnage the data field type ( like from scalar to containre )
 sub _check_access {
     my( $self, $account, $write_access, $name ) = @_;
-    return ( $account && $account->get_login()->is_root() ) || index( $name, '_' ) != 0;
+
+    return index( $name, '_' ) || ( $account && $account->get_login()->is_root() );
+
 } #_check_access
 
 # anyone may read and write public ( not starting with _ ) fields.
@@ -197,10 +200,13 @@ sub _count {
 
 sub _hash_delete {
     my( $self, $hashname, $key ) = @_;
-    Yote::ObjManager::mark_dirty( $self->{DATA}{$hashname} );
-    my $ret = Yote::ObjProvider::hash_delete( $self->{DATA}{$hashname}, $key );
+    my $hash_id = $self->{DATA}{$hashname};
+    if( $hash_id ) {
+	Yote::ObjManager::mark_dirty( $hash_id );
+    }
+    my $ret = Yote::ObjProvider::hash_delete( $hash_id, $key );
 
-    my $hash = $Yote::ObjProvider::DIRTY->{ $self->{DATA}{$hashname} } || $Yote::ObjProvider::WEAK_REFS->{ $self->{DATA}{$hashname} };
+    my $hash = $Yote::ObjProvider::DIRTY->{ $hash_id } || $Yote::ObjProvider::WEAK_REFS->{ $hash_id };
     if( $hash ) {
 	delete $hash->{ $key };
     }
@@ -210,20 +216,23 @@ sub _hash_delete {
 
 sub _hash_insert {
     my( $self, $hashname, $key, $val ) = @_;
-    if( $self->{DATA}{$hashname} ) {
+    my $hash_id = $self->{DATA}{$hashname};
+    if( $hash_id ) {
 	# mark dirty here in case there are outstanding instances of that hash?
-	Yote::ObjManager::mark_dirty( $self->{DATA}{$hashname} );
+	Yote::ObjManager::mark_dirty( $hash_id );
 
-	my $ret = Yote::ObjProvider::hash_insert( $self->{DATA}{$hashname}, $key, $val );
-	my $hash = $Yote::ObjProvider::DIRTY->{ $self->{DATA}{$hashname} } || $Yote::ObjProvider::WEAK_REFS->{ $self->{DATA}{$hashname} };
+	Yote::ObjProvider::hash_insert( $hash_id, $key, $val );
+	my $hash = $Yote::ObjProvider::DIRTY->{ $hash_id } || $Yote::ObjProvider::WEAK_REFS->{ $hash_id };
 	if( $hash ) {
 	    $hash->{ $key }= $val;
 	}
-	return $ret;
+	return $val;
     }
     my $fun = "set_$hashname";
+    
     $self->$fun( { $key => $val } );
-    return;
+
+    return $val;
 } #_hash_insert
 
 sub _hash_fetch {
@@ -235,6 +244,7 @@ sub _list_delete {
     my( $self, $listname, $idx ) = @_;
     my $list_id = $self->{DATA}{$listname};
     return unless $list_id;
+    Yote::ObjManager::mark_dirty( $list_id );
     Yote::ObjProvider::list_delete( $list_id, $idx );
     my $list = $Yote::ObjProvider::DIRTY->{ $list_id } || $Yote::ObjProvider::WEAK_REFS->{ $list_id };
     if( $list ) {
@@ -275,16 +285,19 @@ sub _power_clone {
 
 sub _remove_from {
     my( $self, $listname, @data ) = @_;
-    Yote::ObjManager::mark_dirty( $self->{DATA}{$listname} );
+    my $list_id = $self->{DATA}{$listname};
+    return unless $list_id;
+    
     for my $d (@data) {
-	Yote::ObjProvider::remove_from( $self->{DATA}{$listname}, $d );
+	Yote::ObjProvider::remove_from( $list_id, $d );
     }
-    my $list = $Yote::ObjProvider::DIRTY->{ $self->{DATA}{$listname} } || $Yote::ObjProvider::WEAK_REFS->{ $self->{DATA}{$listname} };
+    my $list = $Yote::ObjProvider::DIRTY->{ $list_id } || $Yote::ObjProvider::WEAK_REFS->{ $list_id };
     if( $list ) {
 	for( my $i=0; $i < @$list; $i++ ) {
 	    splice @$list, $i, 1 if grep { $list->[$i] eq $_ } @data;
 	}
     }    
+    Yote::ObjManager::mark_dirty( $list_id );
 } #_remove_from
 
 #
@@ -314,6 +327,8 @@ sub _update {
 	    $self->$set( $datahash->{ $fld } );
 	}
     }
+    Yote::ObjProvider::dirty( $self, $self->{ID} ) if $dirty;
+
     return $dirty;
 } #_update
 
@@ -349,6 +364,14 @@ sub hash {
 
     return $self->_hash_insert( $name, $key, $val );
 } #hash
+
+sub hash_fetch {
+    my( $self, $args, $account ) = @_;
+    die "Access Error" unless $self->_check_access( $account, 0, $args->{ name } );
+    my( $name, $key ) = @$args{'name','key'};
+
+    return $self->_hash_fetch( $name, $key );
+} #hash_fetch
 
 sub insert_at {
     my( $self, $args, $account ) = @_;
@@ -667,6 +690,10 @@ Removes the key from the hash attached to this object specified by name.
 =item hash( { name => '', key => '', value => item } )
 
 Hashes the item to the key to the hash attached to this object specified by name.
+
+=item hash_fetch( { name => '', key => '' } )
+
+Returns the item from the named hash by key.
 
 =item insert_at( { name => '', index => '', item => item } )
 

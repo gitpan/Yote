@@ -109,26 +109,20 @@ if we are our experiences then we are both sides of them.
 				// control to save this
 				// control to revert this( from working to html )
 				'</DIV>' + 
-				'<DIV id="page_editing_panel">' + $.yote.util.prep_edit( page_node, 'working_text', '', true ) + '</div>'
-//				'<DIV id="page_editing_panel"></div>'
+//				'<DIV id="page_editing_panel">' + $.yote.util.prep_edit( page_node, 'working_text', [], true ) + '</div>'
+				'<DIV id="page_editing_panel"></div>'
 			);
-			$( '#save_page_b' ).show().click( function() {
-			    page_control.save_page_node( page_node );
-			} );
-//			$.yote.util.attach_edit_textarea( '#page_editing_panel', page_node, 'working_text' );
+			$.yote.util.attach_edit_textarea( '#page_editing_panel', page_node, 'working_text' );
 			$.yote.util.implement_edit( page_node, 'working_text' );
 		    }
 
 		    $( '#apppanel_pages' ).empty().append(
 			'<INPUT TYPE="TEXT" id="page_to_load" placeholder="Page to Load">' +
-			    '<div id="page_edit_button_div">' + 
 			    '<BR><BUTTON TYPE="BUTTON" id="load_page_b">Load</BUTTON><BR>' +
 			    '<BR><BUTTON TYPE="BUTTON" id="reload_page_b">Reload From File</BUTTON><BR>' +
 			    '<BR><BUTTON TYPE="BUTTON" id="save_page_b">Save to File</BUTTON><BR>' +
-			    '</div>' + 
 			    '<DIV id="edit_page"></DIV>'
 		    ).show();
-		    $( '#save_page_b' ).hide();
 		    $( '#load_page_b' ).click(function(){
 			edit_page( $( '#page_to_load' ).val() );
 		    } );

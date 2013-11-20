@@ -76,7 +76,7 @@ sub ensure_datastore {
         objects => q~CREATE TABLE `objects` (
                      `id` int(11) NOT NULL AUTO_INCREMENT,
                      `class` varchar(255) DEFAULT NULL,
-                     `last_updated` timestamp,
+                     `last_updated` datetime,
                      `recycled` tinyint DEFAULT 0,
                       PRIMARY KEY (`id`)
                       ) ENGINE=InnoDB DEFAULT CHARSET=latin1~
@@ -103,7 +103,6 @@ sub ensure_datastore {
                 $self->{DBH}->do( $definitions{$table} );
             }
         } else {
-            print STDERR "Creating table $table\n";
             $self->{DBH}->do( $definitions{$table} );
         }
     }
@@ -182,6 +181,7 @@ sub list_delete {
     my( $actual_index ) = $val ? 
 	$self->_selectrow_array( "SELECT field FROM field WHERE obj_id=? AND ( value=? OR ref_id=? )", $list_id, $val, $val ) :
 	$idx;
+    $actual_index ||= 0;
 
     $self->_do( "DELETE FROM field WHERE obj_id=? AND field=?", $list_id, $actual_index );
     $self->_do( "UPDATE field SET field=field-1 WHERE obj_id=? AND field > ?", $list_id, $actual_index );

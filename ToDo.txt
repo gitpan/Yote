@@ -1,24 +1,27 @@
 
 Currently on my plate :
-  * reset password and confirm account links
-  * something to kill and restart server threads
+  * yote.js object handle objects
   * update madyote pages
+  * check logout link on mad yote index page
+  * madyote edit program - html in objects accessed from WebAppServer
+  * sendmail setup
+  * reset password and confirm account links
+
 
 _________________________________________________
 
 The Phases :
-  * GET IT WORKING        Alpha 0
-  * GET IT CORRECT        Alpha 1
-  * GET IT FAST           Alpha 2
+  * GET IT WORKING        Alpha 1
+  * GET IT CORRECT        Alpha 2
   * GET IT COMPREHENSIBLE BETA  1
   * GET IT PRETTY         BETA  2
   * ADD MORE FEATURES     BETA  3 / Release Candidate 1 
 
 Currently
-   Alpha 0 is complete
-   Alpha 1 is nearing completion
-   Alpha 2 is started in parallel
-   Beta  1 has a few things started   
+   Alpha 1 is complete
+   Alpha 2 is nearing completion
+   Beta  1 is started in parallel
+   Beta  2 has a few things started   
 
   * try/catch on the javscript side. dump the cache should there be exceptions that would warrent that.
 
@@ -38,6 +41,13 @@ Beta 3
 
 Beta 2
  GET IT PRETTY
+  * admin page prettier
+  * remove password display from launch
+  * do not show even scrambled password when generating config
+  * madyote edit program - html in objects accessed from WebAppServer. This means that YoteRoot will be checked for html files if the filesystem does not have them. This allows for easy editing of the web pages from the web, wiki style for admins. The files can be flushed to disk after editing. Controls to add pages should be there, etc.
+  -* add test for disabling / enabling accounts and logins
+  -* account and login enabling and disabling.
+  * Do not send whole object in a list if the client already is known to have it ( may just send the id in any case and the client would automatically fetch it )
   * Fix page counter
  -* Make simple WIKI for updating Yote News
   * build page editor
@@ -81,11 +91,13 @@ Beta 1
  Javascript Side
   * control table for scalar list entries ( javascript )
   * control_table sort
+  * nicer cron crontrol. Decide how cron gets done. Use minute or second? I'm guessing minute.
 
 Alpha 2
  GET IT CORRECT
 
  Perl Side
+  * sendmail setup
  -* unit tests for new permissions models for Yote::Obj, Yote::UserObj, Yote::RootObj
  -* cron reclaculate not working for scheduled times. fix
  -* check to see if recycling needs the rest shut down. Actually fixed in the IO modules so that objects can only be recycled after being completely written to disk. 
@@ -117,6 +129,7 @@ Alpha 2
 
 
  Javascript Side
+ -* javascript bug! if an object is returned in a list that already was in the client, bad things may happen
  -* test for pagination in unit_tests.html
  -* Control table : make sure that html tags it creates have appropriate classes. Use the new 'prefix_classname' variable
  -* update control table widget to use new paginate

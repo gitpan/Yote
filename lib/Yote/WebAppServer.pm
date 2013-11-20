@@ -188,6 +188,7 @@ sub start_server {
     #   - and the parent thread an event loop.
 
     my $root = Yote::YoteRoot::fetch_root();
+    Yote::ObjProvider::stow_all();
 
     # check for default account and set its password from the config.
     $root->_check_root( $args->{ root_account }, $args->{ root_password } );
@@ -253,7 +254,6 @@ sub start_server {
 		if( $@ ) {
 		    print STDERR "Error in Cron : $@ $!\n";
 		} 
-		
 		$self->__check_locked_for_dirty();
 		Yote::ObjProvider::start_transaction();
 		Yote::ObjProvider::stow_all();
@@ -388,11 +388,12 @@ sub __process_command {
 	die "Access Error" if $action =~ /^([gs]et|add_(once_)?to_|remove_(all_)?from)_/; # set may not be called directly on an object.
         my $account;
         if( $login ) {
+	    die "Access Error" if $login->get__is_disabled();
             $account = $app->__get_account( $login );
+	    die "Access Error" if $account->get__is_disabled();
 	    $account->set_login( $login ); # security measure to make sure login can't be overridden by a subclass of account
 	    $login->add_once_to__accounts( $account );
         }
-
         my $ret = $app_object->$action( $data, $account, $command->{e} );
 
 	my $dirty_delta = Yote::ObjManager::fetch_dirty( $login, $guest_token );
