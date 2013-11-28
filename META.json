@@ -49,7 +49,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.1011"
+         "version" : "0.1012"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -166,5 +166,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.1011"
+   "version" : "0.1012"
 }

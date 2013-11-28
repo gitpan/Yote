@@ -4,7 +4,7 @@
  * Copyright (C) 2012 Eric Wolf
  * This module is free software; it can be used under the terms of the artistic license
  *
- * Version 0.023
+ * Version 0.024
  */
 $.yote.util = {
     ids:0,
@@ -25,6 +25,14 @@ $.yote.util = {
 	    return buf;
 	}
 	return date.toUTCString();
+    },
+
+    registered_items : {},
+
+    register_items:function( hashed_items ) {
+	for( var key in hashed_items ) {
+	    this.registered_items[ key ] = hashed_items[ key ];
+	}
     },
 
     button_actions:function( args ) {
@@ -134,7 +142,8 @@ $.yote.util = {
 	    stop_edit : function() {
 		var me = editor;
 		var val = item.get( field ) || '';
-		val = val.replace( /[\n\r]/g, '<BR>' );
+		// do filtering here
+		//val = val.replace( /[\n\r]/g, '<BR>' );
 		$( '#' + me.div_id ).empty().append( val );
 		me.go_normal();
 		$.yote.util.implement_edit( me.item, me.field, me.on_edit_function );
@@ -192,7 +201,7 @@ $.yote.util = {
 		var me = editor;
 		if( $( '#' + me.canc_id ).length == 0 ) {
 		    $( '#' + me.div_id ).addClass( 'edit_ready' );
-		    $( '#' + me.div_id ).click( function() { console.log( ['click',me.go_edit] );me.go_edit() } );
+		    $( '#' + me.div_id ).click( function() { me.go_edit() } );
 		}
 	    },
 
@@ -440,7 +449,7 @@ $.yote.util = {
 
 	    var ptab = {
 		obj          : args[ 'obj' ],
-		list_name    : args[ 'list_name' ],
+		container_name    : args[ 'container_name' ],
 		size         : args[ 'size' ] || 100,
 		col_names    : args[ 'col_names' ],
 		title        : args[ 'title' ] || '',
@@ -468,7 +477,7 @@ $.yote.util = {
 		if( ptab.col_names ) {
 		    tab.add_header_row( ptab.col_names );
 		}
-		var hash = ptab.obj[ 'paginate_hash' ]( [ ptab.list_name, ptab.size + 1, start ] );
+		var hash = ptab.obj[ 'paginate_hash' ]( [ ptab.container_name, ptab.size + 1, start ] );
 		var max = hash.length() < ptab.size ? hash.length() : ptab.size;
 		var keys = hash.keys();
 		for( var i=0; i < max ; i++ ) {
@@ -632,9 +641,9 @@ $.yote.util = {
 				      $( '#pw' ).val(),
 				      function( msg ) {
 					  if( thislc.access_test( thislc.app.account() ) ) {
-					      if( typeof thislc.on_login_fun === 'function' ) 
+					      if( typeof thislc.on_login_fun === 'function' )
 						  thislc.on_login_fun();
-					      if( typeof thislc.after_login_fun === 'function' ) 
+					      if( typeof thislc.after_login_fun === 'function' )
 						  thislc.after_login_fun();
 					  } else if( thislc.logged_in_fail_msg ) {
 					      thislc.msg_function( thislc.logged_in_fail_msg, 'error' );
@@ -653,18 +662,18 @@ $.yote.util = {
 	lc.on_logout_fun = args[ 'on_logout_function' ] || lc.make_login;
 	lc.on_login_fun = args[ 'on_login_fun' ]  || lc.on_login;
 	if( lc.access_test( lc.app.account() ) ) {
-	    if( typeof lc.on_login_fun === 'function' ) 
+	    if( typeof lc.on_login_fun === 'function' )
 		lc.on_login_fun();
-	    if( typeof lc.after_login_fun === 'function' ) 
+	    if( typeof lc.after_login_fun === 'function' )
 		lc.after_login_fun();
 	} else {
 	    if( lc.logged_in_fail_msg ) {
 		lc.msg_function( lc.logged_in_fail_msg, 'error' );
 		$.yote.logout();
 	    }
-	    if( typeof lc.on_logout_fun === 'function' ) 
+	    if( typeof lc.on_logout_fun === 'function' )
 		lc.on_logout_fun();
-	    if( typeof lc.after_logout_fun === 'function' ) 
+	    if( typeof lc.after_logout_fun === 'function' )
 		lc.after_logout_fun();
 	}
 
@@ -726,6 +735,89 @@ $.yote.util = {
 	};
     }, //cols_edit
 
+
+    init_el:function(el) {
+	var ct_id = el.attr( 'id' );
+	var item = el.attr( 'item' );
+	var args = { attachpoint : '#' + ct_id };
+
+
+	if( el.attr( 'is_admin' ) == 'root' && ! $.yote.is_root() ) {
+	    el.empty();
+	    return;
+	}
+
+	var fields = [
+	    'container_name', 'paginate_type', 'paginate_order', 'is_admin',
+	    'suppress_table', 'title', 'description', 'prefix_classname',
+	    'include_remove', 'remove_button_text', 'remove_column_text',
+	    'new_attachpoint',
+	    'new_button', 'new_title', 'new_description',
+
+	    'column_headers', 'columns', 'new_columns', 'new_columns_required',
+	    'new_required_by_index', 'new_column_titles', 'new_column_placeholders',
+
+	    'item',
+	    'after_load', 'after_render', 'show_when_empty','remove_function',
+	    'new_required_by_function', 'new_function', 'after_new_function',
+
+	    'control_table_name'
+	];
+	var attr, i, fld;
+	for( i in fields ) {
+	    fld = fields[i];
+	    attr_val = el.attr( fld );
+	    if( typeof attr_val == 'string' ) {
+		// json
+		if( attr_val.charAt(0) == '[' || attr_val.charAt(0) == '{' ) {
+		    args[ fld ] = eval( attr_val );
+		}
+		// function
+		else if( attr_val.charAt(0) == '*' ) {
+		    var fs = attr_val.substring(1);
+		    var f = eval( '['+fs+']' );
+		    args[ fld ] = f[0];
+		}
+
+		// reference
+		else if( attr_val.charAt(0) == '$' ) {
+		    args[ fld ] = $.yote.util.registered_items[ attr_val.substring(1) ];
+		}
+
+		else {
+		    args[ fld ] = attr_val;
+		}
+	    } //if a string
+	} //each field
+
+	var ct = $.yote.util.control_table( args );
+	if( args[ 'control_table_name' ] ) {
+	    window[ args[ 'control_table_name' ] ] = ct;
+	}
+	return;
+    }, //init_el
+
+    init_ui:function() {
+	var may_need_init = false;
+	$( '.control_table' ).each( function() {
+	    var el = $( this );
+	    // init can be called multiple times, but only
+	    // inits on the first time
+	    if( el.attr( 'has_init' ) == 'true' ) {
+		return;
+	    }
+	    el.attr( 'has_init', 'true' );
+	    $.yote.util.init_el(el);
+	    may_need_init = true;
+	} ); //each div
+
+	// run this to make sure no new control tables were created 
+	// as part of the next round
+	if( may_need_init ) {
+	    $.yote.util.init_ui();
+	}
+    }, //init_ui
+
     // this tool is to create a table where the rows correspond to a list in a target
     // objects and the end user can add or remove the rows, or manipulate them
     control_table:function( args ) {
@@ -735,7 +827,7 @@ $.yote.util = {
 
 	    /* PAGINATION */
 	    start		: 0,                                      // pagination start
-	    plimit		: args[ 'plimit' ] || 10,                 // paginatoin limit
+	    plimit		: args[ 'plimit' ],                       // pagination limit
 	    show_count          : typeof args[ 'show_count' ] === 'undefined' ? true : args[ 'show_count' ],
 
 	    search_fun		: args[ 'search_function' ],              // optional alternate search function. Uses the default. which is search_list
@@ -743,7 +835,7 @@ $.yote.util = {
 
 	    /* DATA */
 	    item		: args[ 'item' ],                          // item that contains the list
-	    list_name		: args[ 'list_name' ],                     //   name of list attached to item
+	    container_name      : args[ 'container_name' ],                     //   name of list attached to item
 	    paginate_type	: args[ 'paginate_type' ] || 'list',       //   list or hash
 	    paginate_order	: args[ 'paginate_order' ] || 'forward',   //   forward or backwards
 	    is_admin            : args[ 'is_admin' ] || false,
@@ -831,9 +923,9 @@ $.yote.util = {
 			paginate_function = function() {
 			    if( it.search_fun ) {
 				// TODO : make these into an argument list
-				return it.search_fun( [ it.list_name, it.search_on, it.terms, it.plimit + 1, it.start ] );
+				return it.search_fun( [ it.container_name, it.search_on, it.terms, it.plimit + 1, it.start ] );
 			    } else {
-				return it.item.paginate( { name : it.list_name, limit : it.plimit + 1, skip : it.start,
+				return it.item.paginate( { name : it.container_name, limit : it.plimit + 1, skip : it.start,
 							   search_fields : it.search_on, search_terms : it.terms,
 							   return_hash : it.paginate_type != 'list' ? 1 : 0,
 							   reverse : it.paginate_order != 'forward' ? 1 : 0 } );
@@ -842,15 +934,15 @@ $.yote.util = {
 		    }
 		    else {
 			paginate_function = function() {
-			    return it.item.paginate( { name : it.list_name, limit : it.plimit + 1, return_hash : it.paginate_type != 'list' ? 1 : 0, skip : it.start, reverse : it.paginate_order != 'forward' ? 1 : 0 } );
+			    return it.item.paginate( { name : it.container_name, limit : it.plimit + 1, return_hash : it.paginate_type != 'list' ? 1 : 0, skip : it.start, reverse : it.paginate_order != 'forward' ? 1 : 0 } );
 			}
 		    }
 		} )( me );
 
 
 		// calculated
-		var count          = me.item.count( me.list_name );
-
+		var count          = me.item.count( me.container_name );
+		me.plimit          = me.plimit ? me.plimit : count;
 		var buf = me.title ? '<span class="' + me._classes( '_title' ) + '">' + me.title + '</span>' : '';
 		buf    += me.description ? '<span class="' + me._classes( '_description' ) + '">' + me.description + '</span>' : '';
 
@@ -923,7 +1015,7 @@ $.yote.util = {
 				    newitem.set( nc, val );
 				}
 			    } //each column
-			    it.item.add_to( { name : it.list_name, items : [ newitem ] } );
+			    it.item.add_to( { name : it.container_name, items : [ newitem ] } );
 			    if( it.after_new_fun ) {
 				it.after_new_fun( newitem );
 			    }
@@ -944,6 +1036,7 @@ $.yote.util = {
 		}
 
 		var items = paginate_function();
+
 		var max = items.length() > me.plimit ? me.plimit : items.length();
 
 		if( me.show_count ) {
@@ -969,11 +1062,18 @@ $.yote.util = {
 				      : key );
 
 			    for( var j = 1 ; j < me.columns.length; j++ ) {
-				row.push( typeof me.columns[ j ] == 'function' ?
+				var ctype = typeof me.columns[ j ];
+				if( ctype == 'string' ) {
+				    if( me.columns[ j ].charAt(0) == '*' ) {
+					me.columns[j] = $.yote.util.col_edit( me.columns[j].substring(1) );
+					ctype = 'function';
+				    }
+				}
+				row.push( ctype == 'function' ?
 					  me.columns[ j ]( item, true ) :
-					  typeof me.columns[ j ] == 'object' ?
+					  ctype == 'object' ?
 					  me.columns[ j ][ 'render' ]( item, key )
-					  : item.get( me.columns[ j ] )
+					  :item.get( me.columns[ j ] )
 					);
 			    }
 			    if( me.include_remove ) {
@@ -993,9 +1093,15 @@ $.yote.util = {
 			var item = items.get( i );
 			var row = [];
 			for( var j = 0 ; j < me.columns.length; j++ ) {
-			    row.push( typeof me.columns[ j ] == 'function' ?
+			    var ctype = typeof me.columns[ j ];
+			    if( ctype == 'string' && me.columns[ j ].charAt(0) == '*' ) {
+				me.columns[j ] = $.yote.util.col_edit( me.columns[j].substring(1) );
+				ctype = 'function';
+			    }
+
+			    row.push( ctype == 'function' ?
 				      me.columns[ j ]( item, true ) :
-				      typeof me.columns[ j ] == 'object' ?
+				      ctype == 'object' ?
 				      me.columns[ j ][ 'render' ]( item, me.start + i )
 				      : item.get( me.columns[ j ] )
 				    );
@@ -1098,7 +1204,7 @@ $.yote.util = {
 				if( me.remove_fun ) {
 				    me.remove_fun( it, me.start + idx );
 				} else {
-				    me.item.remove_from( { name : me.list_name, items : [ it ] } );
+				    me.item.remove_from( { name : me.container_name, items : [ it ] } );
 				}
 				var to = me.start - 1;
 				if( to < 0 ) to = 0;
@@ -1125,7 +1231,7 @@ $.yote.util = {
 				if( me.remove_fun ) {
 				    me.remove_fun( it, me.start + idx );
 				} else {
-				    me.item.remove_from( { name : me.list_name, items : [ it ] } );
+				    me.item.remove_from( { name : me.container_name, items : [ it ] } );
 				}
 				var to = me.start - 1;
 				if( to < 0 ) to = 0;
