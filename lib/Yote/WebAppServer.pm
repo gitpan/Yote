@@ -16,13 +16,14 @@ use POSIX qw(strftime);
 
 use Yote::AppRoot;
 use Yote::ConfigData;
-use Yote::ObjManager;
 use Yote::FileHelper;
+use Yote::ObjManager;
 use Yote::ObjProvider;
+use Yote::IO::Mailer;
 
 use vars qw($VERSION);
 
-$VERSION = '0.098';
+$VERSION = '0.099';
 
 # %oid2lockdata stores object id to a string containg locking process id, and last saved time.
 #   The resolution scheme is for the requesting process to unlock (and possibly save) objects that it has locked that are being requested
@@ -181,6 +182,7 @@ sub start_server {
 		      && $Yote::WebAppServer::ERR->autoflush;
 
     Yote::ObjProvider::init( %$args );
+    Yote::IO::Mailer::init( %$args );
 
     # fork out for three starting threads
     #   - one a multi forking server (parent class)
@@ -191,7 +193,7 @@ sub start_server {
     Yote::ObjProvider::stow_all();
 
     # check for default account and set its password from the config.
-    $root->_check_root( $args->{ root_account }, $args->{ root_password } );
+    $root->_update_master_root( $args->{ root_account }, $args->{ root_password } );
 
 
     # make sure the filehelper knows where the data directory is
@@ -224,7 +226,6 @@ sub start_server {
     my $cron = $root->get__crond();
     Yote::ObjProvider::flush_all_volatile();
     $self->__unlock_all();
-    
 
     while( 1 ) {
 	sleep( 5 );
@@ -238,7 +239,6 @@ sub start_server {
 	while( scalar( keys %$threads ) < $self->{ args }{ threads } ) {
 	    $self->__start_server_thread;
 	}
-	
 	my $cron_entries = $cron->entries();
 	Yote::ObjProvider::flush_all_volatile();
 	$self->__unlock_all();
@@ -390,6 +390,7 @@ sub __process_command {
         if( $login ) {
 	    die "Access Error" if $login->get__is_disabled();
             $account = $app->__get_account( $login );
+	    die "Access Error" if $app->get_requires_validation() && ! $login->get__is_validated();
 	    die "Access Error" if $account->get__is_disabled();
 	    $account->set_login( $login ); # security measure to make sure login can't be overridden by a subclass of account
 	    $login->add_once_to__accounts( $account );

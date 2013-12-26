@@ -4,10 +4,24 @@
  * Copyright (C) 2012 Eric Wolf
  * This module is free software; it can be used under the terms of the artistic license
  *
- * Version 0.024
+ * Version 0.025
  */
 $.yote.util = {
     ids:0,
+
+    url_params:function() {
+	if( window.location.href.indexOf('?') == -1 ) {
+	    return {};
+	}
+        var parts  = window.location.href.split('?');
+        var params = parts[1].split('&');
+        var ret = {};
+        for( var i=0; i<params.length; ++i ) {
+            var pair = params[i].split('=');
+	    ret[ pair[0] ] = pair[1];
+        }
+	return ret;
+    }, //url_params
 
     format_date: function( date, format ) {
 	if( format ) {
@@ -144,7 +158,11 @@ $.yote.util = {
 		var val = item.get( field ) || '';
 		// do filtering here
 		//val = val.replace( /[\n\r]/g, '<BR>' );
-		$( '#' + me.div_id ).empty().append( val );
+		if( $( '#' + me.div_id ).attr( 'as_html' ) == 'true' ) {
+		    $( '#' + me.div_id ).empty().append( val );
+		} else {
+		    $( '#' + me.div_id ).empty().text( val );
+		}
 		me.go_normal();
 		$.yote.util.implement_edit( me.item, me.field, me.on_edit_function );
 	    }, //implement_edit.stop_edit
@@ -208,20 +226,27 @@ $.yote.util = {
 	    init : function() {
 		var me = editor;
 		$( '#' + me.div_id ).mouseleave( function() { me.go_normal() } ).mouseenter( function() { me.show_edit() } );
+		var val = item.get( field ) || '';
+		if( $( '#' + me.div_id ).attr( 'as_html' ) == 'true' ) {
+		    $( '#' + me.div_id ).empty().append( val );
+		} else {
+		    $( '#' + me.div_id ).empty().text( val );
+		}
 	    }
 	}; //editor
 	editor.init();
 	return editor;
     }, //implement_edit
 
-    prep_edit:function( item, fld, extra, as_text_area ) {
-	var val = item.get( fld ) || '';
+    prep_edit:function( item, fld, extra, as_html ) {
 	var extr = extra || [];
 	var div_id   = 'ed_' + item.id + '_' + fld;
-	val = val.replace( /[\n\r]/g, '<BR>' );
-	var txt = as_text_area ? '<div CLASS="input_div ' + extr.join(' ') + '" id="' + div_id + '"><textarea>' + val + '</textarea></div>' :
-	    '<DIV CLASS="input_div ' + extr.join(' ') + '" id="' + div_id + '">' + val + '</div>';
-	//maybe something here to make sure the val does not contain certain tags, and contains valid tags
+	var txt;
+	if( as_html ) {
+	    txt = '<DIV CLASS="input_div ' + extr.join(' ') + '" as_html="true" id="' + div_id + '"></div>';
+	} else {
+	    txt = '<DIV CLASS="input_div ' + extr.join(' ') + '" id="' + div_id + '"></div>';
+	}
 	return txt;
     }, //prep_edit
 
@@ -229,7 +254,6 @@ $.yote.util = {
 	var val = item.get( fld ) || '';
 	var extr = extra || [];
 	var div_id   = 'ed_' + item.id + '_' + fld;
-//	val = val.replace( /[\n\r]/g, '<BR>' );
 	$( anchor ).empty().append( '<textarea CLASS="input_div ' + extr.join(' ') + '" id="' + div_id + '"></textarea>' );
 	$( '#' + div_id ).val( val );
 	$.yote.util.implement_edit( item, fld ).go_edit();
@@ -560,6 +584,39 @@ $.yote.util = {
 		} );
 	    }, //on_login
 
+	    make_recovery:function() {
+		var thislc = this;
+		thislc.msg_function('');
+		$( thislc.attachpoint ).empty().append(
+		    '<div class="panel core" id="recover_acct_div">' +
+			'<DIV id="recover_acct_msg"></DIV>' +
+			'<P>' +
+			'<input type="email" placeholder="Email (optional)" id="em" size="8">' +
+			'<A id="recover_acct_b" class="hotlink" href="#">Recover</A> <A HREF="#" id="cancel_b">[X]</A>' +
+			'</div>'
+		);
+		$( '#em' ).focus();
+		$( '#cancel_b' ).click( function() {
+		    thislc.msg_function('');
+		    thislc.needs_login();
+		} );
+
+		$.yote.util.button_actions( {
+		    button : '#recover_acct_b',
+		    texts  : [ '#em' ],
+		    action : function() {
+			thislc.app.recover_password( 
+			    $( '#em' ).val(),
+			    function( msg ) {
+				thislc.msg_function( msg );
+			    },
+			    function( err ) {
+				thislc.msg_function( err, 'error' );
+			    } );
+		    } //action
+		} );
+	    }, //make_recovery
+	    
 	    make_create_login:function() {
 		var thislc = this;
 		thislc.msg_function('');
@@ -583,26 +640,29 @@ $.yote.util = {
 		    texts  : [ '#username', '#em', '#pw' ],
 		    required : [ '#username', '#pw' ],
 		    action : function() {
-			$.yote.create_login( $( '#username' ).val(), $( '#pw' ).val(), $( '#em' ).val(),
-					     function( msg ) {
-						 if( thislc.access_test( thislc.app.account() ) ) {
-						     thislc.msg_function( msg );
-						     if( typeof thislc.on_login_fun === 'function' )
-							 thislc.on_login_fun();
-						     if( typeof thislc.after_login_fun === 'function' )
-							 thislc.after_login_fun();
-						 } else if( thislc.logged_in_fail_msg ) {
-						     thislc.msg_function( thislc.logged_in_fail_msg, 'error' );
-						     $.yote.logout();
-						 }
-					     },
-					     function( err ) {
-						 thislc.msg_function( err, 'error' );
-					     }  );
-		    }
+			var login = thislc.app.create_login(
+			    { 
+				h : $( '#username' ).val(), 
+				p : $( '#pw' ).val(),
+				e : $( '#em' ).val() },
+			    function( msg ) {
+				if( thislc.access_test( thislc.app.account() ) ) {
+				    thislc.msg_function( msg );
+				    if( typeof thislc.on_login_fun === 'function' )
+					thislc.on_login_fun();
+				    if( typeof thislc.after_login_fun === 'function' )
+					thislc.after_login_fun();
+				} else if( thislc.logged_in_fail_msg ) {
+				    thislc.msg_function( thislc.logged_in_fail_msg, 'error' );
+				    $.yote.logout();
+				}
+			    },
+			    function( err ) {
+				thislc.msg_function( err, 'error' );
+			    }  );
+		    } //action
 		} );
-
-	    },
+	    }, //make_create_login
 
 	    needs_login:function() {
 		var thislc = this;
@@ -621,8 +681,9 @@ $.yote.util = {
 			'<DIV id="login_msg"></DIV>' +
 			'Log In' +
 			'<input type="text" id="username" placeholder="Name" size="6">' +
-			'<input type="password" placeholder="Password" id="pw" size="6"> <BUTTON type="BUTTON" id="log_in_b">Log In</BUTTON></P> ' +
-			'<A id="create_account_b" class="hotlink" href="#">Create an Account</A> <A id="cancel_b" href="#">[X]</A>' +
+			'<input type="password" placeholder="Password" id="pw" size="6"> <BUTTON type="BUTTON" id="log_in_b">Log In</BUTTON> <A id="cancel_b" href="#">[X]</A></P> ' +
+			'<A id="reset_password_b" class="hotlink" href="#">Forgot Password</A><BR>' +
+			'<A id="create_account_b" class="hotlink" href="#">Create an Account</A> ' +
 			'</div>'
 		);
 		$( '#username' ).focus();
@@ -656,9 +717,14 @@ $.yote.util = {
 		    }
 		} );
 
+		$( '#reset_password_b' ).click( function() { thislc.make_recovery(); } );
 		$( '#create_account_b' ).click( function() { thislc.make_create_login(); } );
 	    } //make_login
 	};
+	if( ! lc.access_test( lc.app.account() ) ) {
+	    lc.make_login();
+	}
+ 
 	lc.on_logout_fun = args[ 'on_logout_function' ] || lc.make_login;
 	lc.on_login_fun = args[ 'on_login_fun' ]  || lc.on_login;
 	if( lc.access_test( lc.app.account() ) ) {
@@ -680,7 +746,7 @@ $.yote.util = {
 	return lc;
     }, //login_control
 
-    check_edit:function( fld, checked_fun, unchecked_fun, extra_classes, on_edit_f ) {
+    check_edit:function( fld, checked_fun, unchecked_fun, extra_classes ) {
 	return function( item, is_prep ) {
 	    var div_id = 'ed_' + item.id + '_' + fld;
 	    if( is_prep ) {
@@ -694,6 +760,7 @@ $.yote.util = {
 			if( checked_fun ) {
 			    checked_fun(item);
 			} else {
+
 			    item.set( fld, 1 );
 			}
 		    } else {
@@ -704,6 +771,20 @@ $.yote.util = {
 			}
 		    }
 		} );
+	    }
+	};
+    },
+
+    template_edit:function( template_name, extra_classes, on_edit_f ) {
+	return function( item, is_prep ) {
+	    var tmplt = item.get( template_name );
+	    if( ! tmplt ) {
+		tmplt = $.yote.fetch_root().new_template();
+	    }
+	    if( is_prep ) {
+		return $.yote.util.prep_edit( tmplt, 'text', extra_classes );
+	    } else {
+		$.yote.util.implement_edit( tmplt, 'text', on_edit_f );
 	    }
 	};
     },
@@ -735,6 +816,11 @@ $.yote.util = {
 	};
     }, //cols_edit
 
+    reset_els:function(els) {
+	for( var i in  els ) {
+	    $( els[ i ] ).attr( 'has_init', 'false' );
+	}
+    }, //reset_els
 
     init_el:function(el) {
 	var ct_id = el.attr( 'id' );
@@ -742,15 +828,18 @@ $.yote.util = {
 	var args = { attachpoint : '#' + ct_id };
 
 
-	if( el.attr( 'is_admin' ) == 'root' && ! $.yote.is_root() ) {
+	if( el.attr( 'requires_root' ) == 'true' && ! $.yote.is_root() ) {
 	    el.empty();
 	    return;
 	}
 
 	var fields = [
+	    'edit_requires','field',
 	    'container_name', 'paginate_type', 'paginate_order', 'is_admin',
+	    'plimit',
 	    'suppress_table', 'title', 'description', 'prefix_classname',
 	    'include_remove', 'remove_button_text', 'remove_column_text',
+
 	    'new_attachpoint',
 	    'new_button', 'new_title', 'new_description',
 
@@ -790,22 +879,28 @@ $.yote.util = {
 	    } //if a string
 	} //each field
 
-	var ct = $.yote.util.control_table( args );
-	if( args[ 'control_table_name' ] ) {
-	    window[ args[ 'control_table_name' ] ] = ct;
+	if( el.hasClass( 'control_table' ) && args['item']) {
+	    var ct = $.yote.util.control_table( args );
+	    if( args[ 'control_table_name' ] ) {
+		window[ args[ 'control_table_name' ] ] = ct;
+	    }
+	}
+	else if( el.hasClass( 'yote_panel' ) && args['item'] ) {
+	    $.yote.util.yote_panel( args );
 	}
 	return;
     }, //init_el
 
     init_ui:function() {
 	var may_need_init = false;
-	$( '.control_table' ).each( function() {
+	$( '.control_table,.yote_panel' ).each( function() {
 	    var el = $( this );
 	    // init can be called multiple times, but only
 	    // inits on the first time
 	    if( el.attr( 'has_init' ) == 'true' ) {
 		return;
 	    }
+
 	    el.attr( 'has_init', 'true' );
 	    $.yote.util.init_el(el);
 	    may_need_init = true;
@@ -817,6 +912,37 @@ $.yote.util = {
 	    $.yote.util.init_ui();
 	}
     }, //init_ui
+
+    yote_panel:function( args ) {
+	var item = args[ 'item' ];
+	var field = args[ 'field' ];
+	if( item && field ) {
+	    var use_html = false;
+	    if( field.charAt(0) == '#' ) {
+		use_html = true;
+		field = field.substring(1);
+	    }
+	    if( ( args[ 'edit_requires' ] == 'root' && $.yote.is_root() ) ) {
+		$( args[ 'attachpoint' ] ).empty().append(
+		    $.yote.util.prep_edit( item, field, '', use_html )
+		);
+		$.yote.util.implement_edit( item, field );
+	    }
+	    else {
+		if( use_html ) {
+		    $( args[ 'attachpoint' ] ).empty().append(
+			item.get( field ) 
+		    );
+		}
+		else {
+		    $( args[ 'attachpoint' ] ).text(
+			item.get( field ) 
+		    );
+		}
+	    }
+	}
+    },
+
 
     // this tool is to create a table where the rows correspond to a list in a target
     // objects and the end user can add or remove the rows, or manipulate them
@@ -1035,9 +1161,14 @@ $.yote.util = {
 		    tab.add_header_row( ch, me._classes_array( 'row' ), me._classes_array( 'cell' ) );
 		}
 
-		var items = paginate_function();
+		try {
+		    var items = paginate_function();
+		    var max = items.length() > me.plimit ? me.plimit : items.length();
+		}
+		catch( err ) {
+		    return;
+		}
 
-		var max = items.length() > me.plimit ? me.plimit : items.length();
 
 		if( me.show_count ) {
 		    if( max == count ) {

@@ -124,28 +124,6 @@ $.yote = {
 	return ret;
     }, //init
 
-    create_login:function( handle, password, email, passhandler, failhandler ) {
-	var root = this.fetch_root();
-	if( typeof root === 'object' ) {
-	    root.create_login( { h:handle, p:password, e:email },
-			       function(res) {
-				   $.yote.token = res.get( 't' ) || 0;
-				   $.yote.login_obj = res.get( 'l' );
-				   $.cookie( 'yoken', $.yote.token );
-				   if( typeof passhandler === 'function' ) {
-				       passhandler(res);
-				   }
-			       },
-			       failhandler );
-	    return $.yote.login_obj;
-	} else if( typeof failhanlder === 'function' ) {
-	    failhandler('lost connection to yote server');
-	} else {
-	    _error('lost connection to yote server');
-	}
-    }, //create_login
-
-
     fetch_account:function() {
 	return this.fetch_root().account();
     },
@@ -177,7 +155,7 @@ $.yote = {
     }, //fetch_root
 
     is_root:function() {
-	return this.is_logged_in() && this.get_login().is_root();
+	return this.is_logged_in() && 1*this.get_login().is_root();
     },
 
     get_login:function() {
@@ -195,7 +173,7 @@ $.yote = {
 			function(res) {
 			    $.yote.token = res.get( 't' ) || 0;
 			    $.yote.login_obj = res.get( 'l' );
-			    $.cookie( 'yoken', $.yote.token );
+			    $.cookie( 'yoken', $.yote.token, { path : '/' } );
 			    if( typeof passhandler === 'function' ) {
 				passhandler(res);
 			    }
@@ -213,7 +191,7 @@ $.yote = {
 	$.yote.fetch_root().logout();
 	$.yote.login_obj = undefined;
 	$.yote.token = 0;
-	$.cookie( 'yoken', '' );
+	$.cookie( 'yoken', '', { path : '/' } );
     }, //logout
 
     /* general functions */
@@ -315,23 +293,6 @@ $.yote = {
             return resp;
         }
     }, //message
-
-    remove_login:function( handle, password, email, passhandler, failhandler ) {
-	var root = this.fetch_root();
-	if( typeof root === 'object' ) {
-	    root.remove_login( { h:handle, p:password, e:email },
-			       function(res) {
-				   $.yote.token = 0;
-				   $.yote.login_obj = undefined;
-				   passhandler(res);
-			       },
-			       failhandler );
-	} else if( typeof failhanlder === 'function' ) {
-	    failhandler('lost connection to yote server');
-	} else {
-	    _error('lost connection to yote server');
-	}
-    }, //remove_login
 
     /* the upload function takes a selector returns a function that sets the name of the selector to a particular value,
        which corresponds to the parameter name in the inputs.

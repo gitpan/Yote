@@ -11,15 +11,12 @@ no warnings 'uninitialized';
 use Yote::Cron;
 use Yote::Login;
 use Yote::RootObj;
+use Yote::SimpleTemplate;
 use Yote::UserObj;
 
 use Email::Valid;
-use Mail::Sender;
 
 use base 'Yote::AppRoot';
-
-our $HANDLE_CACHE = {};
-our $EMAIL_CACHE = {};
 
 $Yote::YoteRoot::ROOT_INIT = 0;
 
@@ -29,13 +26,17 @@ $Yote::YoteRoot::ROOT_INIT = 0;
 sub _init {
     my $self = shift;
     $self->set__apps({});
+    $self->set__app_mutex( new Yote::Obj() );
+    $self->set__account_mutex( new Yote::Obj() );
     $self->set__handles({});
     $self->set__emails({});
     $self->set__crond( new Yote::Cron() );
     $self->set__application_lib_directories( [] );
+    $self->set__validations( {} );
     $self->set___ALLOWS( {} );
     $self->set___ALLOWS_REV( {} );
     $self->set___DIRTY( {} );
+    $self->SUPER::_init();
 } #_init
 
 # ------------------------------------------------------------------------------------------
@@ -43,59 +44,6 @@ sub _init {
 # ------------------------------------------------------------------------------------------
 
 
-#
-# Creates a login with credentials provided
-#   (client side) use : create_login({h:'handle',e:'email',p:'password'});
-#             returns : { l => login object, t => token }
-#
-sub create_login {
-    my( $self, $args, $dummy, $env ) = @_;
-
-    #
-    # validate login args. Needs handle (,email at some point)
-    #
-    my( $handle, $email, $password ) = ( $args->{h}, $args->{e}, $args->{p} );
-    if( $handle ) {
-	my $lc_handle = lc( $handle );
-        if( $HANDLE_CACHE->{$lc_handle} || $self->_hash_has_key( '_handles', $lc_handle ) ) {
-            die "handle already taken";
-        }
-        if( $email ) {
-            if( $EMAIL_CACHE->{$email} || $self->_hash_has_key( '_emails', $email ) ) {
-                die "email already taken";
-            }
-            unless( Email::Valid->address( $email ) ) {
-                die "invalid email '$email'";
-            }
-        }
-        unless( $password ) {
-            die "password required";
-        }
-
-	$EMAIL_CACHE->{$email}      = 1 if $email;
-	$HANDLE_CACHE->{$lc_handle} = 1;
-
-        my $new_login = new Yote::Login();
-
-	$new_login->set__is_root( 0 );
-        $new_login->set_handle( $handle );
-        $new_login->set_email( $email );
-	my $ip = $env->{REMOTE_ADDR};
-        $new_login->set__created_ip( $ip );
-
-        $new_login->set__time_created( time() );
-
-        $new_login->set__password( Yote::ObjProvider::encrypt_pass($password, $new_login->get_handle()) );
-
-	$self->_hash_insert( '_emails', $email, $new_login ) if $email;
-	$self->_hash_insert( '_handles', $lc_handle, $new_login );
-	
-        return { l => $new_login, t => $self->_create_token( $new_login, $ip ) };
-    } #if handle
-
-    die "no handle given";
-
-} #create_login
 
 # returns cron object for root
 sub cron {
@@ -200,7 +148,7 @@ sub login {
 	my $lc_h = lc( $data->{h} );
 	my $ip = $env->{ REMOTE_ADDR };
         my $login = $self->_hash_fetch( '_handles', $lc_h );
-        if( $login && ($login->get__password() eq Yote::ObjProvider::encrypt_pass( $data->{p}, $login->get_handle()) ) ) {
+        if( $login && ( $login->get__password() eq Yote::ObjProvider::encrypt_pass( $data->{p}, $login->get_handle()) ) ) {
 	    die "Access Error" if $login->get__is_disabled();
 	    Yote::ObjManager::clear_login( $login, $env->{GUEST_TOKEN} );
             return { l => $login, t => $self->_create_token( $login, $ip ) };
@@ -242,6 +190,14 @@ sub new_root_obj {
     return $ret;
 } #new_root_obj
 
+sub new_template {
+    my( $self, $data, $acct ) = @_;
+    return "Access Error" unless $acct->get_login()->is_root();
+    my $ret = new Yote::SimpleTemplate();
+    $ret->set___creator( $acct );
+    return $ret;
+} #new_template
+
 sub new_user_obj {
     my( $self, $data, $acct ) = @_;
     my $ret = new Yote::UserObj( ref( $data ) ? $data : undef );
@@ -265,79 +221,6 @@ sub purge_app {
     die "Permissions Error";
 } #purge_app
 
-#
-# Sends an email to the address containing a link to reset password.
-#
-sub recover_password {
-    my( $self, $args ) = @_;
-
-    my $email    = $args->{e};
-    my $from_url = $args->{u};
-    my $to_reset = $args->{t};
-
-    my $login = $self->_hash_fetch( '_emails', $email );
-
-    if( $login ) {
-        my $now = time();
-        if( $now - $login->get__last_recovery_time() > (60*15) ) { #need to wait 15 mins
-            my $rand_token = int( rand 9 x 10 );
-            my $recovery_hash = $self->get__recovery_logins({});
-            my $times = 0;
-            while( $recovery_hash->{$rand_token} && ++$times < 100 ) {
-                $rand_token = int( rand 9 x 10 );
-            }
-            if( $recovery_hash->{$rand_token} ) {
-                die "error recovering password";
-            }
-            $login->set__recovery_from_url( $from_url );
-            $login->set__last_recovery_time( $now );
-            $login->set__recovery_tries( $login->get__recovery_tries() + 1 );
-            $recovery_hash->{$rand_token} = $login;
-            my $link = "$to_reset?t=$rand_token";
-	    my $sender = new Mail::Sender( {
-		smtp => 'localhost',
-		from => 'yote@localhost',
-					   } );
-	    $sender->MailMsg( { to => $email,
-				 subject => 'Password Recovery',
-				 msg => "<h1>Yote password recovery</h1> Click the link <a href=\"$link\">$link</a>",
-			       } );
-	    
-		
-        }
-	else {
-            die "password recovery attempt failed";
-        }
-    }
-    return "password recovery initiated";
-} #recover_password
-
-#
-# reset by a recovery link.
-#
-sub recovery_reset_password {
-    my( $self, $args ) = @_;
-
-    my $newpass        = $args->{p};
-    my $newpass_verify = $args->{p2};
-
-    die "Passwords don't match" unless $newpass eq $newpass_verify;
-    
-    my $rand_token     = $args->{t};
-    
-    my $recovery_hash = $self->get__recovery_logins({});
-    my $login = $recovery_hash->{$rand_token};
-    if( $login ) {
-        my $now = $login->get__last_recovery_time();
-        delete $recovery_hash->{$rand_token};
-        if( ( time() - $now ) < 3600 * 24 ) { #expires after a day
-            $login->set__password( Yote::ObjProvider::encrypt_pass( $newpass, $login->get_handle() ) );
-            return $login->get__recovery_from_url();
-        }
-    }
-    die "Recovery Link Expired or not valid";
-
-} #recovery_reset_password
 
 
 #
@@ -345,28 +228,29 @@ sub recovery_reset_password {
 #   (client side) use : remove_login({h:'handle',e:'email',p:'password'});
 #             returns : "deleted account"
 #
-sub remove_login {
-    my( $self, $args, $acct, $env ) = @_;
-    my $login = $acct->get_login();
-    if( $login && 
-        Yote::ObjProvider::encrypt_pass($args->{p}, $login->get_handle()) eq $login->get__password() &&
-        $args->{h} eq $login->get_handle() &&
-        $args->{e} eq $login->get_email() &&
-        ! $login->get_is__first_login() ) 
+sub _remove_login {
+    my( $self, $login, $password, $acct ) = @_;
+    if( $login &&
+	$login->_is( $acct->get_login() ) &&
+        Yote::ObjProvider::encrypt_pass($password, $login->get_handle()) eq $login->get__password() &&
+        ! $login->is_master_root() )
     {
-        delete $self->get__handles()->{$args->{h}};
-        delete $self->get__emails()->{$args->{e}};
-	delete $HANDLE_CACHE->{$args->{h}};
-	delete $EMAIL_CACHE->{$args->{e}};
+	my $account_mutex = $self->get__account_mutex();
+	$account_mutex->_lock();
+	my $handle = $login->get_handle();
+	my $email  = $login->get_email();
+        delete $self->get__handles()->{ $handle };
+        delete $self->get__emails()->{ $email };
         $self->add_to__removed_logins( $login );
+	$account_mutex->_unlock();
         return "deleted account";
-    } 
+    }
     die "unable to remove account";
-    
-} #remove_login
+
+} #_remove_login
 
 #
-# Removes root privs from a login. Do not use lightly. Does not remove the last root if there is one
+# Removes root privs from a login. Does not remove the last root if there is one
 #
 sub remove_root {
     my( $self, $login, $acct ) = @_;
@@ -384,29 +268,96 @@ sub remove_root {
 #
 # Makes sure there is a root account with the given credentials.
 #
-sub _check_root {
-    my( $self, $root_name, $encr_passwd ) = @_;
-    
-    my $lc_handle = lc( $root_name );
+sub _update_master_root {
+    my( $self, $master_root_handle, $master_root_password_hashed ) = @_;
 
-    my $root_login = $self->_hash_fetch( '_handles', $lc_handle );
-    
-    unless( $root_login ) {
-	$root_login = new Yote::Login();
-	$root_login->set_handle( $root_name );
-	$root_login->set__is_master_root( 1 );
+    my $lc_handle = lc( $master_root_handle );
 
-        $root_login->set__time_created( time() );
-
-	$self->_hash_insert( '_handles', $lc_handle, $root_login );	
+    my $old_root = $self->get__master_root();
+    if( $old_root ) {
+	if( $old_root->get_handle() ne $master_root_handle ) {
+	    $self->_hash_delete( '_handles', lc( $old_root->get_handle() ) );
+	    $old_root->set_handle( $master_root_handle );
+	    $self->_hash_insert( '_handles', $lc_handle, $old_root );	
+	}
+	if( $old_root->get__password() ne $master_root_password_hashed ) {
+	    $old_root->set__password( $master_root_password_hashed );
+	}
+	return $old_root;
     }
+
+    my $root_login = new Yote::Login();
+    $root_login->set_handle( $master_root_handle );
+    $root_login->set__is_validated(1);
+
+    $self->set__master_root( $root_login );
+
+    $root_login->set__time_created( time() );
+
+    $self->_hash_insert( '_handles', $lc_handle, $root_login );
+
     $root_login->set__is_root( 1 );
     $root_login->set__is_master_root( 1 );
 
-    $root_login->set__password( $encr_passwd );
+    $root_login->set__password( $master_root_password_hashed );
 
     return $root_login;
-} #_check_root
+} #_update_master_root
+
+#
+# Creates a login with credentials provided
+#   (client side) use : create_login({h:'handle',e:'email',p:'password'});
+#             returns : { l => login object, t => token }
+#
+sub _create_login {
+    my( $self, $handle, $email, $password, $env ) = @_;
+    if( $handle ) {
+	my $account_mutex = $self->get__account_mutex();
+	$account_mutex->_lock();
+
+	my $lc_handle = lc( $handle );
+        if( $self->_hash_has_key( '_handles', $lc_handle ) ) {
+	    $account_mutex->_unlock();
+            die "handle already taken";
+        }
+        if( $email ) {
+            if( $self->_hash_has_key( '_emails', $email ) ) {
+		$account_mutex->_unlock();
+                die "email already taken";
+            }
+            unless( Email::Valid->address( $email ) || $email =~ /\@localhost$/ ) {
+		$account_mutex->_unlock();
+                die "invalid email '$email' $Email::Valid::Details";
+            }
+        }
+        unless( $password ) {
+	    $account_mutex->_unlock();
+            die "password required";
+        }
+
+        my $new_login = new Yote::Login();
+
+	$new_login->set__is_root( 0 );
+        $new_login->set_handle( $handle );
+        $new_login->set_email( $email );
+	my $ip = $env->{REMOTE_ADDR};
+        $new_login->set__created_ip( $ip );
+
+        $new_login->set__time_created( time() );
+
+        $new_login->set__password( Yote::ObjProvider::encrypt_pass($password, $new_login->get_handle()) );
+
+	$self->_hash_insert( '_emails', $email, $new_login ) if $email;
+	$self->_hash_insert( '_handles', $lc_handle, $new_login );
+
+	$account_mutex->_unlock();
+
+        return $new_login;
+    } #if handle
+
+    die "no handle given";
+
+} #_create_login
 
 
 #
@@ -417,6 +368,38 @@ sub _create_token {
     my $token = int( rand 9 x 10 );
     $login->set__token( $token."x$ip" );
     return $login->{ID}.'-'.$token;
+}
+
+#
+# This takes a login object and
+# generates a login token, associates it with
+# the login and then returns it.
+#
+sub _register_login_with_validation_token {
+    my( $self, $login ) = @_;
+
+    my $validations = $self->get__validations();
+    my $rand_token = int( rand 9 x 10 );
+    while( $validations->{ $rand_token } ) {
+	$rand_token = int( rand 9 x 10 );
+    }
+
+    $validations->{ $rand_token } = $login;
+    $login->set__validation_token( $rand_token );
+
+    return $rand_token;
+
+} #_register_login_with_validation_token
+
+sub _validate {
+    my( $self, $token ) = @_;
+    my $validations = $self->get__validations();
+    my $login = $validations->{ $token };
+    if( $login ) {
+	$login->set__is_validated( 1 );
+	$login->set__validated_on( time() );
+    }
+    return $login;
 }
 
 1;
@@ -438,7 +421,7 @@ This is the first object and the root of the object graph. It stores user logins
 =item create_login( args )
 
 Create a login with the given client supplied args : h => handle, e => email, p => password.
-This checks to make sure handle and email address are not already taken. 
+This checks to make sure handle and email address are not already taken.
 This is invoked by the javascript call $.yote.create_login( handle, password, email )
 
 =item cron
@@ -483,7 +466,7 @@ Creates and returns a guest token, associating it with the calling IP address.
 
 =item login( { h: handle, p : password } )
 
-Attempts to log the account in with the given credentials. Returns a data structre with 
+Attempts to log the account in with the given credentials. Returns a data structre with
 the login token and the login object.
 
 =item logout
@@ -541,7 +524,7 @@ Hash of classname to app singleton.
 
 =item _emails
 
-Hash of email to login object.    
+Hash of email to login object.
 
 =item _handles
 

@@ -17,7 +17,7 @@ name: Yote
 provides:
   Yote:
     file: lib/Yote.pm
-    version: 0.1013
+    version: 0.1014
   Yote::Account:
     file: lib/Yote/Account.pm
     version: 0.05
@@ -36,12 +36,16 @@ provides:
   Yote::Hash:
     file: lib/Yote/Hash.pm
     version: 0.02
+  Yote::IO::Mailer:
+    file: lib/Yote/IO/Mailer.pm
   Yote::IO::Mongo:
     file: lib/Yote/IO/Mongo.pm
     version: 0.037
   Yote::IO::Mysql:
     file: lib/Yote/IO/Mysql.pm
     version: 0.034
+  Yote::IO::SMTP:
+    file: lib/Yote/IO/SMTP.pm
   Yote::IO::SQLite:
     file: lib/Yote/IO/SQLite.pm
     version: 0.035
@@ -71,6 +75,8 @@ provides:
   Yote::Sample::SimpleTodo:
     file: lib/Yote/Sample/SimpleToDo.pm
     version: 0.02
+  Yote::SimpleTemplate:
+    file: lib/Yote/SimpleTemplate.pm
   Yote::Test::Hello:
     file: lib/Yote/Test/Hello.pm
     version: 0.02
@@ -92,10 +98,13 @@ provides:
     file: lib/Yote/Util/Pages.pm
   Yote::WebAppServer:
     file: lib/Yote/WebAppServer.pm
-    version: 0.098
+    version: 0.099
   Yote::YoteRoot:
     file: lib/Yote/YoteRoot.pm
     version: 0.052
+recommends:
+  Authen::NTLM: 1
+  Digest::HMAC_MD5: 1
 requires:
   Aspect: 1.04
   Crypt::Passwd::XS: 0.601
@@ -115,4 +124,4 @@ requires:
   perl: v5.12.0
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.1013
+version: 0.1014

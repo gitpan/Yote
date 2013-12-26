@@ -7,16 +7,41 @@ package Yote::AppRoot;
 use strict;
 use warnings;
 
-use Yote::Obj;
-use Email::Valid;
+no warnings 'uninitialized';
+
 use MIME::Base64;
+
+use Yote::Obj;
 use Yote::Account;
+use Yote::SimpleTemplate;
 use Yote::YoteRoot;
 
 use base 'Yote::RootObj';
 
 use vars qw($VERSION);
 $VERSION = '0.087';
+
+sub _init {
+    my $self = shift;
+
+    my $hn = `hostname`;
+    chomp $hn;
+
+    $self->set_app_name( ref( $self ) );
+    $self->set_host_name( $hn );
+    $self->set_host_url( "http://$hn" );
+
+    $self->set_validation_email_from( 'yote@' . $hn );
+    $self->set_validation_link_template(new Yote::SimpleTemplate( { text=>'${hosturl}/val.html?t=${t}&app=${app}' } ) );
+    $self->set_validation_message_template(new Yote::SimpleTemplate({text=>'Welcome to ${app}, ${handle}. Click on this link to validate your email : ${link}'}));
+    $self->set_validation_subject_template(new Yote::SimpleTemplate( { text => 'Validate Your Account' } ) );
+
+    $self->set_recovery_email_from( 'yote@' . $hn );
+    $self->set_recovery_subject_template(new Yote::SimpleTemplate( { text => 'Recover Your Account' } ) );
+    $self->set_recovery_link_template(new Yote::SimpleTemplate( { text => '${hosturl}/recover.html?t=${t}&app=${app}' } ) );
+    $self->set_recovery_message_template(new Yote::SimpleTemplate({text=>'Click on <a href="${link}">${link}</a> to recover your account' } ) );
+    $self->SUPER::_init();
+} #_init
 
 # ------------------------------------------------------------------------------------------
 #      * PUBLIC API Methods *
@@ -30,6 +55,128 @@ sub account {
     my( $self, $data, $account ) = @_;
     return $account;
 } #account
+
+sub create_login {
+    my( $self, $args, $dummy, $env ) = @_;
+    my( $handle, $email, $password ) = ( $args->{h}, $args->{e}, $args->{p} );
+
+    if( $self->get_requires_validation() && ! $email ) {
+	die "Must specify valid email";
+    }
+
+    my $root = Yote::YoteRoot::fetch_root();
+    my $login = $root->_create_login( $handle, $email, $password, $env );
+
+    if( $self->get_requires_validation() ) {
+	my $rand_token = $root->_register_login_with_validation_token( $login );
+	my $link = $self->get_validation_link_template()->_fill( {
+	    t       => $rand_token,
+	    hosturl => $self->get_host_url(),
+								 } );
+	my $context = {
+	    handle => $handle,
+	    email  => $email,
+	    app    => $self->get_app_name( ref( $self ) ),
+	    link   => $link,
+	};
+
+	Yote::IO::Mailer::send_email(
+	    {
+		to      => $email,
+		from    => $self->get_validation_email_from( 'yote@' . $self->get_host_name() ),
+		subject => $self->get_validation_subject_template()->_fill( $context ),
+		msg     => $self->get_validation_message_template()->_fill( $context ),
+	    } );
+    } #requires validation
+
+    return { l => $login, t => $root->_create_token( $login, $env->{REMOTE_ADDR} ) };
+} #create_login
+
+#
+# Sends an email to the address containing a link to reset password.
+#
+sub recover_password {
+    my( $self, $email ) = @_;
+
+    my $root = Yote::YoteRoot::fetch_root();
+    my $login = $root->_hash_fetch( '_emails', $email );
+    if( $login ) {
+        my $now = time();
+        if( $now - $login->get__last_recovery_time() > (60*15) ) { #need to wait 15 mins
+            my $rand_token = int( rand 9 x 10 );
+            my $recovery_hash = $root->get__recovery_logins({});
+            my $times = 0;
+            while( $recovery_hash->{$rand_token} && ++$times < 100 ) {
+                $rand_token = int( rand 9 x 10 );
+            }
+            if( $recovery_hash->{$rand_token} ) {
+                die "error recovering password";
+            }
+
+	    $login->set__recovery_token( $rand_token );
+            $login->set__last_recovery_time( $now );
+            $login->set__recovery_tries( $login->get__recovery_tries() + 1 );
+
+            $recovery_hash->{$rand_token} = $login;
+
+	    my $link = $self->get_recovery_link_template()->_fill(
+		{
+		    t       => $rand_token,
+		    hosturl => $self->get_host_url(),
+		    app     => ref( $self ),
+		} );
+
+	    my $context = {
+		handle => $login->get_handle(),
+		email  => $email,
+		app    => $self->get_app_name(),
+		link   => $link,
+		app    => ref( $self ),
+	    };
+	    Yote::IO::Mailer::send_email(
+		{
+		    to      => $email,
+		    from    => $self->get_recovery_email_from(),
+		    subject => $self->get_recovery_subject_template()->_fill( $context ),
+		    msg     => $self->get_recovery_message_template()->_fill( $context ),
+		} );
+        }
+	else {
+            die "password recovery attempt failed";
+        }
+    } #if login
+    return "password recovery initiated";
+} #recover_password
+
+#
+# reset by a recovery link.
+#
+sub recovery_reset_password {
+    my( $self, $args ) = @_;
+
+    my $root = Yote::YoteRoot::fetch_root();
+    my $newpass        = $args->{p};
+    my $rand_token     = $args->{t};
+    my $recovery_hash  = $root->get__recovery_logins({});
+    my $login = $recovery_hash->{$rand_token};
+
+    if( $login ) {
+        my $now = $login->get__last_recovery_time();
+        delete $recovery_hash->{$rand_token};
+        if( ( time() - $now ) < 3600 * 24 ) { #expires after a day
+            $login->set__password( Yote::ObjProvider::encrypt_pass( $newpass, $login->get_handle() ) );
+            return $login->get__recovery_from_url();
+        }
+    }
+    die "Recovery Link Expired or not valid";
+
+} #recovery_reset_password
+
+sub remove_login {
+    my( $self, $args, $acct, $env ) = @_;
+    my $root = Yote::YoteRoot::fetch_root();
+    return $root->_remove_login( $args->{ l }, $args->{ p }, $acct );
+} #remove_login
 
 #
 # Used by the web app server to verify the login. Returns the login object belonging to the token.
@@ -48,9 +195,19 @@ sub token_login {
     return 0;
 } #token_login
 
-###########################################################
-# Messages meant to be overridden and customized per app. #
-###########################################################
+sub validate {
+    my( $self, $token ) = @_;
+    my $root = Yote::YoteRoot::fetch_root();
+    return $root->_validate( $token );
+} #validate
+
+# ------------------------------------------------------------------------------------------
+#      * PRIVATE METHODS *
+# ------------------------------------------------------------------------------------------
+
+###################################
+# These methods may be overridden #
+###################################
 
 #
 # Intializes the account object passed in.
@@ -63,7 +220,6 @@ sub _init_account {}
 sub _new_account {
     return new Yote::Account();
 }
-
 
 
 #######################################################
@@ -85,7 +241,7 @@ sub __get_account {
 	$self->_init_account( $acct );
     }
     die "Access Error" if $acct->get__is_disabled();
-    
+
     return $acct;
 
 } #__get_account
@@ -102,7 +258,7 @@ Yote::AppRoot - Application Server Base Objects
 
 This is the root class for all Yote Apps. Extend it to create an App Object.
 
-Each Web Application has a single container object as the entry point to that object which is an instance of the Yote::AppRoot class. 
+Each Web Application has a single container object as the entry point to that object which is an instance of the Yote::AppRoot class.
 A Yote::AppRoot extends Yote::Obj and provides some class methods and the following stub methods.
 
 
@@ -112,11 +268,19 @@ A Yote::AppRoot extends Yote::Obj and provides some class methods and the follow
 
 =item account()
 
+=item recover_password( { e : email, u : a_url_the_person_requested_recovery, t : reset_url_for_system } )
+
+Causes an email with a recovery link sent to the email in question, if it is associated with an account.
+
 Returns the currently logged in account using this app.
 
 =item token_login()
 
 Returns a token that is used by the client and server to sync up data for the case of a user not being logged in.
+
+=item validate( rand_token )
+
+Validates and returns the login specified by the random token.
 
 =back
 
@@ -126,7 +290,7 @@ Returns a token that is used by the client and server to sync up data for the ca
 
 =item _init_account( $acct )
 
-This is called whenever a new account is created for this app. This can be overridden to perform any initialzation on the 
+This is called whenever a new account is created for this app. This can be overridden to perform any initialzation on the
 account.
 
 =item _new_account()
@@ -134,6 +298,17 @@ account.
 This returns a new Yote::Account object to be used with this app. May be overridden to return a subclass of Yote::Account.
 
 =back
+
+=head1 PUBLIC DATA FIELDS
+
+=over 4
+
+=item requires_validation
+
+When true, an account will not work until validation of the login is achieved, through email or other means.
+
+=back
+
 
 =head1 PRIVATE DATA FIELDS
 
