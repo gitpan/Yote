@@ -17,13 +17,13 @@ name: Yote
 provides:
   Yote:
     file: lib/Yote.pm
-    version: 0.1019
+    version: 0.1020
   Yote::Account:
     file: lib/Yote/Account.pm
     version: 0.05
   Yote::AppRoot:
     file: lib/Yote/AppRoot.pm
-    version: 0.087
+    version: 0.088
   Yote::Array:
     file: lib/Yote/Array.pm
     version: 0.02
@@ -63,7 +63,7 @@ provides:
     version: 0.02
   Yote::ObjProvider:
     file: lib/Yote/ObjProvider.pm
-    version: 0.072
+    version: 0.073
   Yote::PerfAspect:
     file: lib/Yote/PerfAspect.pm
     version: 0.01
@@ -98,10 +98,10 @@ provides:
     file: lib/Yote/Util/Pages.pm
   Yote::WebAppServer:
     file: lib/Yote/WebAppServer.pm
-    version: 0.099
+    version: 0.101
   Yote::YoteRoot:
     file: lib/Yote/YoteRoot.pm
-    version: 0.052
+    version: 0.053
 recommends:
   Authen::NTLM: 1
   Digest::HMAC_MD5: 1
@@ -124,4 +124,4 @@ requires:
   perl: v5.12.0
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.1019
+version: 0.1020

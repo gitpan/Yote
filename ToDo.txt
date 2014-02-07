@@ -1,6 +1,64 @@
 The stack :
+
+ new templating system : range for template lists for pagination
+ new templating system : better error messages
+ new templating system : add radio boxes
+
+ Cron still has problems?
+
+ Clear out obj manager cache and guest token by checking who logged in times. Good thing for cron.
+
+
+ rewrite yote_util and define special characters better ( scaffold this...replace one piece at a time since its largely working )
+
+   First thing - the flow of execution
+       * variables are registered
+       * ui_init is called
+       *   init checks for yote_panel and control_panel classes to run el_init on
+       *   el_init is called for each of those that are not marked as completed
+       *         el init fills in the anchor points ( the div or other element that has the class name ) by analyzing the attribute values of the element.
+       *         if part of the fill in includes an other yote_panel or control_panel that appears in a cell of an item row ( control_panels show lists of items in rows ), then the magic $$ variable is assigned to that item.
+ ( talk about how $$ is the default item and is assigned if there is no item attribute )
+       *   if el_init had been called, it may have written more yote_panel and control_panel elements so ui_init is called again
+
+   options :
+
+    
+
+          - wrap the value in a javascript function as the return and invoke it..thus
+                      prop="$variable"  looks in registered variables for the value and places it in during INIT 
+                      prop="&some_app.get_foo()"  would return the value of foo for some_app immediately during INIT
+                      prop="&function() { return some_app.get_foo(); }" would return a function that would return the value of foo for some_app
+                      prop="~html" puts the html value into the propery or column value
+                      prop="[....]" assign the value of the data structure to prop. This is eval'd
+                      prop="{....}" assign the value of the data structure to prop
+		      
+     OK, this is hard to at first wrap ones head around. At the time of writing I don't copmletely yet either.  
+     Have to meditate on the flow of exectution :
+           
+
+		      
+ hash_paginator in js like list_paginator
+
+ attrs for html entities : maybe prefix these with 'yote' and catch all attrs that begin with yote ( see init_el function ( aroun dline 839 ) of yote.util.js
+
+ Reset cron
+  
+ Control table filter/search
+
+ How about admin making accounts validated. Also account change its email now validates.
   Ugh, more todo? Well, I want to have a good way to update the UI when a list even happens. The UI does not usually keep list objects in it, just slices of them, 
    and those slices do not get updated when things get added to the list ( or hash ) object.
+     [ so, my thought for the above is to register an object/list pairing using ObjManager, then mark the lists as a list dirty when updated
+       The objmanager will know which account is tracking which lists.
+       On the client side, there can be event handlers that fire when objects or those lists are updated ]
+
+
+
+
+  Testing : need a test for the web app server.
+
+  Idea for updating things...Use something cron like - a program that is run once and does things like $root->get_foo(afdasdf);
 
   Also, how about an even handler for when an object does receive an update, and an update to its list.
   

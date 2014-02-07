@@ -4,7 +4,7 @@
  * Copyright (C) 2012 Eric Wolf
  * This module is free software; it can be used under the terms of the artistic license
  *
- * Version 0.11
+ * Version 0.12
  */
 // Production steps of ECMA-262, Edition 5, 15.4.4.19
 // Reference: http://es5.github.com/#x15.4.4.19
@@ -104,13 +104,23 @@ $.yote = {
     port:null,
     err:null,
     objs:{},
+    apps:{},
     debug:false,
+    app:null,
+    root:null,
 
     init:function() {
         var t = $.cookie('yoken');
 	$.yote.token = t || 0;
+	
+	var root;
+	if( ! $.yote.init_precache( root ) ) {
+	    root = this.fetch_root();
+	    $.yote.guest_token = root.guest_token();
+	} else {
+	    root = this.fetch_root();
+	}	    
 
-	var root = this.fetch_root();
         if( typeof t === 'string' ) {
             var ret = root.token_login( $.yote.token );
 	    if( typeof ret === 'object' ) {
@@ -119,20 +129,56 @@ $.yote = {
 	    }
         }
 
-	$.yote.guest_token = root.guest_token();
-
 	return ret;
     }, //init
 
+    init_precache:function( root ) {
+	var precache = window['yote_precache'];
+	if( ! precache ) return false;
+	$.yote.guest_token = precache[ 'gt' ];
+	$.yote.token = precache[ 't' ];
+	var app_id = precache[ 'a' ];
+	var precache_data = precache[ 'r' ];
+	var appname = precache[ 'an' ];
+	var app_data = precache[ 'ap' ];
+	var acct_data = precache[ 'ac' ];
+	var login_data = precache[ 'lo' ];
+	if( appname && app_data ) { 
+	    $.yote.objs['root'] = $.yote._create_obj( precache[ 'ro' ] );
+	    var app = $.yote._create_obj( app_data, app_id );
+	    app.__app_id = app_id;
+	    $.yote.apps[ appname ] = app;
+	    $.yote.app = app;
+	    if( login_data ) {
+		$.yote.login_obj = $.yote._create_obj( login_data );
+	    }
+	    if( acct_data ) {
+		$.yote.acct_obj = $.yote._create_obj( acct_data, app_id );
+	    }
+	    resp = $.yote._create_obj( precache_data, app_id );
+	    return true;
+	}
+	return false;
+    },
+
     fetch_account:function() {
-	return this.fetch_root().account();
+	if( this.app ) {
+	    if( ! this.acct_obj ) {
+		this.acct_obj = this.app.account();
+	    }
+	    return this.acct_obj;
+	}
+	return undefined;
     },
 
     fetch_app:function(appname,passhandler,failhandler) {
+	if( $.yote.apps[ appname ] ) return $.yote.apps[ appname ];
 	var root = this.fetch_root();
 	if( typeof root === 'object' ) {
 	    var ret = root.fetch_app_by_class( appname );
 	    ret._app_id = ret.id;
+	    this.app = ret;
+	    $.yote.apps[ appname ] = ret;
 	    return ret;
 	} else if( typeof failhanlder === 'function' ) {
 	    failhandler('lost connection to yote server');
@@ -150,9 +196,14 @@ $.yote = {
 		wait:true
 	    } );
 	    this.objs['root'] = r;
+	    this.root = r;
 	}
 	return r;
     }, //fetch_root
+
+    get_by_id:function( id ) {
+	return $.yote.objs[id+''] || $.yote.fetch_root().fetch(id).get(0);
+    },
 
     is_root:function() {
 	return this.is_logged_in() && 1*this.get_login().is_root();
@@ -190,9 +241,13 @@ $.yote = {
     logout:function() {
 	$.yote.fetch_root().logout();
 	$.yote.login_obj = undefined;
+	$.yote.acct_obj = undefined;
 	$.yote.token = 0;
 	$.yote._dump_cache();
 	$.cookie( 'yoken', '', { path : '/' } );
+	if( $.yote.util ) {
+	    $.yote.util.registered_items = {};
+	}
     }, //logout
 
     /* general functions */
@@ -415,7 +470,7 @@ $.yote = {
 	} ).submit();
     }, //upload_message
 
-    _cache_size:function() {
+    _cache_size:function() { //used for unit tests
         var i = 0;
         for( v in this.objs ) {
             ++i;
@@ -423,9 +478,9 @@ $.yote = {
         return i;
     },
 
+    // TODO : use prototype for the _create_obj
     _create_obj:function(data,app_id) { //creates the javascript proxy object for the perl object.
 	var root = this;
-
 	if( data.id != null && typeof data.id !== 'undefined' && root._is_in_cache( data.id ) ) {
 	    return root.objs[ data.id + '' ];
 	}
@@ -575,6 +630,7 @@ $.yote = {
 		if( typeof val === 'undefined' ) return false;
 		if( typeof val === 'object' ) return val;
 		if( typeof val === 'function' ) return val;
+
 		if( val.substring(0,1) != 'v' ) {
 		    var obj = root.objs[val+''] || $.yote.fetch_root().fetch(val).get(0);
 		    obj._app_id = this._app_id;
@@ -732,6 +788,7 @@ $.yote = {
 
     _dump_cache:function() {
         this.objs = {};
+	this.apps = {};
     },
 
     // generic server type error
