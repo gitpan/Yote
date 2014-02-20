@@ -4,7 +4,7 @@
  * Copyright (C) 2012 Eric Wolf
  * This module is free software; it can be used under the terms of the artistic license
  *
- * Version 0.12
+ * Version 0.2
  */
 // Production steps of ECMA-262, Edition 5, 15.4.4.19
 // Reference: http://es5.github.com/#x15.4.4.19
@@ -275,7 +275,8 @@ $.yote = {
         if( async == 0 ) {
             root._disable();
         }
-        var get_data = $.yote.token + "/" + $.yote.guest_token + "/" + wait + "/" + $.base64.encode( JSON.stringify( { d : data } ) );
+	var encoded_data = $.base64.encode( JSON.stringify( { d : data } ) );
+        var get_data = $.yote.token + "/" + $.yote.guest_token + "/" + wait;
 	var resp;
 
         if( $.yote.debug == true ) {
@@ -288,6 +289,7 @@ $.yote = {
 	    async:async,
 	    cache: false,
 	    contentType: "application/json; charset=utf-8",
+	    data : encoded_data,
 	    dataFilter:function(a,b) {
 		if( $.yote.debug == true ) {
 		    console.log('incoming '); console.log( a );
@@ -341,7 +343,7 @@ $.yote = {
                     console.log( "Success reported but no response data received" );
                 }
 	    },
-	    type:'GET',
+	    type:'POST',
 	    url:url + '/' + get_data
 	} );
         if( ! async ) {
@@ -517,6 +519,114 @@ $.yote = {
 		    var res = this.values().sort( sortfun );
 		    return res;
 		},
+
+		wrap_list:function( args ) {
+		    var me = this;
+		    var obj = me.get( args[ 'collection_name' ] );
+		    var ol = obj ? obj.length() : 0;
+		    return {
+			obj     : obj,
+			id      : me.id,
+			start   : args[ 'start' ] || 0,
+			page_size    : args[ 'size' ],
+			search_values : args[ 'search_value'  ] || undefined,
+			search_fields : args[ 'search_field'  ] || undefined,
+			sort_fields   : args[ 'sort_fields'   ] || undefined,
+			sort_reverse  : args[ 'sort_reverse'  ] || false,
+			length : ol,
+			to_list : function() {
+			    var me = this;
+			    var ret = [];
+			    if( ! this.obj ) return ret;
+			    var olist = this.obj.to_list();
+
+			    if( this.sort_fields ) {
+				olist = olist.sort( function( a, b ) { 
+				    for( var i=0; i<me.sort_fields.length; i++ ) {
+					if( typeof a === 'object' && typeof b === 'object' ) 
+					    return a.get( me.sort_fields[i] ).toLowerCase().localeCompare( b.get( me.sort_fields[i] ).toLowerCase() );
+					return 0;
+				    }
+				} );
+			    }
+
+			    this.length = 0;
+			    for( var i=0; i < olist.length; i++ ) {
+				if( this.search_values && this.search_fields && this.search_values.length > 0 && this.search_fields.length > 0 ) {
+				    if( this.search_fields && this.search_fields.length > 0 ) {
+					var match = false;
+					for( var j=0; j<this.search_values.length; j++ ) {
+					    for( var k=0; k<this.search_fields.length; k++ ) {
+						match = match || typeof olist[ i ] === 'object' && olist[ i ].get( this.search_fields[k] ).toLowerCase().indexOf( this.search_values[ j ].toLowerCase() ) != -1;
+					    }
+					}
+					if( match ) {
+					    this.length++;
+					    if( i >= this.start && ret.length < this.page_size ) 
+						ret.push( olist[i] );
+					}
+				    }
+				}
+				else {
+				    this.length++;
+				    if( i >= this.start && ret.length < this.page_size ) 
+					ret.push( olist[i] );
+				}
+			    }
+			    return ret;
+			},
+			set_search_criteria:function( fields, values ) {
+			    if( ! values ) {
+				this.search_fields = undefined;
+				return;
+			    }
+			    var has_val = false;
+			    for( var i=0; i<values.length; i++ ) {
+				has_val = has_val || (values[ i ] && values[ i ] != '' );
+			    }
+			    if( has_val ) {
+				this.search_fields = fields;
+				this.search_values = values;
+			    }
+			    else {
+				this.search_fields = undefined;
+			    }
+			},
+			get : function( idx ) {
+			    return this.obj.get( idx );
+			},
+			add_to : function( data ) {
+			    return this.obj.add_to( data );
+			},
+			remove_from : function( data ) {
+			    return this.obj.remove_from( data );
+			},
+			seek:function(topos) {
+			    this.start = topos;
+			},
+			forwards:function(){
+			    var towards = this.start + this.page_size;
+			    this.start = towards > this.length ? (this.length-1) : towards;
+			},
+			can_rewind : function() {
+			    return this.start > 0;
+			},
+			can_fast_forward : function() {
+			    return this.start + this.page_size < this.length;
+			},
+			back:function(){
+			    var towards = this.start - (this.page_size);
+ 			    this.start = towards < 0 ? 0 : towards;
+			},
+			first:function(){
+			    this.start = 0;
+			},
+			last:function(){
+			    this.start = this.length - this.page_size;
+			}
+		    };
+		}, //wrap list
+
 		paginator:function( fieldname, is_hash, size, start ) {
 		    var obj = this;
 		    var st = start || 0;
