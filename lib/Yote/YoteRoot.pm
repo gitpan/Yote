@@ -48,7 +48,7 @@ sub _init {
 # returns cron object for root
 sub cron {
     my( $self, $data, $acct ) = @_;
-    if( $acct->is_root() ) {
+    if( $acct && $acct->is_root() ) {
 	return $self->_cron();
     }
     die "Permissions Error";
@@ -97,7 +97,7 @@ sub fetch {
     die "Access Error" unless Yote::ObjManager::allows_access( $data, $self, $account ? $account->get_login() : undef, $env->{GUEST_TOKEN} );
     if( ref( $data ) eq 'ARRAY' ) {
 	my $login = $account->get_login();
-	return [ map { Yote::ObjProvider::fetch( $_ ) } grep { $Yote::ObjProvider::LOGIN_OBJECTS->{ $login->{ID} }{ $_ } } @$data ];
+	return [ map { Yote::ObjProvider::fetch( $_ ) } grep { defined($Yote::ObjProvider::LOGIN_OBJECTS->{ $login->{ID} }{ $_ }) } @$data ];
     } 
     return [ Yote::ObjProvider::fetch( $data ) ];
 
@@ -112,6 +112,7 @@ sub fetch_app_by_class {
         eval ("use $data");
         die $@ if $@;
         $app = $data->new();
+	$app->set__key( $data );
         $self->get__apps()->{$data} = $app;
     }
     return $app;
@@ -219,12 +220,30 @@ sub new_user_obj {
 # and can only be used by the superuser.
 #
 sub purge_app {
-    my( $self, $app_name, $account ) = @_;
+    my( $self, $app_or_name, $account ) = @_;
     if( $account->get_login()->get__is_root() ) {
 	my $apps = $self->get__apps();
-	my $app = delete $apps->{ $app_name };
+	my $app;
+	if( ref( $app_or_name ) ) {
+	    $app = $app_or_name;
+	    my $aname = $app->get__key();
+	    if( $aname ) {
+		$app = delete $apps->{ $app_or_name };
+	    }
+	    else {
+		for my $key (keys %$apps) {
+		    if( $app_or_name->_is( $apps->{ $key } ) ) {
+			delete $apps->{ $key };
+			last;
+		    }
+		}
+	    }
+	}
+	else {
+	    $app = delete $apps->{ $app_or_name };
+	}
 	$self->add_to__purged_apps( $app );
-	return "Purged '$app_name'";
+	return "Purged " . ref( $app_or_name ) ? ref( $app_or_name ) : $app_or_name;
     }
     die "Permissions Error";
 } #purge_app

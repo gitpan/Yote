@@ -53,7 +53,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.1022"
+         "version" : "0.2"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -84,7 +84,7 @@
       },
       "Yote::IO::Mongo" : {
          "file" : "lib/Yote/IO/Mongo.pm",
-         "version" : "0.037"
+         "version" : "0.038"
       },
       "Yote::IO::Mysql" : {
          "file" : "lib/Yote/IO/Mysql.pm",
@@ -176,5 +176,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.1022"
+   "version" : "0.2"
 }

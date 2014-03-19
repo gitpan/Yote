@@ -491,6 +491,24 @@ sub io_independent_tests {
     $res = $app->_paginate( { name => 'hsh', return_hash => 1 } );
     is_deeply( $res, { 'baz/bof' => "FOOME", 'Bingo' => "BARFO" }, ' paginate for hash, with one key having a slash in its name' );
 
+    # test paginate with hashkey_search
+    $res = $app->_paginate( { name => 'hsh', return_hash => 1, hashkey_search => [ "o" ] } );
+    is_deeply( $res, { 'baz/bof' => "FOOME", 'Bingo' => "BARFO" }, ' paginate for hash using hashkey_search with one multiple hit search term' );
+
+    $res = $app->_paginate( { name => 'hsh', return_hash => 1, hashkey_search => [ "B", '/' ] } );
+    is_deeply( $res, { 'baz/bof' => "FOOME", 'Bingo' => "BARFO" }, ' paginate for hash using hashkey_search with two separate hit search terms' );
+
+    $res = $app->_paginate( { name => 'hsh', return_hash => 1, hashkey_search => [ "g","Q" ] } );
+    is_deeply( $res, { 'Bingo' => "BARFO" }, ' paginate for hash using hashkey_search with nonhit search term' );
+
+    $res = $app->_paginate( { name => 'hsh', return_hash => 1, search_terms => [ "R" ] } );
+    is_deeply( $res, { 'Bingo' => "BARFO" }, ' search_terms for hash using hashkey_search with nonhit search term' );
+
+    $res = $app->_paginate( { name => 'hsh', return_hash => 1, search_terms => [ "g" ], hashkey_search => [ "Z" ] } );
+    is_deeply( $res, { 'baz/bof' => "FOOME" }, ' search_terms for hash using search terma and hashkey_search with nonhit search term' );
+    my $count = $app->_count( { name => 'hsh', return_hash => 1, search_terms => [ "g" ], hashkey_search => [ "Z" ] } );
+    is( $count, 1, "one results for count using hash and hashkey and search terms" );
+
     # delete with key that has slash in the name
     $app->_hash_delete( 'hsh', 'baz/bof' );
     $res = $app->_paginate( { name => 'hsh', return_hash => 1 } );
@@ -538,6 +556,8 @@ sub io_independent_tests {
 	);
     Yote::ObjProvider::stow_all();
 
+    $res = $o->_count( { name => 'searchlist', search_fields => [ 'a' ], search_terms => [ 'foobie' ] } );
+    is( $res, 2, "Two search resultscount" );
     $res = $o->paginate( { name => 'searchlist', search_fields => [ 'a' ], search_terms => [ 'foobie' ] } );
     is( @$res, 2, "Two search results" );
     my $searchlist = $o->get_searchlist();
@@ -545,6 +565,8 @@ sub io_independent_tests {
     my %resids = map { $_->{ID} => 1 } @$res;
     is_deeply( \%ids, \%resids, "Got correct search matches" );
 
+    $res = $o->_count( { name => 'searchlist', search_fields => [ 'a' ], search_terms => [ 'foobie' ], sort_fields => [ 'n' ] } );
+    is( $res, 2, "Two search results count" );
     $res = $o->paginate( { name => 'searchlist', search_fields => [ 'a' ], search_terms => [ 'foobie' ], sort_fields => [ 'n' ] } );
     is( @$res, 2, "Two search results" );
     $searchlist = $o->get_searchlist();
@@ -666,6 +688,51 @@ sub io_independent_tests {
 
     #set root back to root admin
     $root_login->set__is_root( 1 );
+
+    #
+    # Make sure named list operations properly integrate with recycling/garbage collection.
+    #
+    Yote::ObjProvider::recycle_objects();
+    {
+	my $o2a = new Yote::Obj( { name => "Test for list add to w/ recycling" } );
+	my $o2b = new Yote::Obj( { name => "An other Test for list add to w/ recycling" } );
+	$root->_add_to( 'o_list', $o2a );
+	$root->_add_to( 'o_list', $o2b );
+	Yote::ObjProvider::stow_all();
+	is( $root->_container_type( 'o_list' ), 'ARRAY', 'container type detect list' );
+	my $objs = Yote::ObjProvider::recycle_objects();
+	is( $objs, 0, 'add_to(  not recycled' );
+	$root->_remove_from( 'o_list', $o2a );
+	$root->_remove_from( 'o_list', $o2b );
+	Yote::ObjProvider::stow_all();
+    }
+    my $objs = Yote::ObjProvider::recycle_objects();
+    is( $objs, 2, 'remove_from(  is recycled' );
+
+    $root->set_o_list( undef );
+    Yote::ObjProvider::stow_all();	
+    is( Yote::ObjProvider::recycle_objects(), 1, "one recycled list obj" );
+    is( $root->_container_type( 'o_list' ), '', 'container type detect no class once list removed' );
+
+    {
+	my $o2a = new Yote::Obj( { name => "yet Test for list add to w/ recycling" } );
+	my $o2b = new Yote::Obj( { name => "yet An other Test for list add to w/ recycling" } );
+	$root->_hash_insert( 'o_hash', "KEYA", $o2a );
+	$root->_hash_insert( 'o_hash', "KEYB", $o2b );
+	Yote::ObjProvider::stow_all();
+	is( $root->_container_type( 'o_hash' ), 'HASH', 'container type detect hash' );
+	my $objs = Yote::ObjProvider::recycle_objects();
+	is( $objs, 0, 'hash(  not recycled' );
+	$root->_hash_delete( 'o_hash', "KEYA" );
+	$root->_hash_delete( 'o_hash', "KEYB" );
+	Yote::ObjProvider::stow_all();	
+    }
+    $objs = Yote::ObjProvider::recycle_objects();
+    is( $objs, 2, 'hash delete  is recycled' );
+
+    $root->set_o_hash( undef );
+    Yote::ObjProvider::stow_all();	
+    is( $root->_container_type( 'o_hash' ), '', 'container type detect no class once hash removed' );
 
     $root->add_to( { name => 'z_list', items => [ "A", "B" ] }, $root_acct );
     is_deeply( $root->get_z_list(), [ "A", "B" ], "add to having correct obj" );
@@ -1112,7 +1179,7 @@ sub io_independent_tests {
     my $zl = $root->login( { h => 'zoot', p => 'naughty' } )->{l};
     $zl->set__is_root( 1 );
 
-
+    Yote::ObjProvider::stow_all();
     my $toot_notroot = $root->login( { h => 'toot', p => 'toor' } )->{l};
     ok( ! $toot_notroot->is_root(), "Toot notroot is not root" );
     my $toot_notroot_acct = $root->__get_account( $toot_notroot );

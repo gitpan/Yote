@@ -9,6 +9,12 @@ use warnings;
 
 use base 'Yote::Obj';
 
+sub new_with_same_permissions {
+    my( $self, $dummy, $account ) = @_;
+    die "Permissions Error" unless $self->_check_access( $account, 1, '' );
+    return new Yote::UserObj();
+} #new_with_same_permissions
+
 
 sub _check_access {
     my( $self, $account, $write_access, $name ) = @_;
@@ -29,6 +35,16 @@ Yote::UserObj
 This is a subclass of Yote::Obj that allows root or its creator to access and write to public and private fields.
 Public fields may be read by others but not written. The Yote::YoteRoot instance method new_root_obj
 returns a new object of this type.
+
+=head2 METHODS
+
+=over 4
+
+=item new_with_same_permissions()
+
+Returns a new yote object with the same permissions as this.
+
+=back
 
 =head1 AUTHOR
 
