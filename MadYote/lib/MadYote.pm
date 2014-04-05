@@ -19,6 +19,7 @@ sub _init {
 sub _load {
     my $self = shift;
     $self->get_sandbox( new Yote::Obj() );
+    $self->get_rolodex( new Yote::Obj() );
 }
 sub reset_sandbox {
     my $self = shift;

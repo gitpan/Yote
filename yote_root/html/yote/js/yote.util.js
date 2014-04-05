@@ -753,19 +753,20 @@ $.yote.util = {
 		if( ! args[ 'default_var' ] ) args[ 'default_var' ] = args[ 'item' ];
 		if( ! args[ 'default_parent' ] ) args[ 'default_parent' ] = args[ 'parent' ];
 //WOLF - here is here the args get introduced to the template id instance
-
-		$( args[ 'attachpoint' ] ).click(function(){
-		    if( args[ 'action' ].indexOf('__') == 0 && $.yote.util.intrinsic_functions[ args[ 'action' ].substring(2) ] ) {
-			$.yote.util.intrinsic_functions[ args[ 'action' ].substring(2) ]( args );
+		(function(a) {
+		$( a[ 'attachpoint' ] ).click(function(){
+		    if( a[ 'action' ].indexOf('__') == 0 && $.yote.util.intrinsic_functions[ a[ 'action' ].substring(2) ] ) {
+			$.yote.util.intrinsic_functions[ a[ 'action' ].substring(2) ]( a );
 		    }
-		    else if( $.yote.util.functions[ args[ 'action' ] ] ) {
-			$.yote.util.functions[ args[ 'action' ] ]( args )
-		    } else if( typeof window[ args[ 'action' ] ] === 'function' ) {
-			window[ args[ 'action' ] ]( args );
+		    else if( $.yote.util.functions[ a[ 'action' ] ] ) {
+			$.yote.util.functions[ a[ 'action' ] ]( a )
+		    } else if( typeof window[ a[ 'action' ] ] === 'function' ) {
+			window[ a[ 'action' ] ]( a );
 		    } else {
-			console.log( "'" + args['action'] + "' not found for button." );
+			console.log( "'" + a['action'] + "' not found for button." );
 		    }
 		} );
+		} )( args );
 	    } else {
 		console.log( "No action found for button." );
 	    }
@@ -1511,7 +1512,7 @@ $.yote.util = {
 
 
   In each case, you have an object in focus. How do you get the first object?
-  how is this bootstrapped??
+  how is this bootstrapped?
 
   Editing templates as yote variables, too?
 
@@ -1525,7 +1526,7 @@ $.yote.util = {
 	    if( args[ 'default_var' ] && args[ 'field' ] ) {
 		var newv = args[ 'default_var' ].new_with_same_permissions();
 		if( newv ) {
-		    var newf = $.yote.util.template_context[ args[ 'template_id' ] ][ 'newfields' ] || {};
+		    var newf = $.yote.util.template_context[ args[ 'template_id' ] ][ 'new_fields' ] || {};
 		    for( var k in newf ) {
 			var f = $( '#' + newf[ k ] );
 			if( f ) {
@@ -1537,8 +1538,8 @@ $.yote.util = {
 			}
 		    }
 		    if( args[ 'new_hashkey' ] ) {
-			args[ 'default_var' ].hash( { key   : args[ 'new_hashkey' ], 
-						      name  : args[ 'field' ], 
+			args[ 'default_var' ].hash( { key   : args[ 'new_hashkey' ],
+						      name  : args[ 'field' ],
 						      items : [ newv ] } );
 		    }
 		    else {
@@ -1571,6 +1572,11 @@ $.yote.util = {
 
     register_function:function( key, value ) {
 	$.yote.util.functions[ key ] = value;
+    },
+    
+    run_function:function( fun, args ) {
+	if( $.yote.util.functions[ fun ] )
+	    $.yote.util.functions[ fun ]( args );
     },
 
     register_functions:function( hash ) {
@@ -1616,20 +1622,19 @@ $.yote.util = {
 	while( text_val.indexOf( '<$$' ) > -1 ) {
 	    var parts = $.yote.util._template_parts( text_val, '$$', template );
 	    var args = Object.clone( params );
-	    var template_pieces = parts[ 1 ].split(/ +/);
-            args[ 'template_name' ] = template_pieces[ 0 ];
-	    if( template_pieces.length == 2 ) {
-		args[ 'target' ] = template_pieces[ 1 ];
-		args[ 'default_var' ] = $.yote.util._template_var( args );
+	    var funparts = parts[1].match( /^\s*(\S+)(\s+.*)?\s*$/ );
+	    if( funparts ) {
+		if( funparts.length == 3 && funparts[2] ) {
+		    args[ 'extra' ] = funparts[2].trim();
+		}
+		args[ 'template_name' ] = funparts[ 1 ];
+		text_val = parts[ 0 ] +
+		    $.yote.util.fill_template( args ) +
+		    parts[ 2 ];
+	    } else {
+		text_val = parts[ 0 ] + parts[ 2 ];
+		console.log( 'Warning .. empty template given' );
 	    }
-	    if( template_pieces.length == 3 ) {
-		args[ 'target' ] = template_pieces[ 2 ];
-		args[ 'default_parent' ] = $.yote.util._template_var( args );
-	    }
-	    // WOLF : check to see if a default var or parent should go here.
-	    text_val = parts[ 0 ] +
-		$.yote.util.fill_template( args ) +
-		parts[ 2 ];
 	}
 	while( text_val.indexOf( '<$@' ) > -1 ) {
 	    var parts = $.yote.util._template_parts( text_val, '$@', template );
@@ -1675,16 +1680,20 @@ $.yote.util = {
 	    // functions to be run after rendering is done
 	    var parts = $.yote.util._template_parts( text_val, '??', template );
 	    var args = Object.clone( params );
-	    (function(fn, args ) {
+	    var funparts = parts[1].match( /^\s*(\S+)(\s+.*)?\s*$/ );
+	    if( funparts.length == 3 && funparts[2] ) {
+		args[ 'extra' ] = funparts[2].trim();
+	    }
+	    (function(fn, arg ) {
 		$.yote.util.after_render_functions.push( function() {
 		    var f = $.yote.util.functions[ fn ];
 		    if( f ) {
-			f( args );
+			f( arg );
 		    } else {
 			console.log( "Template in after render function. Function '" + fn + "' not found." );
 		    }
 		} );
-	    } )( parts[ 1 ].trim(), args );
+	    } )( funparts[ 1 ].trim(), args );
 	    text_val = parts[ 0 ] + parts[ 2 ];
 	}
 	while( text_val.indexOf( '<?' ) > -1 ) {
@@ -1712,37 +1721,52 @@ $.yote.util = {
     }, //run_template_function
 
     register_template_value:function( text_val, params ) { //expects "_name_ (new(_hashkey)?)? <control>"
-	var parts = text_val.match( /^\s*(\S+)\s+(new[\S]*)?\s*(<.*)/i );
+
+        // now about we change this around so that the following are legit :
+        /*
+          <$$$ var varname value $$$>
+          <$$$ control ctlname <..html control..> $$$>
+          <$$$ new ctlname <..html control..> $$$>
+          <$$$ new_hashkey <..html control..> $$$>
+         */
+	var parts = text_val.match( /^\s*(var|control|new|new_hashkey)\s+((\S+)(.*))?/i );
 	if( parts ) {
-	    var control = parts.length == 3 ? parts[ 2 ] : parts[ 3 ];
+            var cmd = parts[ 1 ];
+            var varname = parts[ 3 ];
+            if( cmd.toLowerCase() == 'var' ) {
+		if( ! params[ 'vars' ] ) params[ 'vars' ] = {};
+                var val = $.yote.util.fill_template_text( { template : parts[ 4 ] } );
+                params[ 'vars' ][ varname ] = val;
+                $.yote.util.template_context[ params[ 'template_id' ] ][ 'vars' ][ varname ] = val;
+                return '';
+            }
+
+            var control = cmd.toLowerCase() == 'new_hashkey' ? parts[ 2 ] : parts[ 4 ];
 	    var ctrl_parts = /\*\<.* id\s*=\s*['"]?(\S+)['"]? /.exec( control );
 	    var ctrl_id;
 	    var ctrl = control;
 	    if( ctrl_parts ) {
 		ctrl_id = ctrl_parts[ 1 ];
-	    } 
+	    }
 	    else {
 		ctrl_id = '__' + $.yote.util.next_id();
 		ctrl = ctrl.replace( /^\s*(<\s*[^\s\>]+)([ \>])/, '$1 id="' + ctrl_id + '" $2' );
 	    }
-	    if( parts[ 2 ] == 'new' ) {
-		if( ! params[ 'new_vars' ] ) params[ 'new_vars' ] = {};
-		params[ 'new_vars' ][ parts [ 1 ] ] = ctrl_id;
-		$.yote.util.template_context[ params[ 'template_id' ] ][ 'newfields' ][ parts[ 1 ] ] = ctrl_id;
-	    }
-	    else if( parts[ 2 ] == 'new_hashkey' ) {
-		params[ 'new_hashkey' ] = ctrl_id;
-		$.yote.util.template_context[ params[ 'template_id' ] ][ 'new_hashkey' ] = ctrl_id;
-	    }
-	    if( ! params[ 'vars' ] ) params[ 'vars' ] = {};
-	    params[ 'vars' ][ parts [ 1 ] ] = ctrl_id;
+            if( cmd.toLowerCase() == 'new_hashkey' ) {
+                params[ 'new_hashkey' ] = ctrl_id;
+	        $.yote.util.template_context[ params[ 'template_id' ] ][ 'new_hashkey' ] = ctrl_id;
+            }
+            else { // new or control
+                var tvar =  cmd.toLowerCase() == 'control' ? 'controls' : 'new_fields';
+		if( ! params[ tvar ] ) params[ tvar ] = {};
+                params[ tvar ][ varname ] = ctrl_id;
+                if( ! $.yote.util.template_context[ params[ 'template_id' ] ][ tvar ] ) $.yote.util.template_context[ params[ 'template_id' ] ][ tvar ] = {};
+                $.yote.util.template_context[ params[ 'template_id' ] ][ tvar ][ varname ] = ctrl_id;
+            }
+            return ctrl;
+        } //has parts
+        return '';
 
-	    $.yote.util.template_context[ params[ 'template_id' ] ][ 'vars' ][ parts[ 1 ] ] = ctrl_id;
-
-	    return ctrl;
-	}
-	console.log( "Template error for registering '"+text_val+"' : not understood." );
-	return '';
     }, //register_template_value
 
     fill_template_container:function( params, is_hash ) {
@@ -1756,12 +1780,13 @@ $.yote.util = {
 	    container_name    = parts[ 3 ].trim();
 
 	if( typeof host_obj === 'object' && container_name ) {
-	    var container = host_obj.wrap( { collection_name : container_name, 
+	    var container = host_obj.wrap( { collection_name : container_name,
 					     size : args[ 'size' ],
-					     wrap_key : params[ 'template_name' ],
+					     wrap_key : main_template,
 					   }, is_hash );
             args[ 'template_name' ] = container.full_size() == 0 ? on_empty_template : main_template;
 	    args[ 'default_var' ] = container;
+	    args[ 'container_name' ] = container_name;
 	    return $.yote.util.fill_template( args );
 	}
 	return '';
@@ -1826,6 +1851,7 @@ $.yote.util = {
 	else if( subj == 'id' )   subjobj = args[ 'template_id' ];
 	else if( subj == '_' )    subjobj = args[ 'default_var' ];
 	else if( subj == '__' )   subjobj = args[ 'default_parent' ];
+	else if( subj == '___' )   subjobj = args[ 'extra' ];
 	else subjobj = $.yote.util.registered_items[ subj ];
 
 	if( subjobj ) {
@@ -1890,7 +1916,7 @@ $.yote.util = {
 	    var item   = default_var;
 	    var parent = default_parent;
 	    var txt = parts ? parts[3].trim() : '';
-	    return '<button type="BUTTON" ' + ( item ? ' item="$$' + item.id + '"' : '' ) +  ( parent ? ' parent="$$' + parent.id + '"' : '' ) + ' class="yote_button" action="' + subj.trim() +'" template_id="' + args[ 'template_id' ] + '">' + txt + '</button>'; //needs to insert an id for itself and register the action
+	    return '<button type="BUTTON" ' + ( args[ 'container_name' ] ? 'container_name="' + args[ 'container_name' ] + '"'  : '' ) + ' ' + ( item ? ' item="$$' + item.id + '"' : '' ) +  ( parent ? ' parent="$$' + parent.id + '"' : '' ) + ' class="yote_button" action="' + subj.trim() +'" template_id="' + args[ 'template_id' ] + '">' + txt + '</button>'; //needs to insert an id for itself and register the action
 	    // also need a pagination object which will work with the tempates and we can finally rid ourselves of control_table bigcodyness
 	}
 	else if( cmd == 'action_link' ) {
@@ -1906,12 +1932,24 @@ $.yote.util = {
 	    txt = parts ? parts[1].trim() : 'New';
 	    return '<button type="BUTTON" item="$$' + subjobj.id + '" field="'+fld+'" class="yote_button" action="__new_with_same_permissions" template_id="' + args[ 'template_id' ] + '">' + txt + '</button>';
 	}
-	else if( cmd == 'list_remove_button' ) {	    
+	else if( cmd == 'list_remove_button' ) {
 	    parts = /^\s*\S+\s+\S+\s+\S+\s*(.*)/.exec( varcmd );
 	    var subjobj = $.yote.util._template_var( args );
 	    txt = parts && parts[1] ? parts[1].trim() : 'Delete';
 	    var parent = default_parent;
-	    return '<button type="BUTTON" parent="$$' + parent.id + '" item="$$' + subjobj.id + '" field="'+fld+'" class="yote_button" action="__remove_from_list" template_id="' + args[ 'template_id' ] + '">' + txt + '</button>';	    
+	    return '<button type="BUTTON" parent="$$' + parent.id + '" item="$$' + subjobj.id + '" field="'+fld+'" class="yote_button" action="__remove_from_list" template_id="' + args[ 'template_id' ] + '">' + txt + '</button>';
+	}
+	else if( cmd == 'show_or_edit' ) {
+	    if( ! subjobj ) return '';
+	    if( $.yote.is_root() ) {
+		return '<span class="yote_panel" ' + (fld.charAt(0) == '#' ? ' as_html="true" ' : '' ) + ' after_edit_function="*function(){$.yote.util.refresh_ui();}" item="$$' + subjobj.id + '" field="' + fld + '" template_id="' + args[ 'template_id' ] + '"></span>';
+	    }
+	    else {
+		return '<span class="yote_panel" no_edit="true" ' + (fld.charAt(0) == '#' ? ' as_html="true" ' : '' ) + ' item="$$' + subjobj.id + '" field="' + fld + '" template_id="' + args[ 'template_id' ] + '"></span>';
+	    }
+	}
+	else if( cmd == 'val' ) {
+	    return args[ 'vars' ][ subj ];
 	}
 	console.log( "template variable command '" + varcmd + '" not understood' );
 	return varcmd;
@@ -1945,6 +1983,7 @@ $.yote.util = {
      <@ templatename list @>
      <@ templatename obj field @>
      <? command ?>   run the restigered function and include its text result in the html
+     <?? after_template_renders_command arbitrary_args_as_a_single_string ??>  runs after the template this is in has been rendered.
    Applies the template to each item in the list, concatinating the results together.
 
 

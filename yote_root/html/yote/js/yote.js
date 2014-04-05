@@ -270,6 +270,27 @@ $.yote = {
 	}
     }, //logout
 
+    include_templates:function( url ) {
+	var root = this;
+	$.ajax( {
+	    async:false,
+	    cache: false,
+	    contentType: "text/html",
+	    dataFilter:function(a,b) {
+		if( $.yote.debug == true ) {
+		    console.log('incoming '); console.log( a );
+		}
+		return a;
+	    },
+	    error:function(a,b,c) { root._error(a); },
+	    success:function( data ) {
+		$( 'body' ).append( data );
+	    },
+	    type:'GET',
+	    url: url
+	} );	
+    }, //include_templates
+
     /* general functions */
     message:function( params ) {
         var root   = this;
@@ -545,14 +566,16 @@ $.yote = {
 		    var host_obj = this;
 		    var fld = args[ 'collection_name' ];
 
-		    if( ! $.yote.wrap_cache[ host_obj.id ] ) {
-			$.yote.wrap_cache[ host_obj.id ] = {};
+		    var cache_key = host_obj.id;
+
+		    if( ! $.yote.wrap_cache[ cache_key ] ) {
+			$.yote.wrap_cache[ cache_key ] = {};
 		    }
-		    if( ! $.yote.wrap_cache[ host_obj.id ][ args[ 'wrap_key' ] ] ) {
+		    if( ! $.yote.wrap_cache[ cache_key ][ args[ 'wrap_key' ] ] ) {
 			$.yote.wrap_cache[ host_obj.id ][ args[ 'wrap_key' ] ] = {};
 		    }
-		    if( $.yote.wrap_cache[ host_obj.id ][ args[ 'wrap_key' ] ][ fld ] ) {
-			return $.yote.wrap_cache[ host_obj.id ][ args[ 'wrap_key' ] ][ fld ];
+		    if( $.yote.wrap_cache[ cache_key ][ args[ 'wrap_key' ] ][ fld ] ) {
+			return $.yote.wrap_cache[ cache_key ][ args[ 'wrap_key' ] ][ fld ];
 		    }
 
 		    var ol = host_obj.count( fld );
@@ -575,11 +598,11 @@ $.yote = {
 			field              : fld,
 			start              : args[ 'start' ] || 0,
 			page_size     : 1*args[ 'size' ],
-			search_values : args[ 'search_value'  ] || undefined,
-			search_fields : args[ 'search_field'  ] || undefined,
-			sort_fields   : args[ 'sort_fields'   ] || undefined,
+			search_values : args[ 'search_value'  ] || [],
+			search_fields : args[ 'search_field'  ] || [],
+			sort_fields   : args[ 'sort_fields'   ] || [],
 			hashkey_search_value : args[ 'hashkey_search_value' ] || undefined,
-			sort_reverse  : args[ 'sort_reverse'  ] || undefined,
+			sort_reverse  : args[ 'sort_reverse'  ] || false,
 			is_hash       : is_hash,
 			full_size : function() {
 			    var me = this;
@@ -605,7 +628,7 @@ $.yote = {
 				    skip  : me.start,
 				    search_fields : me.search_fields,
 				    search_terms  : me.search_values,
-				    reverse : me.sort_reverse,
+				    reverse : me.sort_reverse ? 1 : 0,
 				    sort_fields : me.sort_fields
 				} );
 				return res.to_list();
@@ -615,7 +638,7 @@ $.yote = {
 				if( ! me.collection_obj ) return ret;
 				var olist = me.collection_obj.to_list();
 
-				if( me.sort_fields ) {
+				if( me.sort_fields.length > 0 ) {
 				    olist = olist.sort( function( a, b ) { 
 					for( var i=0; i<me.sort_fields.length; i++ ) {
 					    if( typeof a === 'object' && typeof b === 'object' ) 
@@ -644,8 +667,9 @@ $.yote = {
 					}
 				    }
 				    else {
+					me.length = olist.length;
+
 					if( i >= me.start && ( me.page_size==0 || ret.length < me.page_size) ) {
-					    me.length++;
 					    ret.push( olist[i] );
 					}
 				    }
@@ -696,22 +720,23 @@ $.yote = {
 					    }
 					    if( match ) {
 						var k = hkeys[ i ];
+						me.length++;
 						if( i >= me.start && me.length < me.page_size &&
 						    ( ! me.hashkey_search_value || 
 						      k.toLowerCase().indexOf( me.hashkey_search_value ) != -1 ) )
 						{
 						    ret[ k ] = ohash[ k ];
-						    me.length++;
 						}
 					    }
 					}
 				    }
 				    else {
+					me.length = Object.size( ohash );
+
 					if( i >= me.start && me.length < me.page_size ) {
 					    var k = hkeys[ i ];
 					    if( ! me.hashkey_search_value || k.toLowerCase().indexOf( me.hashkey_search_value ) != -1 ) {
 						ret[ k ] = ohash[ k ];
-						me.length++;
 					    }
 					}
 				    }
@@ -775,10 +800,10 @@ $.yote = {
 			    this.start = 0;
 			},
 			last:function(){
-			    this.start = this.full_size() - this.page_size;
+			    this.start = this.length - this.page_size;
 			}
 		    };
-		    $.yote.wrap_cache[ host_obj.id ][ args[ 'wrap_key' ] ][ fld ] = ret;
+		    $.yote.wrap_cache[ cache_key ][ args[ 'wrap_key' ] ][ fld ] = ret;
 		    return ret;
 		}, //wrap
 

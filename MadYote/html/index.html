@@ -8,7 +8,8 @@
     <script src="/yote/js/jquery.base64.min.js"></script>
     <script src="/yote/js/json2.js"></script>
 
-    <script src="/js/main.js"></script>
+    <script src="/templates/templates.js"></script>
+
     <script src="/yote/js/yote.js"></script>
     <script src="/yote/js/yote.util.js"></script>
     <link href="/yote.css" rel="stylesheet" type="text/css" media="all" />
@@ -31,18 +32,12 @@
 
     <script>
       <!--
-/*
-  One could, for example have templates. One template for the frame of the page, one for the javascript
-  and one each for the panels.
-
-  Now what would the template look like?
-
-
-*/
 	  $().ready(function() {
+	      $.yote.include_templates( '/templates/templates.html' );
+	      $.yote.util.register_functions( base_templates );
 
 	      $.yote.init();
-	      var yote_app = $.yote.fetch_app( 'MadYote' );
+ 	      var yote_app = $.yote.fetch_app( 'MadYote' );
 
 	      function setup() {
 		  var root     = $.yote.fetch_root();
@@ -94,27 +89,19 @@
 
 	      } //setup
 
-	      attach_login( {
-		  attachpoint         : '#logged_in_status',
-		  message_attachpoint : '#msg_div',
-		  app                 : yote_app,
-		  after_login         : function() {
-		      if( $.yote.is_root() ) {
-			  $( '#suggestion_box' ).hide();
-			  $( '#suggestion_box_admin' ).show();
-		      }
-		      else {
-			  $( '#suggestion_box' ).show();
-			  $( '#suggestion_box_admin' ).hide();
-		      }
-		      setup();
-		  },
-		  after_logout        : function() {
-		      $( '#suggestion_box_admin' ).hide();
-		      $( '#suggestion_box' ).show();
-		      setup();
+	      function refresh_all() {
+		  if( $.yote.is_root() ) {
+		      $( '#suggestion_box' ).hide();
+		      $( '#suggestion_box_admin' ).show();
 		  }
-	      } );
+		  else {
+		      $( '#suggestion_box' ).show();
+		      $( '#suggestion_box_admin' ).hide();
+		  }
+		  $.yote.util.refresh_ui();		  
+	      }
+	      $.yote.util.register_function( 'refresh_all', refresh_all );
+	      refresh_all();
 	  } );
 	-->
     </script>
@@ -129,8 +116,7 @@
         <img height="70px" width="151px" src="yotelogo.png">
       </A>
       <UL id="top_nav" class="nav"></UL>
-      <DIV class="login logged_in" id="logged_in_status"></DIV>
-      <DIV id="msg_div"></DIV>
+      <DIV id="login_div" class="yote_template login" template="Log_in_box"></div>
     </DIV>
 
     <DIV id="side_panel" class="side_panel yote_panel" item="$page"    field="#side_panel" edit_requires="root"> </DIV>
