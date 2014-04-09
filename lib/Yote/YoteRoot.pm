@@ -228,11 +228,11 @@ sub purge_app {
 	    $app = $app_or_name;
 	    my $aname = $app->get__key();
 	    if( $aname ) {
-		$app = delete $apps->{ $app_or_name };
+		delete $apps->{ $aname };
 	    }
 	    else {
 		for my $key (keys %$apps) {
-		    if( $app_or_name->_is( $apps->{ $key } ) ) {
+		    if( $app->_is( $apps->{ $key } ) ) {
 			delete $apps->{ $key };
 			last;
 		    }
@@ -243,12 +243,31 @@ sub purge_app {
 	    $app = delete $apps->{ $app_or_name };
 	}
 	$self->add_to__purged_apps( $app );
-	return "Purged " . ref( $app_or_name ) ? ref( $app_or_name ) : $app_or_name;
+	return "Purged " . (ref( $app_or_name ) ? ref( $app_or_name ) : $app_or_name );
     }
     die "Permissions Error";
 } #purge_app
 
+sub register_app {
+    my( $self, $data, $acct ) = @_;
+    die "Register app requires name and class fields" unless $data->{ name } && $data->{ class };
+    eval( "require $data->{ class }" );
+    die $@ if $@;
+    my $name = $data->{ name };
+    my $apps = $self->get__apps({});
+    die "App '$name' already registered" if $apps->{ $name };
+    my $app = $data->{ class }->new( { _key => $name } );
+    die 'Register_app class must subclass Yote::AppRoot' unless $app->isa( 'Yote::AppRoot' );
+    $apps->{ $name } = $app;
+    return $app;
+} #register_app
 
+sub flush_purged_apps {
+    my( $self, $data, $acct ) = @_;
+    die "Access Error" unless $acct->is_root();
+    $self->set__purged_apps( [] );
+    return 1;
+} #flush_purged_apps
 
 #
 # Removes a login. Need not only to be logged in, but present all credentials
@@ -488,6 +507,10 @@ Returns the app object singleton of the given package name.
 
 Returns the singleton root object. It creates it if it has not been created.
 
+=item flush_purged_apps
+
+Removes the backups of purged apps.
+
 =item guest_token
 
 Creates and returns a guest token, associating it with the calling IP address.
@@ -526,6 +549,10 @@ Returns a new user yote object, initialized with the optional has reference.
 =item purge_app
 
 This method may only be invoked by a login with the root bit set. This clears out the app entirely.
+
+=item register_app
+
+Registers the app object with the app key. This means there can be generic apps.
 
 =item remove_root( login )
 

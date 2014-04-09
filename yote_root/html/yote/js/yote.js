@@ -99,10 +99,11 @@ if( ! Object.keys ) {
     }
 }
 if( ! Object.clone ) {
+    // shallow clone
     Object.clone = function( h ) {
         var clone = {};
         for( var key in h ) {
-            clone[ key ] = h[ key ];
+	    clone[ key ] = h[ key ];
         }
         return clone;
     }
@@ -265,9 +266,6 @@ $.yote = {
 	$.yote.token = 0;
 	$.yote._dump_cache();
 	$.cookie( 'yoken', '', { path : '/' } );
-	if( $.yote.util ) {
-	    $.yote.util.registered_items = {};
-	}
     }, //logout
 
     include_templates:function( url ) {
@@ -378,6 +376,7 @@ $.yote = {
 			    }
 		        }
 		    } else if( typeof params.failhandler === 'function' ) {
+			console.log( data.err );
 		        params.failhandler(data.err);
                     } //error case. no handler defined
                 } else {
@@ -602,7 +601,7 @@ $.yote = {
 			search_fields : args[ 'search_field'  ] || [],
 			sort_fields   : args[ 'sort_fields'   ] || [],
 			hashkey_search_value : args[ 'hashkey_search_value' ] || undefined,
-			sort_reverse  : args[ 'sort_reverse'  ] || false,
+			sort_reverse  : args[ 'sort_reverse'  ] || undefined,
 			is_hash       : is_hash,
 			full_size : function() {
 			    var me = this;
@@ -628,7 +627,7 @@ $.yote = {
 				    skip  : me.start,
 				    search_fields : me.search_fields,
 				    search_terms  : me.search_values,
-				    reverse : me.sort_reverse ? 1 : 0,
+				    reverse : me.sort_reverse,
 				    sort_fields : me.sort_fields
 				} );
 				return res.to_list();
@@ -667,9 +666,8 @@ $.yote = {
 					}
 				    }
 				    else {
-					me.length = olist.length;
-
 					if( i >= me.start && ( me.page_size==0 || ret.length < me.page_size) ) {
+					    me.length++;
 					    ret.push( olist[i] );
 					}
 				    }
@@ -720,23 +718,22 @@ $.yote = {
 					    }
 					    if( match ) {
 						var k = hkeys[ i ];
-						me.length++;
 						if( i >= me.start && me.length < me.page_size &&
 						    ( ! me.hashkey_search_value || 
 						      k.toLowerCase().indexOf( me.hashkey_search_value ) != -1 ) )
 						{
 						    ret[ k ] = ohash[ k ];
+						    me.length++;
 						}
 					    }
 					}
 				    }
 				    else {
-					me.length = Object.size( ohash );
-
 					if( i >= me.start && me.length < me.page_size ) {
 					    var k = hkeys[ i ];
 					    if( ! me.hashkey_search_value || k.toLowerCase().indexOf( me.hashkey_search_value ) != -1 ) {
 						ret[ k ] = ohash[ k ];
+						me.length++;
 					    }
 					}
 				    }
@@ -790,7 +787,7 @@ $.yote = {
 			    return this.start > 0;
 			},
 			can_fast_forward : function() {
-			    return this.start + this.page_size < this.length;
+			    return this.start + this.page_size < this.full_size();
 			},
 			back:function(){
 			    var towards = this.start - (this.page_size);
@@ -800,7 +797,7 @@ $.yote = {
 			    this.start = 0;
 			},
 			last:function(){
-			    this.start = this.length - this.page_size;
+			    this.start = this.full_size() - this.page_size;
 			}
 		    };
 		    $.yote.wrap_cache[ cache_key ][ args[ 'wrap_key' ] ][ fld ] = ret;
@@ -922,7 +919,12 @@ $.yote = {
 		if( typeof val === 'function' ) return val;
 
 		if( val.substring(0,1) != 'v' ) {
-		    var obj = root.objs[val+''] || $.yote.fetch_root().fetch(val).get(0);
+		    var obj = root.objs[val+''];
+		    if( ! obj ) {
+			var ret = $.yote.fetch_root().fetch(val);
+			if( ! ret ) return undef; //this can happen if an authorized user logs out
+			obj = ret.get(0);
+		    }
 		    obj._app_id = this._app_id;
                     return obj;
 		}
