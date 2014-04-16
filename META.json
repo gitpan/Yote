@@ -28,7 +28,9 @@
       "runtime" : {
          "recommends" : {
             "Authen::NTLM" : "1",
-            "Digest::HMAC_MD5" : "1"
+            "DBD::mysql" : "1",
+            "Digest::HMAC_MD5" : "1",
+            "MongoDB" : "1"
          },
          "requires" : {
             "Aspect" : "1.04",
@@ -53,7 +55,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.203"
+         "version" : "0.204"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -176,5 +178,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.203"
+   "version" : "0.204"
 }

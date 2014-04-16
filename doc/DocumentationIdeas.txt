@@ -1,0 +1,105 @@
+Yote is a tool for rapidly creating web applications.
+It provides a web server, a client side templating system
+and automatic backend storage. It provides account management
+and object level permissioning. Fully functioning web apps
+can be created entirely with client side code.
+
+<h2>Example</h2>
+<p>
+To demonstrate its power, this example shows all the steps needed to create a simple rolodex app.
+</p>
+<p>
+<h4>Design goals</h4>
+  Design a rolodex where all may edit, add and remove entries. The entries should be paginated, sortable and searchable.
+</p>
+
+<h3>Installation and configuration</h3>
+ <ol>
+   <li>Get Yote.  The simplist way is to use cpan.<BR>
+      <code>$&gt; sudo cpan Yote</code>
+   </li>
+   <li>Shut off any webservers running on port 80 ( or choose a different port via yote configuration </li>
+   <li>start yote
+     <code>$&gt; sudo yote_server </code>
+   At this point, Yote will ask setup questions and will write that setup to /opt/yote/yote.conf. For this example, the defaults can all be used ( except possibly the port question if you want to run Yote on something other than port 80 ). The only thing you must provide is the root password.
+    </li>
+ </ol>
+<h3>Create an app</h3>
+ <ol>
+   <li>open up the Yote Admin Page :  http://localhost/admin.html (if using a port other than 80, open up http://localhost:<yourport>/admin.html</li>
+   <li>Add an app. Give it the name 'Rolo'. <BR>
+       <img src="/images/create_app.png">
+      </li>
+   <li>Add an object with read and write permissions for all to the app. Call this rolodex.  <BR>
+         <img src="/images/add_object.png"></li>
+  </ol>
+<h3>Write the App Front End in 6 steps</h3>
+<ol>
+  <li>Copy the app template file for editing <BR><code> $&gt; cp /opt/yote/html/app_template.html /opt/yote/html/rolo.html </code> </li>
+  <li>Edit  /opt/yote/html/rolo.html with your favorite editor. </li>
+  <li>Create a template for the whole rolodex app. Rename the default template in the body of the html page.<BR>
+     <code><pre>&lt;BODY&gt;
+   &lt;DIV class="yote_template side_panel" template="RolodexMain" default_variable="app"&gt;&lt;/div&gt;
+&lt;/body&gt;</pre></code>
+<p>
+Outside of the body, define the template that will show the app. There are a few template tags being demonstrated here.
+The first is the &lt$@ tag. This indicates to the engine that a list will be filled with template Show_Rolodex ( if there are entries )
+or the template called Empty if there are none. The _ character is the default variable, the entries variable that was defined above.
+The entries container will be the default variable for the Show_Rolodex template.
+</p>
+     <code><pre>
+&lt;script type="text/template" class="yote_template_definition" template_name="RolodexMain"&gt;
+   &lt;h2&gt;Rolodex App&lt;/h2&gt;
+   &lt;DIV class="box"&gt;
+     &lt;$@ Show_Rolodex Empty _ entries @$&gt; &lt;BR&gt;
+   &lt;/DIV&gt;
+   &lt;DIV class="box"&gt;
+     &lt;$$ New_Rolodex $$&gt;
+   &lt;/DIV&gt;
+&lt;/script&gt;
+     </pre></code>
+   </li>
+  <li>Define the empty and normal templates to show the list of entries.
+   <BR><CODE><PRE>&lt;script type="text/template" class="yote_template_definition" template_name="Empty"&gt;
+    No entries found.
+&lt;/script&gt;</PRE></CODE><BR>
+The code for the case to show the entries is more interesting. The $$$ tag defines a variable in this case called
+search fields. This variable will be accessable to any template referenced by this one. $$ again references an other
+template, this time the SearchList template that is included in the templates.html library that is included by default.
+Since this is tabular data, a table can be used. Note the &lt;@ Show_Rolodex_Entry 10 @&gt;. This shows up to 10 entries;
+the Show_Rolodex_Entry is given the entry as a default variable and is rendered. The paginator likewise is a template
+included in templates.html.
+<CODE><PRE>&lt;script type="text/template" class="yote_template_definition" template_name="Show_Rolodex"&gt;
+   &lt;h3&gt;Rolodex Entries&lt;/h3&gt;
+   &lt;$$$ var search_fields firstname lastname email $$$&gt;
+   &lt;$$ SearchList $$&gt;&lt;BR&gt;
+   &lt;TABLE&gt;
+         &lt;TR&gt; &lt;TH&gt;First Name&lt;/TH&gt; &lt;TH&gt;Last Name&lt;/TH&gt; &lt;TH&gt;Email&lt;/TH&gt; &lt;TH&gt;Cell Number&lt&gt; &lt;TH&gt;Homepage&lt;/TH&gt; &lt;TH&gt;Delete&lt;/TH&gt; &lt;/TR&gt;
+         &lt;@ Show_Rolodex_Entry 10 @&gt;
+   &lt;/TABLE&gt;
+   &lt;$$ Paginator $$&gt;
+&lt;/script&gt;
+
+   </li>
+   <li>Deinfe the view for one entry in the table. This is the template referenced by the @ tag above. The default variable _ is for the entry. Edit makes the field clicable and editable. The list_remove_button is an automatic command that creates a button that removes _ from its parent object's entries container. <BR>
+<CODE><PRE>&lt;script type="text/template" class="yote_template_definition" template_name="Show_Rolodex_Entry"&gt;                                                                         
+   &lt;TR&gt;                                                                                                                                                                  
+         &lt;TD&gt;  &lt;$ edit _ firstname $&gt; &lt;/TD&gt;                                                                                                                   
+         &lt;TD&gt;  &lt;$ edit _ lastname  $&gt; &lt;/TD&gt;                                                                                                                   
+     &lt;TD&gt;  &lt;$ edit _ email  $&gt;    &lt;/TD&gt;                                                                                                                       
+     &lt;TD&gt;  &lt;$ edit _ cell $&gt;      &lt;/TD&gt;                                                                                                                       
+         &lt;TD&gt;  &lt;$ edit _ homepage $&gt;  &lt;/TD&gt;                                                                                                                   
+         &lt;TD&gt;  &lt;$ list_remove_button _ entries $&gt;  &lt;/TD&gt;                                                                                                      
+   &lt;/TR&gt;                                                                                                                                                                  
+&lt;/script&gt;</PRE></CODE></LI>
+ <LI>The last piece of the puzzle is how to create new entries. The $$$ new directive makes an entry in a special hash of variables that 
+are set aside for creating new things. Yote takes the html that is contained between the $$$ markers, assigns it an id and stores the id with that new variable.
+The newbutton likewise is an automatic control that tells Yote where to add the newly created object. 
+<BR><CODE><PRE>&lt;script type="text/template" class="yote_template_definition" template_name="New_Rolodex"&gt;                                                                                
+   &lt;$$$ new firstname &lt;input type="text"  placeholder="First Name"   &gt; $$$&gt;   &lt;BR&gt;                                                                              &lt;$$$ new lastname  &lt;input type="text"  placeholder="Last Name"    &gt; $$$&gt;   &lt;BR&gt;                                                                              &lt;$$$ new email     &lt;input type="email" placeholder="Email Address"&gt; $$$&gt;   &lt;BR&gt;                                                                              &lt;$$$ new cell      &lt;input type="phone" placeholder="Cellphone"    &gt; $$$&gt;   &lt;BR&gt;                                                                              &lt;$$$ new homepage  &lt;input type="text"  placeholder="Homepage URL" &gt; $$$&gt;   &lt;BR&gt;                                                                              &lt;$ newbutton _.rolodex entries New Rolodex Entry $&gt;                                                                                                                            
+&lt;/script&gt;</PRE></CODE><BR>
+Now it is done. Toss in a little CSS and it looks like this.<BR>
+<img src="/images/completed.png">
+  </LI>                   
+</ol>
+
