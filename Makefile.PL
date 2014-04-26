@@ -14,6 +14,7 @@ WriteMakefile
                    'Email::Valid' => '0.19',
                    'File::UStore' => '0.12',
                    'JSON' => '2.53',
+                   'JavaScript::Minifier' => '1.11',
                    'MIME::Base64' => 0,
                    'Mail::Sender' => 0,
                    'Test::More' => 0,
