@@ -11,15 +11,26 @@
    <$$$ control login_button <button type="BUTTON">Log In</button> $$$>
 <BR>
    <$ action_link forgot Forgot Password $>
-   <?? init_login ??>
+   <$ action_link show_create_account Create Account $>
+   <? init_login ?>
 </script>
 
 <script type="text/template" class="yote_template_definition" template_name="Recover_Login">
    <$$$ control messages <span></span> $$$><BR>
    <$$$ control email <input placeholder="email" type="text"> $$$>
-   <$ button recover Recover Password $>
+   <$$$ control recover <button type="button">Recover Password</button> $$$>
    <$ action_link refresh_all [X] $>
-   <?? init_recover ??>
+   <? init_recover ?>
+</script>
+
+<script type="text/template" class="yote_template_definition" template_name="Create_Login">
+   <$$$ control messages <span></span> $$$><BR>
+   <$$$ control handle <input placeholder="handle" type="text"> $$$>
+   <$$$ control email <input placeholder="email" type="text"> $$$>
+   <$$$ control password <input placeholder="password" type="password"> $$$>
+   <$$$ control create <button type="button">Create Accout</button> $$$>
+   <$ action_link refresh_all [X] $>
+   <? init_create ?>
 </script>
 
 <script type="text/template" class="yote_template_definition" template_name="Paginator">
@@ -27,28 +38,45 @@
  <$$$ control paginate_back_button <button type="BUTTON">&lsaquo;</button> $$$>
  <$$$ control paginate_forward_button <button type="BUTTON">&rsaquo;</button> $$$>
  <$$$ control paginate_to_end_button <button type="BUTTON">&raquo;</button> $$$>
- <?? init_paginator ??>
+ <? init_paginator ?>
 </script>
 
 
 <script type="text/template" class="yote_template_definition" template_name="SearchList">
  <$$$ control search_val <input type="TEXT" placeholder="Search"> $$$>
  <$$$ control search_btn <button type="BUTTON">Search</button> $$$>
- <?? init_search_list ??>
+ <? init_search_list ?>
 </script>
 
 <script type="text/template" class="yote_template_definition" template_name="YoteHeader">
   <DIV class="header" id="header_div">
     <A href="/index.html" style="display:block">
-      <img height="70px" width="151px" src="yotelogo.png">
+      <img height="70px" width="151px" src="<$ val logo /yotelogo.png $>">
     </A>
     <UL id="top_nav" class="nav"></UL>
-    <div class="login">
-      <? check_login_status ?>
+    <div id="login_div" class="login">
+      <?? check_login_status ??>
     </div>
   </DIV>
 </script>
 
 <script type="text/template" class="yote_template_definition" template_name="Log_in_box">
- <? check_login_status ?>
+ <?? check_login_status ??>
+</script>
+
+<script type="text/template" class="yote_template_definition" template_name="Log_in_box_admin">
+  <$$$ var default_login_message This page requires a root login. $$$>
+  <$$ Log_in_box $$>
+</script>
+
+<script type="text/template" class="yote_template_definition" template_name="YoteHeaderAdmin">
+    <DIV class="header">
+      <A href="/index.html" style="display:block">
+	<img height="70px" width="151px" src="<$ val logo /yotelogo.png $>">
+      </A>
+      <UL id="top_nav" class="nav"></UL>
+      <div id="login_div" class="login">
+        <$$ Log_in_box_admin $$>
+      </div>
+    </DIV>
 </script>

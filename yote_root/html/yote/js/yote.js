@@ -30,11 +30,12 @@ $.yote = {
     app:null,
     root:null,
     wrap_cache:{},
+    need_reinit:false,
 
-    init:function( appname ) {
-        var token = $.cookie('yoken');
+    init:function( appname, token ) {
+        token = token ? token : $.cookie('yoken');
 	$.yote.token = token || 0;
-	
+
 	var initial_data = this.message( {
 	    async:false,
 	    cmd:'fetch_initial',
@@ -47,10 +48,12 @@ $.yote = {
 	    $.yote.yote_root = yote_root;
 	    $.yote.objs[ yote_root.id ] = yote_root;
 
-	    var app = initial_data.get(  'app' ); app._app_id = app.id;
+	    var app = initial_data.get( 'app' ) || yote_root;
+	    app._app_id = app.id;
 	    $.yote.default_app = app;
+	    $.yote.default_appname = appname;
 	    $.yote.objs[ app.id ] = app;
-	    
+
 	    $.yote.login_obj   = initial_data.get(  'login' );
 	    $.yote.acct_obj    = initial_data.get(  'account' );
 	    $.yote.guest_token = initial_data.get(  'guest_token' );
@@ -58,6 +61,15 @@ $.yote = {
 	    return app;
 	}
     }, //init
+
+    reinit:function( token ) {
+	if( ! this.default_app || this.need_reinit ) {
+	    this.init( this.default_appname, token );
+	    this.need_reinit = false;
+	    return true;
+	}
+	return false;
+    }, //reinit
 
     fetch_account:function() {
 	if( this.default_app ) {
@@ -82,7 +94,7 @@ $.yote = {
 	}
     }, //fetch_app
 
-    // TODO - add login information here as well and 
+    // TODO - add login information here as well and
     // return not only root but login if applicable
     fetch_root:function() {
 	var r = $.yote.yote_root;
@@ -145,6 +157,7 @@ $.yote = {
 	$.yote.fetch_root().logout();
 	$.yote.login_obj = undefined;
 	$.yote.acct_obj = undefined;
+	$.yote.default_app = undefined;
 	$.yote.token = 0;
 	$.yote._dump_cache();
 	$.cookie( 'yoken', '', { path : '/' } );
@@ -168,7 +181,7 @@ $.yote = {
 	    },
 	    type:'GET',
 	    url: url
-	} );	
+	} );
     }, //include_templates
 
     /* general functions */
@@ -349,7 +362,7 @@ $.yote = {
 		    if( $.yote.debug == true ) {
 			console.log('incoming '); console.log( resp );
 		    }
-		    
+
                     if( typeof resp !== 'undefined' ) {
 			if( typeof resp.err === 'undefined' ) {
 			    //dirty objects that may need a refresh
@@ -434,28 +447,53 @@ $.yote = {
 		    var res = this.values().sort( sortfun );
 		    return res;
 		},
-		wrap_list:function( args ) {
-		    return this.wrap( args, false ); 
+		wrap_list:function( args, size, dontmake ) {
+		    args.dontmake = dontmake;
+		    args.size = size;
+		    return this.wrap( args );
 		},
-		wrap_hash:function( args ) {
-		    return this.wrap( args, true );
+		wrap_hash:function( args, size, dontmake ) {
+		    args.is_hash = true;
+		    args.dontmake = dontmake;
+		    args.size = size;
+		    return this.wrap( args );
 		},
-		wrap:function( args, is_hash ) {
+		wrap_native_list:function( list ) {
+		    return {
+			start:0,
+			full_size:function() { return list.length; },
+			to_list:function() { return list; },
+			set_hashkey_search_criteria:function( hashkey_search ) {},
+			set_search_criteria:function( hashkey_search ) {},
+			get:function( idx ) { return list[ idx ] },
+			seek:function( topos ) { this.start = topos; },
+			forwards:function( ) {},
+			can_rewind:function( ) { return this.start > 0; },
+			can_fast_forward:function( ) {},
+			back:function( ) {},
+			first:function( ) { this.start = 0; },
+			last:function( ) {},
+		    };
+		},
+		wrap:function( args ) { 
+		    var ctx = args.context;
 		    var host_obj = this;
-		    var fld = args[ 'collection_name' ];
+		    var fld = ctx.collection_name;
 
 		    var cache_key = host_obj.id;
 
 		    if( ! $.yote.wrap_cache[ cache_key ] ) {
 			$.yote.wrap_cache[ cache_key ] = {};
 		    }
-		    if( ! $.yote.wrap_cache[ cache_key ][ args[ 'wrap_key' ] ] ) {
-			$.yote.wrap_cache[ host_obj.id ][ args[ 'wrap_key' ] ] = {};
+		    // TODO : better wrap_key. Suggest it be a path of templates that traces to the root html document.
+		    // NEED to then have a parent_template functioning well
+		    if( ! $.yote.wrap_cache[ cache_key ][ args.wrap_key ] ) {
+			$.yote.wrap_cache[ cache_key ][ args.wrap_key ] = {};
 		    }
-		    if( $.yote.wrap_cache[ cache_key ][ args[ 'wrap_key' ] ][ fld ] ) {
-			return $.yote.wrap_cache[ cache_key ][ args[ 'wrap_key' ] ][ fld ];
+		    if( $.yote.wrap_cache[ cache_key ][ args.wrap_key ][ fld ] ) {
+			return $.yote.wrap_cache[ cache_key ][ args.wrap_key ][ fld ];
 		    }
-
+		    if( args.dontmake ) return undefined;
 		    var ol, page_out_list = false;
 		    // check to see if this object is already loaded in the cache.
 		    if( $.yote._is_in_cache( '' + host_obj._d[ fld ] ) ) {
@@ -464,7 +502,7 @@ $.yote = {
 		    else {
 			ol = host_obj.count( fld );
 			// see if the whole list can be obtained at once
-			page_out_list = fld.charAt( 0 ) == '_'  || ol > (args[ 'threshhold' ] || 200);
+			page_out_list = fld.charAt( 0 ) == '_'  || ol > (ctx.threshhold || 200);
 		    }
 
 		    if( ! page_out_list ) {
@@ -480,18 +518,19 @@ $.yote = {
 			id                 : host_obj.id,
 			host_obj           : host_obj,
 			field              : fld,
-			start              : args[ 'start' ] || 0,
-			page_size     : 1*args[ 'size' ],
-			search_values : args[ 'search_value'  ] || [],
-			search_fields : args[ 'search_field'  ] || [],
-			sort_fields   : args[ 'sort_fields'   ] || [],
-			hashkey_search_value : args[ 'hashkey_search_value' ] || undefined,
-			sort_reverse  : args[ 'sort_reverse'  ] || undefined,
-			is_hash       : is_hash,
+			start              : ctx.start || 0,
+			page_size     : 1*args.size,
+			search_values : ctx.search_value || [],
+			search_fields : ctx.search_field || [],
+			sort_fields   : ctx.sort_fields  || [],
+			hashkey_search_value : ctx.hashkey_search_value || undefined,
+			sort_reverse  : ctx.sort_reverse || undefined,
+			is_hash       : args.is_hash,
 			full_size : function() {
 			    var me = this;
 			    if( me.page_out_list ) {
-				return 1 * me.host_obj.count( me.field );
+				var c = 1 * me.host_obj.count( me.field );
+				return c;
 			    }
 			    if( me.is_hash ) {
  				 return Object.size( me.collection_obj._d );
@@ -502,12 +541,12 @@ $.yote = {
 			    var me = this;
 			    if( me.page_out_list ) {
 				me.length = 1*me.host_obj.count( {
-				    name  : me.field, 
+				    name  : me.field,
 				    search_fields : me.search_fields,
 				    search_terms  : me.search_values,
 				} );
-				var res = me.host_obj.paginate( { 
-				    name  : me.field, 
+				var res = me.host_obj.paginate( {
+				    name  : me.field,
 				    limit : me.page_size,
 				    skip  : me.start,
 				    search_fields : me.search_fields,
@@ -523,9 +562,9 @@ $.yote = {
 				var olist = me.collection_obj.to_list();
 
 				if( me.sort_fields.length > 0 ) {
-				    olist = olist.sort( function( a, b ) { 
+				    olist = olist.sort( function( a, b ) {
 					for( var i=0; i<me.sort_fields.length; i++ ) {
-					    if( typeof a === 'object' && typeof b === 'object' ) 
+					    if( typeof a === 'object' && typeof b === 'object' )
 						return a.get( me.sort_fields[i] ).toLowerCase().localeCompare( b.get( me.sort_fields[i] ).toLowerCase() );
 					    return 0;
 					}
@@ -545,7 +584,7 @@ $.yote = {
 					    }
 					    if( match ) {
 						me.length++;
-						if( i >= me.start && ret.length < me.page_size ) 
+						if( i >= me.start && ret.length < me.page_size )
 						    ret.push( olist[i] );
 					    }
 					}
@@ -564,13 +603,13 @@ $.yote = {
 			    var me = this;
 			    if( me.page_out_list ) {
 				me.length = 1*me.host_obj.count( {
-				    name  : me.field, 
+				    name  : me.field,
 				    search_fields : me.search_fields,
 				    search_terms  : me.search_values,
 				    hashkey_search : me.hashkey_search_value,
 				} );
-				var res = me.host_obj.paginate( { 
-				    name  : me.field, 
+				var res = me.host_obj.paginate( {
+				    name  : me.field,
 				    limit : me.page_size,
 				    skip  : me.start,
 				    search_fields : me.search_fields,
@@ -587,7 +626,7 @@ $.yote = {
 				if( ! me.collection_obj ) return ret;
 				var ohash  = me.collection_obj.to_hash();
 				var hkeys = me.collection_obj.keys();
-				
+
 				hkeys.sort();
 				if( me.sort_reverse ) hkeys.reverse();
 
@@ -604,7 +643,7 @@ $.yote = {
 					    if( match ) {
 						var k = hkeys[ i ];
 						if( i >= me.start && me.length < me.page_size &&
-						    ( ! me.hashkey_search_value || 
+						    ( ! me.hashkey_search_value ||
 						      k.toLowerCase().indexOf( me.hashkey_search_value ) != -1 ) )
 						{
 						    ret[ k ] = ohash[ k ];
@@ -664,9 +703,15 @@ $.yote = {
 			seek:function(topos) {
 			    this.start = topos;
 			},
+			back_one:function() {
+			    this.start--;
+			},
+			forwards_one:function() {
+			    this.start++;
+			},
 			forwards:function(){
 			    var towards = this.start + this.page_size;
-			    this.start = towards > this.length ? (this.length-1) : towards;
+			    this.start = towards > this.full_size() ? (this.length-1) : towards;
 			},
 			can_rewind : function() {
 			    return this.start > 0;
@@ -678,14 +723,14 @@ $.yote = {
 			    var towards = this.start - (this.page_size);
  			    this.start = towards < 0 ? 0 : towards;
 			},
-			first:function(){         
+			first:function(){
 			    this.start = 0;
 			},
 			last:function(){
 			    this.start = this.full_size() - this.page_size;
 			}
 		    };
-		    $.yote.wrap_cache[ cache_key ][ args[ 'wrap_key' ] ][ fld ] = ret;
+		    $.yote.wrap_cache[ cache_key ][ args.wrap_key ][ fld ] = ret;
 		    return ret;
 		}, //wrap
 
@@ -709,7 +754,7 @@ $.yote = {
 				return this.contents.length;
 			    }
 			},
-			seek : function( idx ) {			    
+			seek : function( idx ) {
 			    if( this.is_hash ) {
 				this.contents = obj.paginate( { name : this.field, limit : this.page_size, skip : idx, return_hash : true } ).to_hash();
 			    }
@@ -718,7 +763,7 @@ $.yote = {
 				this.contents = [];
 				for( var i=0; i < res.length(); i++ ) {
 				    this.contents.push( res.get( i ) );
-				}			
+				}
 			    }
 			    this.start = idx;
 			},
@@ -744,7 +789,7 @@ $.yote = {
 			end: function() {
 			    this.seek( this.full_size - this.page_size );
 			},
-			to_beginning : function() { 
+			to_beginning : function() {
 			    this.seek( 0 );
 			}
 		    };
@@ -815,6 +860,12 @@ $.yote = {
 		return val.substring(1);
 	    };
 
+	    o._get_id = function( key ) {
+		// returns the id ( if any of the item specified by the key )
+		var val = this._d[key];
+		return val && val.substring(0,1) != 'v' ? val : undefined;
+	    },
+
 	    o.get_list_handle = function( key ) {
 		// this returns an object that is a handle to a container. It does not load the
 		// container contents at once, but provides get and set that contact the server to load
@@ -827,7 +878,7 @@ $.yote = {
 			return this.item.list_fetch( { name : this.container_key, index : idx } );
 		    },
 		    push          : function( key, val ) {
-			return this.item.insert_at( { name : this.container_key, item : val } );			
+			return this.item.insert_at( { name : this.container_key, item : val } );
 		    }
 		};
 		return ret;
@@ -844,7 +895,7 @@ $.yote = {
 			return this.item.hash_fetch( { name : this.container_key, key : hkey } );
 		    },
 		    set           : function( hkey, val ) {
-			return this.item.hash( { name : this.container_key, key : hkey, value : val } );			
+			return this.item.hash( { name : this.container_key, key : hkey, value : val } );
 		    }
 		};
 		return ret;
@@ -1147,4 +1198,3 @@ if( ! Object.clone ) {
         return clone;
     }
 }
-

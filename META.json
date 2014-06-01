@@ -56,7 +56,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.213"
+         "version" : "0.214"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -120,6 +120,9 @@
          "file" : "lib/Yote/ObjProvider.pm",
          "version" : "0.073"
       },
+      "Yote::Page" : {
+         "file" : "lib/Yote/Page.pm"
+      },
       "Yote::PerfAspect" : {
          "file" : "lib/Yote/PerfAspect.pm",
          "version" : "0.01"
@@ -127,19 +130,15 @@
       "Yote::RootObj" : {
          "file" : "lib/Yote/RootObj.pm"
       },
-      "Yote::Sample::SecretCollect" : {
-         "file" : "lib/Yote/Sample/SecretCollect.pm",
-         "version" : "0.01"
-      },
-      "Yote::Sample::SimpleTodo" : {
-         "file" : "lib/Yote/Sample/SimpleToDo.pm",
-         "version" : "0.02"
-      },
       "Yote::SimpleTemplate" : {
          "file" : "lib/Yote/SimpleTemplate.pm"
       },
       "Yote::Test::Hello" : {
          "file" : "lib/Yote/Test/Hello.pm",
+         "version" : "0.02"
+      },
+      "Yote::Test::Template" : {
+         "file" : "lib/Yote/Test/Template.pm",
          "version" : "0.02"
       },
       "Yote::Test::TestAppNeedsLogin" : {
@@ -179,5 +178,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.213"
+   "version" : "0.214"
 }

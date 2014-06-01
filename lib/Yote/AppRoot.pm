@@ -9,14 +9,16 @@ use warnings;
 
 no warnings 'uninitialized';
 
+use File::Slurp;
 use MIME::Base64;
 
-use Yote::Obj;
 use Yote::Account;
+use Yote::Obj;
+use Yote::RootObj;
 use Yote::SimpleTemplate;
 use Yote::YoteRoot;
 
-use base 'Yote::RootObj';
+use parent 'Yote::RootObj';
 
 use vars qw($VERSION);
 $VERSION = '0.088';
@@ -48,10 +50,6 @@ sub _load {
     my $self = shift;
     $self->get__attached_objects( {} ); # field -> obj parings, set aside here as a duplicate data structure to track items that may be editable on the admin page
 }
-
-sub precache {
-    my( $self, $data, $account ) = @_;
-} #_precache
 
 # ------------------------------------------------------------------------------------------
 #      * PUBLIC API Methods *
@@ -101,6 +99,72 @@ sub create_login {
 
     return { l => $login, t => $root->_create_token( $login, $env->{REMOTE_ADDR} ) };
 } #create_login
+
+#
+#
+#
+sub do_404 {
+    my $self = shift;
+    return ( 404, $self->get_error_page() );
+} #do_404
+
+#
+# TODO: maybe rather than app_name and DEfAULT, have a html_root and html_root_default fields
+# Returns response code and response.
+#
+sub fetch_page {
+    my( $self, $url ) = @_;
+    my $node = $self->_hash_fetch( '_pages', $url );
+    my $file_loc = "$ENV{YOTE_ROOT}/html/".$self->get_app_name()."/$url";
+    my $app_default_loc = $self->get_app_default_loc();
+    my $default_file_loc = defined( $app_default_loc ) ? "$ENV{YOTE_ROOT}/html/$app_default_loc" : undef;
+    if( -e $file_loc ) {
+	if( $node ) {
+	  # check to see which is more recent. if the file is, then set the current version of the node to the file unless
+	  # the node version is locked.
+	  my $file_mod_time;
+	  my $last_updated = $node->get_last_updated();
+	  if( $file_mod_time > $last_updated ) {
+	    my $html = read_file( $url );
+	    if( ! $node->get_version_locked() ) {
+	      $node->set_current_version_number( $node->_count( 'versions' ) );
+	      $node->add_to_versions( $html );
+	      $node->set_current_version( $html );
+	    }
+	    return 200, $html;
+	  }
+	  elsif( $file_mod_time < $last_updated ) {
+	    my $html = $node->get_current_version();
+	    write_file( $url, $html );
+	    return 200, $html;
+	  }
+	  else {
+	    return 200, $node->get_current_version();
+	  }
+	}
+	else {
+	    #create a new node
+ 	    my $html = read_file( $file_loc );
+	    $self->_hash_insert( '_pages',
+				 $url,
+				 $node = new Yote::RootObj( { current_version => $html,
+							      versions        => [ $html ],
+							      last_updated    => time } ) );
+	    return $html;
+	}
+    }
+    elsif( $node ) {
+	my $html = $node->get_current_version();
+	write_file( $file_loc, $html );
+	return 200, $html;
+    }
+    elsif( $default_file_loc && -e $default_file_loc ) {
+	return 200, read_file( $default_file_loc );
+    }
+    else {
+	return 404, $self->do_404();
+    }
+} #fetch_page
 
 #
 # Sends an email to the address containing a link to reset password.
@@ -183,11 +247,21 @@ sub recovery_reset_password {
 
 } #recovery_reset_password
 
-sub remove_login {
+sub remove_account {
     my( $self, $args, $acct, $env ) = @_;
-    my $root = Yote::YoteRoot::fetch_root();
-    return $root->_remove_login( $args->{ l }, $args->{ p }, $acct );
-} #remove_login
+    
+    die "invalid arguments" unless ref( $args ) eq 'HASH';
+    my( $del_acct, $password ) = @$args['a','p'];
+    die "invalid arguments" unless $del_acct && $password;
+    die "Cannot remove root" if $del_acct->get_login()->is_root() || $del_acct->get_login()->is_master_root();
+    my $login = $del_acct->get_login();
+    if( $acct->is_root() || ( $del_acct->_is( $acct ) &&
+			      Yote::ObjProvider::encrypt_pass($password, $login->get_handle()) eq $login->get__password() ) ) {
+	$self->_hash_delete( '_account_roots', $login->{ID} );
+	$self->_hash_delete( '_account_handles', lc($login->get_handle() ) );
+    }
+    die "unable to remove account";
+} #remove_account
 
 #
 # Used by the web app server to verify the login. Returns the login object belonging to the token.
