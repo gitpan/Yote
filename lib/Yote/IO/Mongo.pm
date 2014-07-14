@@ -199,7 +199,7 @@ sub fetch {
 } #fetch
 
 #
-# Returns the first ID that is associated with the root YoteRoot object
+# Returns the first ID that is associated with the root Root object
 #
 sub first_id {
     my $self = shift;
@@ -622,7 +622,7 @@ Returns a hash representation of a yote object, hash ref or array ref by id. The
 
 =item first_id( id )
 
-Returns the id of the first object in the system, the YoteRoot.
+Returns the id of the first object in the system, the Root.
 
 =item get_id( obj )
 

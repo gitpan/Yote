@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use Yote::AppRoot;
-use Yote::YoteRoot;
+use Yote::Root;
 use Yote::Test::TestAppNoLogin;
 use Yote::Test::TestAppNeedsLogin;
 use Yote::Test::TestDeepCloner;
@@ -33,10 +33,10 @@ BEGIN {
 my( $fh, $name ) = mkstemp( "/tmp/SQLiteTest.XXXX" );
 $fh->close();
 
-Yote::ObjProvider::init(
+Yote::ObjProvider::init( {
     datastore      => 'Yote::SQLiteIO',
     store          => $name,
-    );
+    } );
 my $db = $Yote::ObjProvider::DATASTORE->database();
 test_suite( $db );
 done_testing();
@@ -62,13 +62,13 @@ sub test_suite {
 #                                      #
 # ----------- simple object tests -----#
 #                                      #
-    Yote::YoteRoot->fetch_root();
-    my $ROOT_START = 23;
-    my $ROOT_FIELD_START = 31;
+    Yote::Root->fetch_root();
+    my $ROOT_START = 24;
+    my $ROOT_FIELD_START = 30;
     my( $o_count ) = query_line( $db, "SELECT count(*) FROM objects" );
     is( $o_count, $ROOT_START, "number of objects before save root, since root is initiated automatically" );
     my $root = Yote::ObjProvider::fetch( Yote::ObjProvider::first_id() );
-    is( ref( $root ), 'Yote::YoteRoot', 'correct root class type' );
+    is( ref( $root ), 'Yote::Root', 'correct root class type' );
     ok( $root->{ID} == 1, "Root has id of 1" );
     my $max_id = $Yote::ObjProvider::DATASTORE->max_id();
     is( $max_id, $ROOT_START, "highest id in database is $ROOT_START" );
@@ -132,7 +132,7 @@ sub test_suite {
 # 1 from alias_apps
     my $db_rows = $db->selectall_arrayref("SELECT * FROM field");
 
-    BAIL_OUT("error saving after stow all") unless is( scalar(@$db_rows), $ROOT_FIELD_START + 28, "Number of db rows saved to database with stow all" );
+    BAIL_OUT("error saving after stow all") unless is( scalar(@$db_rows), $ROOT_FIELD_START + 38, "Number of db rows saved to database with stow all" );
 
     $db_rows = $db->selectall_arrayref("SELECT * FROM objects WHERE recycled=0");
     is( scalar(@$db_rows), $ROOT_START+9, "Number of db rows saved to database not recycled" ); 

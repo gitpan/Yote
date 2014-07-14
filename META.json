@@ -4,7 +4,7 @@
       "Eric Wolf (coyocanid@gmail.com)"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.4005, CPAN::Meta::Converter version 2.132140",
+   "generated_by" : "Module::Build version 0.4003, CPAN::Meta::Converter version 2.141170",
    "license" : [
       "perl_5"
    ],
@@ -37,6 +37,7 @@
             "Crypt::Passwd::XS" : "0.601",
             "DBD::SQLite" : "1.35",
             "DBI" : "1.625",
+            "Daemon::Daemonize" : "0.0052",
             "DateTime" : "0.77",
             "Email::Valid" : "0.19",
             "File::UStore" : "0.12",
@@ -56,7 +57,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.214"
+         "version" : "0.215"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -70,9 +71,15 @@
          "file" : "lib/Yote/Array.pm",
          "version" : "0.02"
       },
+      "Yote::ConfigData" : {
+         "file" : "lib/Yote/ConfigData.pm"
+      },
       "Yote::Cron" : {
          "file" : "lib/Yote/Cron.pm",
          "version" : "0.014"
+      },
+      "Yote::Engine" : {
+         "file" : "lib/Yote/Engine.pm"
       },
       "Yote::FileHelper" : {
          "file" : "lib/Yote/FileHelper.pm",
@@ -91,7 +98,7 @@
       },
       "Yote::IO::Mysql" : {
          "file" : "lib/Yote/IO/Mysql.pm",
-         "version" : "0.034"
+         "version" : "0.035"
       },
       "Yote::IO::SMTP" : {
          "file" : "lib/Yote/IO/SMTP.pm"
@@ -126,6 +133,10 @@
       "Yote::PerfAspect" : {
          "file" : "lib/Yote/PerfAspect.pm",
          "version" : "0.01"
+      },
+      "Yote::Root" : {
+         "file" : "lib/Yote/Root.pm",
+         "version" : "0.053"
       },
       "Yote::RootObj" : {
          "file" : "lib/Yote/RootObj.pm"
@@ -165,11 +176,7 @@
       },
       "Yote::WebAppServer" : {
          "file" : "lib/Yote/WebAppServer.pm",
-         "version" : "0.2"
-      },
-      "Yote::YoteRoot" : {
-         "file" : "lib/Yote/YoteRoot.pm",
-         "version" : "0.053"
+         "version" : "0.22"
       }
    },
    "release_status" : "stable",
@@ -178,5 +185,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.214"
+   "version" : "0.215"
 }

@@ -5,26 +5,16 @@ package Yote;
 # and launch the server.								       #
 ################################################################################################
 
-
-# note : forks and forks::shared should be used before any use strict
-use forks;
-use forks::shared;
-
 use strict;
 use warnings;
-
 no warnings 'uninitialized';
-
 use vars qw($VERSION);
 
-$VERSION = '0.214';
+$VERSION = '0.215';
 
 use Carp;
+use Crypt::Passwd::XS;
 use File::Path;
-
-use Yote::ObjProvider;
-use Yote::WebAppServer;
-
 
 ##################
 # Public Methods #
@@ -40,47 +30,48 @@ sub get_args {
     # -------- run data ---------------------------
 
     my %commands = (
-	'start'    => 'start',
-	'restart'  => 'restart',
-	'stop'     => 'stop',
-	'halt'     => 'stop',
-	'shutdown' => 'stop',
-	);
+        'start'    => 'start',
+        'restart'  => 'restart',
+        'stop'     => 'stop',
+        'halt'     => 'stop',
+        'shutdown' => 'stop',
+        );
 
     my %argmap = (
-	e  => 'engine',
-	E  => 'engine_port',
-	g  => 'generate',
-	c  => 'show_config',
-	f  => 'profile',
-	h  => 'help',
-	'?' => 'help',
-	H  => 'host',
-	P  => 'password',
-	p  => 'port',
-	R  => 'reset_password',
-	A  => 'smtp_auth',
-	D  => 'smtp_authdomain',
-	N  => 'smtp_auth_encoded',
-	I  => 'smtp_authid',
-	w  => 'smtp_authpwd',
-	T  => 'smtp_TLS_allowed',
-	q  => 'smtp_TLS_required',
-	s  => 'store',
-	u  => 'user',
-	r  => 'yote_root',
-	t  => 'threads',
-	);
+        e  => 'engine',
+        E  => 'engine_port',
+        g  => 'generate',
+        c  => 'show_config',
+        f  => 'profile',
+        h  => 'help',
+        '?' => 'help',
+        H  => 'host',
+        i  => 'internal_port',
+        P  => 'password',
+        p  => 'port',
+        R  => 'reset_password',
+        A  => 'smtp_auth',
+        D  => 'smtp_authdomain',
+        N  => 'smtp_auth_encoded',
+        I  => 'smtp_authid',
+        w  => 'smtp_authpwd',
+        T  => 'smtp_TLS_allowed',
+        q  => 'smtp_TLS_required',
+        s  => 'store',
+        u  => 'user',
+        r  => 'yote_root',
+        t  => 'threads',
+        );
     my %noval = (  #arguments that do not take a value
-		   help			=> 1,
-		   generate		=> 1,
-		   show_config		=> 1,
-		   reset_password	=> 1,
-		   profile              => 1,
-	);
+                   help           => 1,
+                   generate       => 1,
+                   show_config	  => 1,
+                   reset_password => 1,
+                   profile        => 1,
+        );
     my %argnames = map { $_ => 1 } values %argmap;
 
-    my %required = map { $_ => 1 } qw/engine store yote_root root_account root_password port threads smtp_auth/;
+    my %required = map { $_ => 1 } qw/engine store yote_root root_account root_password port internal_port threads smtp_auth/;
 
     # ---------  run variables  -----------------
 
@@ -90,33 +81,34 @@ sub get_args {
 
     # ---------  get command line arguments ---------
     while ( @ARGV ) {
-	my $arg = shift @ARGV;
+        my $arg = shift @ARGV;
 
-	if ( $arg =~ /^--([^=]*)(=(.*))?/ ) {
-	    _soft_exit( "Unknown argument '$arg'" ) unless $argnames{ $1 } || $allow_unknown;
-	    $config{ $1 } = $noval{ $1 } ? 1 : $3;
-	} elsif ( $arg =~ /^-(.*)/ ) {
-	    _soft_exit( "Unknown argument '$arg'" ) unless $argmap{ $1 } || $allow_unknown;
-	    $config{ $argmap{ $1 } } = $noval{ $argmap{ $1 } } ? 1 : shift @ARGV;
-	} else {
-	    _soft_exit( "Unknown command '$arg'" ) unless $commands{ lc($arg) } || $allow_unknown || $allow_multiple_commands;
-	    _soft_exit( "Only takes one command argument" ) if $cmd && ! $allow_multiple_commands;
-	    $cmd = $arg;
-	    push @cmds, $cmd;
-	}
+        if ( $arg =~ /^--([^=]*)(=(.*))?/ ) {
+            _soft_exit( "Unknown argument '$arg'" ) unless $argnames{ $1 } || $allow_unknown;
+            $config{ $1 } = $noval{ $1 } ? 1 : $3;
+        } elsif ( $arg =~ /^-(.*)/ ) {
+            _soft_exit( "Unknown argument '$arg'" ) unless $argmap{ $1 } || $allow_unknown;
+            $config{ $argmap{ $1 } } = $noval{ $argmap{ $1 } } ? 1 : shift @ARGV;
+        } else {
+            _soft_exit( "Unknown command '$arg'" ) unless $commands{ lc($arg) } || $allow_unknown || $allow_multiple_commands;
+            _soft_exit( "Only takes one command argument" ) if $cmd && ! $allow_multiple_commands;
+            $cmd = $arg;
+            push @cmds, $cmd;
+        }
     } # each argument
 
     # --------- find yote root directory and configuration file ---------
     my $yote_root_dir = $config{ yote_root };
     unless( $yote_root_dir ) {
-	eval('use Yote::ConfigData');
-	$yote_root_dir = $@ ? '/opt/yote' : Yote::ConfigData->config( 'yote_root' );
+        eval('use Yote::ConfigData');
+        $yote_root_dir = $@ ? '/opt/yote' : Yote::ConfigData->config( 'yote_root' );
     }
     $config{ yote_root } = $yote_root_dir;
+    $config{ pidfile } = "$yote_root_dir/yote.pid";
     $ENV{YOTE_ROOT} = $yote_root_dir;
 
     if( $config{ help } ) {
-	_soft_exit();
+        _soft_exit();
     }
 
     _log( "using root directory '$yote_root_dir'" );
@@ -124,41 +116,41 @@ sub get_args {
     _log( "Looking for '$yote_root_dir/yote.conf'" );
 
     if( $config{ show_config }  ) {
-	my $loaded_config = _load_config( $yote_root_dir );
-	print "Yote configuration :\n " . join( "\n ", map { "$_ : $loaded_config->{ $_ }" } keys %$loaded_config ) . "\n";
-	exit( 0 );
+        my $loaded_config = _load_config( $yote_root_dir );
+        print "Yote configuration :\n " . join( "\n ", map { "$_ : $loaded_config->{ $_ }" } keys %$loaded_config ) . "\n";
+        exit( 0 );
     }
     elsif( $config{ generate } ) {
-	_log( "Generating new configuration file" );
-	my $newconfig = _create_configuration( $yote_root_dir, _load_config( $yote_root_dir ) );
-	for my $key ( keys %$newconfig ) {
-	    $config{ $key } ||= $newconfig->{ $key };
-	}
+        _log( "Generating new configuration file" );
+        my $newconfig = _create_configuration( $yote_root_dir, _load_config( $yote_root_dir ) );
+        for my $key ( keys %$newconfig ) {
+            $config{ $key } ||= $newconfig->{ $key };
+        }
     }
     elsif( $config{ reset_password } ) {
-	%config = %{ _reset_root_password( $yote_root_dir, _load_config( $yote_root_dir ) ) };
-	exit( 0 );
+        %config = %{ _reset_root_password( $yote_root_dir, _load_config( $yote_root_dir ) ) };
+        exit( 0 );
     }
     elsif ( -r "$yote_root_dir/yote.conf" ) {
-	my $loaded_config = _load_config( $yote_root_dir );
-	for my $key ( keys %$loaded_config ) {
-	    $config{ lc( $key ) } ||= $loaded_config->{ $key };
-	}
-	if( grep { ! defined( $config{ $_ } ) } keys %required ) {
-	    _log( "The configuration file is insufficient to run yote. Asking user to generate a new one.\n" );
-	    my $newconfig = _create_configuration( $yote_root_dir );
-	    for my $key ( keys %$newconfig ) {
-		$config{ $key } ||= $newconfig->{ $key };
-	    }
-	}
+        my $loaded_config = _load_config( $yote_root_dir );
+        for my $key ( keys %$loaded_config ) {
+            $config{ lc( $key ) } ||= $loaded_config->{ $key };
+        }
+        if( grep { ! defined( $config{ $_ } ) } keys %required ) {
+            _log( "The configuration file is insufficient to run yote. Asking user to generate a new one.\n" );
+            my $newconfig = _create_configuration( $yote_root_dir );
+            for my $key ( keys %$newconfig ) {
+                $config{ $key } ||= $newconfig->{ $key };
+            }
+        }
 
     } # reading in yote.conf file
     else {
-	_log( "No configuration file exists. Asking user to get values for one.\n" );
-	my $newconfig = _create_configuration( $yote_root_dir );
-	for my $key ( keys %$newconfig ) {
-	    $config{ $key } ||= $newconfig->{ $key };
-	}
+        _log( "No configuration file exists. Asking user to get values for one.\n" );
+        my $newconfig = _create_configuration( $yote_root_dir );
+        for my $key ( keys %$newconfig ) {
+            $config{ $key } ||= $newconfig->{ $key };
+        }
     } #had to write first config file
 
     $cmd ||= 'start';
@@ -167,6 +159,19 @@ sub get_args {
 
     return { config => \%config, command => $cmd, commands => \@cmds };
 } #get_args
+
+#
+# Encrypt the password so its not saved in plain text.
+#
+sub encrypt_pass {
+    my( $pw, $handle ) = @_;
+    return $handle ? Crypt::Passwd::XS::crypt( $pw, $handle ) : undef;
+} #encrypt_pass
+
+
+sub start_yote {
+    my %config = @_;
+}
 
 sub run {
     my %config = @_;
@@ -188,22 +193,6 @@ sub run {
 
 } #run
 
-#
-# Convenience method to return the Yote::YoteRoot singleton, connected to the db as outlined by
-# the config file.
-#
-# Warning : do not do any write operations while a Yote server is running. This could cause havoc
-#           if that server is also doing write operations.
-#
-sub fetch_root {
-    my $args = get_args();
-    my $config = $args->{ config };
-    Yote::ObjProvider::init( $config );
-    Data::Dumper->Dump([ $config ]);
-    require Yote::YoteRoot;
-    return Yote::YoteRoot::fetch_root();
-} #fetch_root
-
 ###################
 # Private Methods #
 ###################
@@ -215,6 +204,7 @@ sub _print_use {
                     --generate
                     --help
                     --host=mongo-or-mysql-host
+                    --internal_port=object-and-action-server-port
                     --show_config
                     --password=engine-password
                     --port=yote-server-port
@@ -245,30 +235,30 @@ sub _ask {
     my( $question, $allowed, $default ) = @_;
     my %valmap;
     if( $allowed ) {
-	%valmap = map { (1 + $_ ) => $allowed->[$_] } ( 0 .. $#$allowed );
-	for my $all (@$allowed) { $valmap{ lc( $all ) } = $all; }
+        %valmap = map { (1 + $_ ) => $allowed->[$_] } ( 0 .. $#$allowed );
+        for my $all (@$allowed) { $valmap{ lc( $all ) } = $all; }
     }
 
     while( 1 ) {
-	if( $allowed ) {
-	    print "$question : possible values ( ".join(',',map { (1 + $_ ) .") $allowed->[$_]".($default eq $allowed->[$_] ? '*' : '') } ( 0 .. $#$allowed )).") ? ";
-	} elsif( $default ) {
-	    print "$question : [ $default ]?";
-	} else {
-	    print "$question : ";
-	}
-	my $ans = <STDIN>;
-	$ans =~ s/[\n\r]+$//;
-	if( $allowed && $valmap{ lc($ans) } ) {
-	    return $valmap{ lc($ans) }
-	}
-	elsif( $ans !~ /\S/ && $default ) {
-	    return $default;
-	}
-	elsif( ! $allowed ) {
-	    return $ans;
-	}
-	print "'$ans' not a valid value. Try again\n";
+        if( $allowed ) {
+            print "$question : possible values ( ".join(',',map { (1 + $_ ) .") $allowed->[$_]".($default eq $allowed->[$_] ? '*' : '') } ( 0 .. $#$allowed )).") ? ";
+        } elsif( $default ) {
+            print "$question : [ $default ]?";
+        } else {
+            print "$question : ";
+        }
+        my $ans = <STDIN>;
+        $ans =~ s/[\n\r]+$//;
+        if( $allowed && $valmap{ lc($ans) } ) {
+            return $valmap{ lc($ans) }
+        }
+        elsif( $ans !~ /\S/ && $default ) {
+            return $default;
+        }
+        elsif( ! $allowed ) {
+            return $ans;
+        }
+        print "'$ans' not a valid value. Try again\n";
     }
 } #_ask
 
@@ -286,7 +276,7 @@ sub _create_configuration {
 sub _reset_root_password {
     my( $yote_root_dir, $config ) = @_;
 
-    $config->{ root_password } = Yote::ObjProvider::encrypt_pass( _ask( "Root Account Password" ), $config->{ root_account } );
+    $config->{ root_password } = encrypt_pass( _ask( "Root Account Password" ), $config->{ root_account } );
 
     open( my $OUT, '>', "$yote_root_dir/yote.conf" ) or die $@;
     print $OUT "\#\n# Yote Configuration File\n#\n\n".join("\n",map { "$_ = $config->{$_}" } grep { $config->{$_} } keys %$config )."\n\n";
@@ -305,117 +295,118 @@ sub _get_configuration {
 
     eval( "require Yote::IO::Mongo" );
     if( ! $@ ) {
-	push @$avail, 'mongo';
+        push @$avail, 'mongo';
     }
     elsif( $current_config->{ engine } eq 'mongo' ) {
-	delete $current_config->{ engine };
+        delete $current_config->{ engine };
     }
     eval( "require Yote::IO::Mysql" );
     if( ! $@ ) {
-	push @$avail, 'mysql';
+        push @$avail, 'mysql';
     }
     elsif( $current_config->{ engine } eq 'mysql' ) {
-	delete $current_config->{ engine };
+        delete $current_config->{ engine };
     }
     
     my $engine = 'sqlite';
 
     if( @$avail > 1 ) { 
-	$engine = _ask( 'This is the first time yote is being run and must be set up now.
+        $engine = _ask( 'This is the first time yote is being run and must be set up now.
  The first decision as to what data store to use.',
-			$avail, $current_config->{ engine } || 'sqlite' );
+                        $avail, $current_config->{ engine } || 'sqlite' );
     } else {
-	print "Using sqlite as an engine. Mongo and Mysql do not appear to be installed.\n";
+        print "Using sqlite as an engine. Mongo and Mysql do not appear to be installed.\n";
     }
     $newconfig{ engine } = $engine;
 
     if ( $engine eq 'sqlite' ) {
-	my $done;
-	until( $done ) {
-	    my( $dir, $store ) = ( _ask( "sqlite filename", undef, $current_config->{ store } ||  'yote.sqlite' ) =~ /(.*\/)?([^\/]+)$/ );
-	    if( $store ) {
-		if( $dir && substr( $dir, 0, 1 ) eq '/' ) {
-		    if( -d $dir && -w $dir ) {
-			$done = 1;
-			$newconfig{ store } = "$dir$store";
-		    }
-		    elsif( -d $dir ) {
-			print "Directory '$dir' is not writable by this account.\n";
-		    }
-		    else {
-			print "Directory '$dir' is not found.\n";
-		    }
-		}
-		elsif( -w $yote_root_dir || ( ! -d $yote_root_dir || -w "$yote_root_dir/.." ) ) {
-		    if( $dir ) {
-			my $full_store = "$yote_root_dir/$dir";
-			mkpath( $full_store );
-			$newconfig{ store } = "$full_store/$store";
-			$done = 1;
-		    }
-		    else {
-			$newconfig{ store } = "$yote_root_dir/data/$store";
-			$done = 1;
-		    }
-		}
-		else {
-		    print "Directory '$yote_root_dir' is not writable by this account.\n";
-		}
-	    }
-	} #done loop
+        my $done;
+        until( $done ) {
+            my( $dir, $store ) = ( _ask( "sqlite filename", undef, $current_config->{ store } ||  'yote.sqlite' ) =~ /(.*\/)?([^\/]+)$/ );
+            if( $store ) {
+                if( $dir && substr( $dir, 0, 1 ) eq '/' ) {
+                    if( -d $dir && -w $dir ) {
+                        $done = 1;
+                        $newconfig{ store } = "$dir$store";
+                    }
+                    elsif( -d $dir ) {
+                        print "Directory '$dir' is not writable by this account.\n";
+                    }
+                    else {
+                        print "Directory '$dir' is not found.\n";
+                    }
+                }
+                elsif( -w $yote_root_dir || ( ! -d $yote_root_dir || -w "$yote_root_dir/.." ) ) {
+                    if( $dir ) {
+                        my $full_store = "$yote_root_dir/$dir";
+                        mkpath( $full_store );
+                        $newconfig{ store } = "$full_store/$store";
+                        $done = 1;
+                    }
+                    else {
+                        $newconfig{ store } = "$yote_root_dir/data/$store";
+                        $done = 1;
+                    }
+                }
+                else {
+                    print "Directory '$yote_root_dir' is not writable by this account.\n";
+                }
+            }
+        } #done loop
     } #sqlite
     elsif ( lc($engine) eq 'mongo' ) {
-	$newconfig{ store }       = _ask( "MongoDB database", undef, $current_config->{ store }       || 'yote' );
-	$newconfig{ host }        = _ask( "MongoDB host",     undef, $current_config->{ host }        || 'localhost' );
-	$newconfig{ engine_port } = _ask( "MongoDB port",     undef, $current_config->{ engine_port } || 27017 );
-	$newconfig{ user }        = _ask( "MongoDB user acccount name", undef, $current_config->{ user } );
-	if ( $newconfig{ user } ) {
-	    $newconfig{ password } = _ask( "MongoDB user acccount name", undef, $current_config->{ password } );
-	}
+        $newconfig{ store }       = _ask( "MongoDB database", undef, $current_config->{ store }       || 'yote' );
+        $newconfig{ host }        = _ask( "MongoDB host",     undef, $current_config->{ host }        || 'localhost' );
+        $newconfig{ engine_port } = _ask( "MongoDB port",     undef, $current_config->{ engine_port } || 27017 );
+        $newconfig{ user }        = _ask( "MongoDB user acccount name", undef, $current_config->{ user } );
+        if ( $newconfig{ user } ) {
+            $newconfig{ password } = _ask( "MongoDB user acccount name", undef, $current_config->{ password } );
+        }
     }
     elsif ( lc($engine) eq 'mysql' ) {
-	$newconfig{ store }       = _ask( "MysqlDB database", undef, $current_config->{ store }       || 'yote' );
-	$newconfig{ host }        = _ask( "MysqlDB host",     undef, $current_config->{ host }        || 'localhost' );
-	$newconfig{ engine_port } = _ask( "MysqlDB port",     undef, $current_config->{ engine_port } || 27017 );
-	$newconfig{ user }        = _ask( "MysqlDB user acccount name", undef, $current_config->{ user } );
-	if ( $newconfig{ user } ) {
-	    $newconfig{ password } = _ask( "MysqlDB user acccount name", undef, $current_config->{ password } );
-	}
+        $newconfig{ store }       = _ask( "MysqlDB database", undef, $current_config->{ store }       || 'yote' );
+        $newconfig{ host }        = _ask( "MysqlDB host",     undef, $current_config->{ host }        || 'localhost' );
+        $newconfig{ engine_port } = _ask( "MysqlDB port",     undef, $current_config->{ engine_port } || 27017 );
+        $newconfig{ user }        = _ask( "MysqlDB user acccount name", undef, $current_config->{ user } );
+        if ( $newconfig{ user } ) {
+            $newconfig{ password } = _ask( "MysqlDB user acccount name", undef, $current_config->{ password } );
+        }
     }
 
     $newconfig{ smtp_smtp }  = _ask( "SMPT Host", undef, $current_config->{ smtp_smtp } || 'localhost' );
     $newconfig{ smtp_port }  = _ask( "SMPT Port", undef, $current_config->{ smtp_port } || 25 );
     $newconfig{ smtp_auth }  = _ask( "SMPT Authentication Method", ['LOGIN','PLAIN','CRAM-MD5','NTLM'], $current_config->{ smtp_auth } || 'PLAIN' );
     if( $newconfig{ smtp_auth } eq 'NTLM' ) {
-	$newconfig{ smtp_authdomain }  = _ask( "NTML Auth Domain", $current_config->{ smtp_authdomain } );
+        $newconfig{ smtp_authdomain }  = _ask( "NTML Auth Domain", $current_config->{ smtp_authdomain } );
     }
     elsif( $newconfig{ smtp_auth } eq 'LOGIN' ) {
-	$newconfig{ smtp_auth_encoded }  = _ask( "Should the LOGIN protocoll assume authid and authpwd are already base64 encoded?", ['Yes','No' ],  $current_config->{ smtp_auth_encoded } ? 'Yes' : 'No' );
-	$newconfig{ smtp_auth_encoded } = $newconfig{ smtp_auth_encoded } ? 1 : 0;
+        $newconfig{ smtp_auth_encoded }  = _ask( "Should the LOGIN protocoll assume authid and authpwd are already base64 encoded?", ['Yes','No' ],  $current_config->{ smtp_auth_encoded } ? 'Yes' : 'No' );
+        $newconfig{ smtp_auth_encoded } = $newconfig{ smtp_auth_encoded } ? 1 : 0;
     }
     if( $newconfig{ smtp_auth } eq 'PLAIN' ) {
-	$newconfig{ smtp_auth } = '';
+        $newconfig{ smtp_auth } = '';
     }
     else {
-	$newconfig{ smtp_authid }  = _ask( "Auth ID", undef, $current_config->{ smtp_authid } );
-	$newconfig{ smtp_authpwd } = _ask( "Auth Password", undef, $current_config->{ smtp_authpwd } );
+        $newconfig{ smtp_authid }  = _ask( "Auth ID", undef, $current_config->{ smtp_authid } );
+        $newconfig{ smtp_authpwd } = _ask( "Auth Password", undef, $current_config->{ smtp_authpwd } );
     }
-    $newconfig{ smtp_TLS_allowed } = _ask( "Should TLS ( SSL encrypted connection ) be used ", ['Yes','No'], $current_config->{ smtp_TLS_allowed } ? 'Yes' : 'No' );
-    $newconfig{ smtp_TLS_allowed } = $newconfig{ smtp_TLS_allowed } eq 'Yes' ? 1 : 0;
+    $newconfig{ smtp_TLS_allowed }  = _ask( "Should TLS ( SSL encrypted connection ) be used ", ['Yes','No'], $current_config->{ smtp_TLS_allowed } ? 'Yes' : 'No' );
+    $newconfig{ smtp_TLS_allowed }  = $newconfig{ smtp_TLS_allowed } eq 'Yes' ? 1 : 0;
     $newconfig{ smtp_TLS_required } = _ask( "Must TLS ( SSL encrypted connection ) be used", ['Yes','No'], $current_config->{ smtp_TLS_required } ? 'Yes' : 'No' );
     $newconfig{ smtp_TLS_required } = $newconfig{ smtp_TLS_required } eq 'Yes' ? 1 : 0;
 
-
-    $newconfig{ port } = _ask( "Port to run yote server on?",     undef, $current_config->{ port }    || 80 );
-    $newconfig{ threads } = _ask( "Number of server processes :", undef, $current_config->{ threads } || 4 );
+    # TODO - make sure internal port is not externally accessible.
+    $newconfig{ internal_port } = _ask( "Internal port to run object server on?",     undef, $current_config->{ internal_port } || 81 );
+    $newconfig{ port }          = _ask( "Port to run yote server on?",     undef, $current_config->{ port }    || 80 );
+    $newconfig{ threads }       = _ask( "Number of server processes :", undef, $current_config->{ threads } || 4 );
 
     # this is as secure as the file permissions of the config file, and as secure as the data store is itself.
     $newconfig{ root_account  } = _ask( "Root Account name", undef, $current_config->{ root_account} || 'root' );
     my $passwd;
     until( $passwd ) {
-	$passwd = _ask( "Root Account Password" );
+        $passwd = _ask( "Root Account Password" );
     }
-    $newconfig{ root_password } = Yote::ObjProvider::encrypt_pass( $passwd, $newconfig{ root_account } );
+    $newconfig{ root_password } = encrypt_pass( $passwd, $newconfig{ root_account } );
     return \%newconfig;
 } #_get_configuration
 
@@ -425,18 +416,18 @@ sub _load_config {
 
     my %config;
     if( -r "$yote_root_dir/yote.conf" ) {
-	open( my $IN, '<', "$yote_root_dir/yote.conf" ) or die $@;
-	while ( <$IN> ) {
-	    s/\#.*//;
-	    next unless /\S/;
-	    if ( /\s*(\S+)\s*=\s*(.*)\s*$/ ) {
-		$config{ lc( $1 ) } ||= $2;
-	    } else {
-		chop;
-		warn "Bad line in config file : '$_'";
-	    }
-	}
-	close( $IN );
+        open( my $IN, '<', "$yote_root_dir/yote.conf" ) or die $@;
+        while ( <$IN> ) {
+            s/\#.*//;
+            next unless /\S/;
+            if ( /\s*(\S+)\s*=\s*(.*)\s*$/ ) {
+                $config{ lc( $1 ) } ||= $2;
+            } else {
+                chop;
+                warn "Bad line in config file : '$_'";
+            }
+        }
+        close( $IN );
     }
     return \%config;
 } #_load_config
@@ -533,16 +524,6 @@ return until the yote server has shut down.
 =head1 BUGS
 
 There are likely bugs to be discovered. This is alpha software.
-
-=head2 METHODS
-
-=over 4
-
-=item fetch_root()
-
-Returns the Yote Root singleton. Used for some tests.
-
-=back
 
 =head1 AUTHOR
 

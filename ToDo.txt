@@ -1,8 +1,56 @@
 The stack :
 
+problem where madyote.com/se  and madyote.com/se/index.html cause images there to be / for the first and /se/ for the second.
+fix with redirect
+
+comment on tags
+
+bugs in admin page live
+
+
+
+sort fields numeric for IO classes ( SQLite is done. test for this is now done for all )
+
+fetch app - check if app is already fetched
+
 _Templates_
 
-  for pagination. if paginating beyond due to change in list, move the start point
+
+Precidence
+  <# comments go here #>
+  <??? function( ctx ) ...
+  <$$$ set varname function foo( ctx ) ...
+  <$$$ set varname othervar $$$>
+  <$$$ set varname "value" $$$>
+  <?? function( ctx ) ....
+  <$$ template 
+  <@ template list max_rows @>
+  <% template list max_rows %>
+  <$ show var $>
+  <$ show var $>
+  <? function( ctx ) ... ( after render )
+  --- reeval the tags?
+  
+
+
+ template test for setvar as well as getvar
+
+  is_first and is_last in context for pagination lists
+
+  for pagination. if paginating beyond due to change in list, move the start point.
+        see adding a new flavor. in the refresh, it doesn't move forwards.
+
+  yote admin page
+
+  aliasresult and list useage. Needs a lot of work. Specifically, a yote list should be able to be specified rather in the same way that hostobj listname are currently.
+
+  error messages for unknown directive
+
+
+
+The BART sings to me. Its song is the sweet howl of the metal tracks and its buzzing. It is fine
+
+
 
 
 

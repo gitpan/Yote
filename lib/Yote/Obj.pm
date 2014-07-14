@@ -268,7 +268,7 @@ sub _list_delete {
     Yote::ObjProvider::list_delete( $list_id, $idx );
     my $list = $Yote::ObjProvider::DIRTY->{ $list_id } || $Yote::ObjProvider::WEAK_REFS->{ $list_id };
     if( $list ) {
-	splice @$list, $idx, 1;
+        splice @$list, $idx, 1;
     }
     return;
 } #_list_delete
@@ -277,16 +277,6 @@ sub _list_fetch {
     my( $self, $listname, $key ) = @_;
     return Yote::ObjProvider::list_fetch( $self->{DATA}{$listname}, $key );
 }
-
-sub _lock {
-    my $self = shift;
-    return Yote::ObjProvider::lock( $self->{ID}, $self );
-} #lock
-
-sub _unlock {
-    my $self = shift;
-    return Yote::ObjProvider::unlock( $self->{ID} );
-} #_unlock
 
 sub _hash_has_key {
     my( $self, $hashname, $key ) = @_;
@@ -600,7 +590,7 @@ will remove all the "b" values from the 'foo' list.
 All Yote objects have public api methods. These are methods that connect to javascript objects
 and are invoked by clients. All the public api methods have the same signature :
 
-All Yote objects except YoteRoot are attached to an application or descent of the Yote::AppRoot
+All Yote objects except Root are attached to an application or descent of the Yote::AppRoot
 class.
 
 =over 2
