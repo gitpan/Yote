@@ -4,7 +4,7 @@
       "Eric Wolf (coyocanid@gmail.com)"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.4003, CPAN::Meta::Converter version 2.141170",
+   "generated_by" : "Module::Build version 0.4003, CPAN::Meta::Converter version 2.141520",
    "license" : [
       "perl_5"
    ],
@@ -27,29 +27,34 @@
       },
       "runtime" : {
          "recommends" : {
+            "Aspect" : "1.04",
             "Authen::NTLM" : "1",
-            "DBD::mysql" : "1",
+            "DBD::mysql" : "4.025",
             "Digest::HMAC_MD5" : "1",
-            "MongoDB" : "1"
+            "MongoDB" : "0"
          },
          "requires" : {
-            "Aspect" : "1.04",
             "Crypt::Passwd::XS" : "0.601",
             "DBD::SQLite" : "1.35",
             "DBI" : "1.625",
             "Daemon::Daemonize" : "0.0052",
             "DateTime" : "0.77",
             "Email::Valid" : "0.19",
-            "File::UStore" : "0.12",
+            "File::Path" : "2.09",
+            "File::Slurp" : "9999.19",
+            "File::Temp" : "0.23",
+            "File::UStore" : "0.14",
+            "File::stat" : "0.07",
+            "IO::Handle" : "1.34",
             "JSON" : "2.53",
             "JavaScript::Minifier" : "1.11",
             "MIME::Base64" : "0",
             "Mail::Sender" : "0",
+            "POSIX" : "1.32",
             "Test::More" : "0",
             "Test::Pod" : "0",
+            "Time::HiRes" : "1.9725",
             "WeakRef" : "0.01",
-            "forks" : "0.34",
-            "forks::shared" : "0.34",
             "perl" : "v5.12.0"
          }
       }
@@ -57,7 +62,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.215"
+         "version" : "0.217"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -65,21 +70,19 @@
       },
       "Yote::AppRoot" : {
          "file" : "lib/Yote/AppRoot.pm",
-         "version" : "0.088"
+         "version" : "0.089"
       },
       "Yote::Array" : {
          "file" : "lib/Yote/Array.pm",
          "version" : "0.02"
-      },
-      "Yote::ConfigData" : {
-         "file" : "lib/Yote/ConfigData.pm"
       },
       "Yote::Cron" : {
          "file" : "lib/Yote/Cron.pm",
          "version" : "0.014"
       },
       "Yote::Engine" : {
-         "file" : "lib/Yote/Engine.pm"
+         "file" : "lib/Yote/Engine.pm",
+         "version" : "0.001"
       },
       "Yote::FileHelper" : {
          "file" : "lib/Yote/FileHelper.pm",
@@ -185,5 +188,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.215"
+   "version" : "0.217"
 }
