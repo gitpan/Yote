@@ -62,7 +62,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.217"
+         "version" : "0.218"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -179,7 +179,7 @@
       },
       "Yote::WebAppServer" : {
          "file" : "lib/Yote/WebAppServer.pm",
-         "version" : "0.22"
+         "version" : "0.23"
       }
    },
    "release_status" : "stable",
@@ -188,5 +188,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.217"
+   "version" : "0.218"
 }
