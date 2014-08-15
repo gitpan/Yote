@@ -62,7 +62,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.218"
+         "version" : "0.219"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -78,11 +78,11 @@
       },
       "Yote::Cron" : {
          "file" : "lib/Yote/Cron.pm",
-         "version" : "0.014"
+         "version" : "0.015"
       },
       "Yote::Engine" : {
          "file" : "lib/Yote/Engine.pm",
-         "version" : "0.001"
+         "version" : "0.002"
       },
       "Yote::FileHelper" : {
          "file" : "lib/Yote/FileHelper.pm",
@@ -120,7 +120,7 @@
       },
       "Yote::Obj" : {
          "file" : "lib/Yote/Obj.pm",
-         "version" : "0.072"
+         "version" : "0.073"
       },
       "Yote::ObjManager" : {
          "file" : "lib/Yote/ObjManager.pm",
@@ -179,7 +179,7 @@
       },
       "Yote::WebAppServer" : {
          "file" : "lib/Yote/WebAppServer.pm",
-         "version" : "0.23"
+         "version" : "0.24"
       }
    },
    "release_status" : "stable",
@@ -188,5 +188,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.218"
+   "version" : "0.219"
 }
