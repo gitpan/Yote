@@ -62,7 +62,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.220"
+         "version" : "0.221"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -108,7 +108,7 @@
       },
       "Yote::IO::SQLite" : {
          "file" : "lib/Yote/IO/SQLite.pm",
-         "version" : "0.035"
+         "version" : "0.036"
       },
       "Yote::IO::TestUtil" : {
          "file" : "lib/Yote/IO/TestUtil.pm",
@@ -188,5 +188,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.220"
+   "version" : "0.221"
 }
