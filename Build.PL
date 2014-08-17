@@ -65,7 +65,6 @@ my $builder = Module::Build->new(
     script_files       => [ 'bin/yote_server' ],
     test_files         => [ 't/sqlite.t', ],
     recommends         => {
-	'Aspect'                => 1.04,
 	'Authen::NTLM'     => 1,
 	'Digest::HMAC_MD5' => 1,
 	'DBD::mysql'       => 4.025,
@@ -73,6 +72,7 @@ my $builder = Module::Build->new(
     },
     requires => {
 	'perl'                  => 'v5.12',
+    'Aspect'                => 1.04,
 	'Crypt::Passwd::XS'     => 0.601,
     'Daemon::Daemonize'     => 0.0052,
 	'DateTime'              => 0.77,

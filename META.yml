@@ -17,7 +17,7 @@ name: Yote
 provides:
   Yote:
     file: lib/Yote.pm
-    version: '0.222'
+    version: '0.223'
   Yote::Account:
     file: lib/Yote/Account.pm
     version: '0.05'
@@ -105,12 +105,12 @@ provides:
     file: lib/Yote/WebAppServer.pm
     version: '0.24'
 recommends:
-  Aspect: '1.04'
   Authen::NTLM: '1'
   DBD::mysql: '4.025'
   Digest::HMAC_MD5: '1'
   MongoDB: '0'
 requires:
+  Aspect: '1.04'
   Crypt::Passwd::XS: '0.601'
   DBD::SQLite: '1.35'
   DBI: '1.625'
@@ -135,4 +135,4 @@ requires:
   perl: v5.12.0
 resources:
   license: http://dev.perl.org/licenses/
-version: '0.222'
+version: '0.223'

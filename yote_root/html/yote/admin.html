@@ -4,7 +4,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Yote Admin Page (YAP)</title>
 
-    <script src="/yote/js"></script>
+    <script src="/yote/JS"></script>
 
     <link href="/yote.css" rel="stylesheet" type="text/css" media="all" />
     <link href="/css/main.css" rel="stylesheet" type="text/css" media="all" />
@@ -499,12 +499,13 @@ if we are our experiences then we are both sides of them.
   </script>
 
   <script type="text/template" class="yote_template_definition" template_name="MainBody">
-    <?? function( ctx ) {
+    <??? function( ctx ) {
          return $.yote.has_root_permissions() ?
 	    '<$$ AdminBody $$>' :
-	    '<DIV id="errpanel" class="err">Must be logged in with a root account to view this page.</DIV>';
+	    '<DIV id="errpanel" class="err">Must be logged in with a root account to view this page. ' + ( $.yote.is_logged_in() ? '<$$$ lo <a href="#">$$$>logout</a>' : '' ) + '</DIV>';
         } 
-    ??>
+    ???>
+    <? function( ctx ) { $( ctx.controls.lo ).click( $.yote.logout() ); } ?>
   </script>
 
   </head>
