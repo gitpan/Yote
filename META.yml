@@ -17,7 +17,7 @@ name: Yote
 provides:
   Yote:
     file: lib/Yote.pm
-    version: '0.223'
+    version: '0.224'
   Yote::Account:
     file: lib/Yote/Account.pm
     version: '0.05'
@@ -60,7 +60,7 @@ provides:
     version: '0.04'
   Yote::Obj:
     file: lib/Yote/Obj.pm
-    version: '0.073'
+    version: '0.074'
   Yote::ObjManager:
     file: lib/Yote/ObjManager.pm
     version: '0.02'
@@ -135,4 +135,4 @@ requires:
   perl: v5.12.0
 resources:
   license: http://dev.perl.org/licenses/
-version: '0.223'
+version: '0.224'

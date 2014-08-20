@@ -10134,6 +10134,8 @@ $.yote = {
 			            if( ! collection_obj ) {
 			                console.log( "warning '" + fld + "' not found in object. defaulting to page out list." );
 			                page_out = true;
+                            //remove this from the cache since this might be filled in on refresh
+                            delete $.yote.wrap_cache[ cache_key ];
 			            }
 		            }
 		            var ret = {
@@ -10658,6 +10660,7 @@ $.yote = {
     _dump_cache:function() {
         this.objs = {};
 	    this.apps = {};
+	    this.wrap_cache = {};
 	    this.yote_root   = undefined;
 	    this.default_app = undefined;
         this._app_id = undefined;

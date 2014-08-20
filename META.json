@@ -62,7 +62,7 @@
    "provides" : {
       "Yote" : {
          "file" : "lib/Yote.pm",
-         "version" : "0.223"
+         "version" : "0.224"
       },
       "Yote::Account" : {
          "file" : "lib/Yote/Account.pm",
@@ -120,7 +120,7 @@
       },
       "Yote::Obj" : {
          "file" : "lib/Yote/Obj.pm",
-         "version" : "0.073"
+         "version" : "0.074"
       },
       "Yote::ObjManager" : {
          "file" : "lib/Yote/ObjManager.pm",
@@ -188,5 +188,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.223"
+   "version" : "0.224"
 }
