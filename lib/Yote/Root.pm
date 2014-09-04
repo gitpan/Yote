@@ -45,7 +45,17 @@ sub _init {
 # ------------------------------------------------------------------------------------------
 #      * PUBLIC METHODS *
 # ------------------------------------------------------------------------------------------
-
+sub admin_prefetch {
+    my( $self, $data, $acct ) = @_;
+    if( $acct && $acct->is_root() ) {
+        my $cron = $self->_cron();
+        my $ret = $cron->prefetch( undef, $acct );
+        push @$ret, 
+            (values %{ $self->get__handles({}) }), 
+            (values %{ $self->get__apps({}) } );
+        return $ret;
+    }    
+} #admin_prefect
 
 
 # returns cron object for root
@@ -404,7 +414,7 @@ sub _purge_deleted_logins {
         push @removed, scalar( @gonners );
     } #store
 
-    my $flushed = $self->_count( '_removed_logins' );
+    my $flushed = $self->_count(  { name => '_removed_logins' } );
     $self->set__removed_logins( [] );
 
     return "Flushed $flushed removed accounts. Removed $removed[0] invalid handles and $removed[1] invalid emails";

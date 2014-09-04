@@ -14,51 +14,52 @@
     <STYLE>
       .mainpanel { top:0px; width:900px; display:inline-block; }
       .tabs {
-	  position: relative;
-	  min-height: 300px; /* This part sucks */
-	  clear: both;
-	  margin: 25px 0;
+	      position: relative;
+	      min-height: 300px; /* This part sucks */
+	      clear: both;
+	      margin: 25px 0;
       }
       .tab {
-	  float: left;
+	      float: left;
       }
       .tab label {
-	  background: #eee;
-	  padding: 10px;
-	  border: 1px solid #ccc;
-	  margin-left: -1px;
-	  position: relative;
-	  left: 1px;
+	      background: #eee;
+	      padding: 10px;
+	      border: 1px solid #ccc;
+	      margin-left: -1px;
+	      position: relative;
+	      left: 1px;
       }
       .tab [type=radio] {
-	  display: none;
+	      display: none;
       }
       .content {
-	  position: absolute;
-	  top: 28px;
-	  left: 0;
-	  background: white;
-	  right: 0;
-	  bottom: 0;
-	  padding: 20px;
-	  border: 1px solid #ccc;
+	      position: absolute;
+	      top: 28px;
+	      left: 0;
+	      background: white;
+	      right: 0;
+	      bottom: 0;
+	      padding: 20px;
+	      border: 1px solid #ccc;
       }
       [type=radio]:checked ~ label {
-	  background: white;
-	  border-bottom: 1px solid white;
-	  z-index: 2;
+	      background: white;
+	      border-bottom: 1px solid white;
+	      z-index: 2;
       }
       [type=radio]:checked ~ label ~ .content {
-	  z-index: 1;
+	      z-index: 1;
       }
-      .apppanel { margin-left: 150px; }
-     border:none;
-     padding:0!important;
-    /*border is optional*/
-     border-bottom:1px solid #444; ; }
+      .apppanel {
+          margin-left: 150px;
+          border:none;
+          padding:0!important;
+          /*border is optional*/
+          border-bottom:1px solid #444;
+      }
       ._ct_row { vertical-align: top }
       ._ct_cell { border: 6px rgb(120,226,165) groove }
-
 
       tr { vertical-align: top }
     </STYLE>
@@ -78,8 +79,11 @@ if we are our experiences then we are both sides of them.
 
       $().ready(function(){
           $.yote.debug = false;
+$.yote.debug = true;
 	      $.yote.templates.import_templates( '/templates/default_templates.html' );
+	      $.yote.templates.import_templates( '/templates/yote_templates.html' );
 	      $.yote.init(  );
+          $.yote.fetch_root().admin_prefetch();
 	      $.yote.templates.init();
 	      $.yote.templates.refresh();
       });
@@ -88,19 +92,26 @@ if we are our experiences then we are both sides of them.
 
 
 <script type="text/template" class="yote_template_definition" template_name="Entry_Repeat">
+  <??? 
+    ctx.vars.repeats = $.yote.wrap_list( { 
+           array : 'repeats',
+           obj   : ctx.vars._,
+           ctx   : ctx
+        } );
+    ???>
   <table border=1><tr>  <th>Interval (mins)</th>     <th>Infinite Repeat</th>   <th>Repeats</th>
                         <th>Delete</th>
                   </tr>
-      <@ Cron_Repeat_Row _@repeats 2 @>
+      <$$ listpaginate Cron_Repeat_Row repeats $$>
   </table>
-  <$$ Paginator _@repeats $$>
+  <$$ Paginator repeats $$>
   <$$$ newrep <button type="button">add repeat</button> $$$>
-    <? function( ctx ) {
+    <?
         $( ctx.controls.newrep ).click( function() {
             ctx.vars._.add_to( { name : 'repeats', items : [ $.yote.fetch_root().new_root_obj()] } );
 	        $.yote.templates.refresh();
         } );
-    } ?>
+    ?>
 </script>
 
 <script type="text/template" class="yote_template_definition" template_name="Entry_Repeat_Table">
@@ -110,32 +121,37 @@ if we are our experiences then we are both sides of them.
 <script type="text/template" class="yote_template_definition" template_name="Cron_Repeat_Row">
   <tr>  <td><$$ edit _ repeat_interval $$></td>  <td><$$ checkbox _ repeat_infinite $$></td>  <td><$$ edit _ repeat_times $$></td>  <td><$$$ delme <a href="#">delete</a>$$$></td> </tr>
     <?
-    function( ctx ) {
         $( ctx.controls.delme ).click( function() {
             ctx.vars.__.remove_item( ctx.vars._ );
 	        $.yote.templates.refresh();            
         } );
-    }
     ?>
 </script>
 
 
 <script type="text/template" class="yote_template_definition" template_name="Cron_Schedule_Row">
   <tr>  <td><$ show $></td> <td><$$$ controls remsched <button type="button">remove</button>$$$></td> </tr>
-    <? function( ctx ) {
+    <?
         $( ctx.controls.remsched ).click( function() {
             ctx.vars.__.remove_item( ctx.vars.hashkey_or_index );
         } );
-    } ?>
+    ?>
 </script>
 
 
 
   <script type="text/template" class="yote_template_definition" template_name="Attached_Objects">
+    <??? 
+       ctx.vars.attached_objects = $.yote.wrap_hash( { 
+           hash  : 'attached_objects',
+           obj   : ctx.vars._,
+           ctx   : ctx
+       } );
+    ???>
     <table> <TR> <TH>Object Name</TH> <TH>Class</TH> <TH>Remove</TH> </TR>
-      <% Attached_Obj_Row _%attached_objects 10 %>
+      <$$ hashpaginate Attached_Obj_Row attached_objects $$>
     </table>
-    <$$ Paginator _%attached_objects $$>
+    <$$ Paginator attached_objects $$>
     <$$ Add_Attached $$>
   </script>
 
@@ -143,7 +159,7 @@ if we are our experiences then we are both sides of them.
     <$$$ field <input type="text" placeholder="field"> $$$>
       <$$$ objtype <select> <option value="1">All May Edit</option> <option value="2">User and Root May Edit</option> <option value="3">Root May Edit</option></select> $$$>
 	<$$$ add_attached_b <BUTTON type="BUTTON">Attach Object</BUTTON> $$$>
-    <? function( ctx ) { 
+    <?
     $.yote.util.button_actions( 
 	{
 	    button : ctx.controls.add_attached_b,
@@ -163,7 +179,6 @@ if we are our experiences then we are both sides of them.
 		}
 	    } //action
 	} );
-    }
     ?>
   </script>
 
@@ -171,21 +186,15 @@ if we are our experiences then we are both sides of them.
     <$$$ set fieldname <$ hash_key $> $$$>
       <TR>
 	<TD><$ hash_key $></TD>
-	<TD><?? function( ctx ) { return ctx.vars._.class } ??></TD>
+	<TD><?? return ctx.vars._.class; ??></TD>
 	<TD><$$$ remove_attached <button type="button">Remove</button> $$$></TD>
       </TR>
-    <? function( ctx ) {
+    <?
 	    var dh = ctx.vars.fieldname;
 	    ctx.vars.__.set( dh, null );
 	    ctx.vars._.delete_key( { name : '_attached_objects', key : dh } );
 	    $.yote.templates.refresh();
-    } ?>
-  </script>
-
-  <script type="text/template" class="yote_template_definition" template_name="Attached_ObjTab">
-    <table> <TR> <TH>Object Name</TH> <TH>Class</TH> <TH>Remove</TH> </TR>
-      <% Attached_Obj_Row 10 %>
-    </table>    
+    ?>
   </script>
 
   <script type="text/template" class="yote_template_definition" template_name="Email_Settings">
@@ -201,6 +210,14 @@ if we are our experiences then we are both sides of them.
   <!-- ------------------------------ -->
 
   <script type="text/template" class="yote_template_definition" template_name="Users">
+   <??? 
+      ctx.vars.handles = $.yote.wrap_hash( { 
+             hash  : '_handles',
+             obj   : ctx._app_,
+             ctx   : ctx
+          } );
+    ???>
+
     <a NAME="Users">
       <h3>Users</h3>
       <table border=1><tr>  
@@ -210,14 +227,14 @@ if we are our experiences then we are both sides of them.
           <th>Was Validated</th>
           <th>Reset Password</th>
         </tr>
-        <% User_Row _app_%_handles 1 %>
+        <$$ hashpaginate User_Row handles $$>
       </table>
-      <$$ Paginator _app_%_handles $$> <br>
-       <#$$ SearchHash $$#>
+      <$$ Paginator handles $$> <br>
+       <$$ SearchHash handles values handle email $$>
        <br>
        user logins removed : <$$$ rl <span></span> $$$><br>
        <$$$ purge_users <button type="button">Flush all removed users</button> $$$>
-       <? function( ctx ) {
+       <?
            var pu = 1*ctx._app_.count( '_removed_logins' );
            $( ctx.controls.rl ).text( pu );
            if( pu == 0 ) {
@@ -233,24 +250,24 @@ if we are our experiences then we are both sides of them.
                    $.yote.templates.refresh();
                }
            } );
-       } ?>
+       ?>
    </script>
 
    <script type="text/template" class="yote_template_definition" template_name="User_Row">
      <tr>   
        <th><$ _hashkey_ $></th>
        <th><$ _.email $></th>
-       <th><??? function( ctx ) { 
+       <th><???
           var login = ctx.vars._;
           return login ? login.is_master_root() ? 'master root' : 
                             '<$$$ toggle <input type="checkbox"> $$$>' : ''; 
-          } ???></th>
-       <th><??? function( ctx ) {
-               return ctx.vars._ && ctx.vars._.is_validated() ? 'Yes' : 'No <$$$ makevalid <button type="button">validate</button>$$$>' } ???>
+          ???></th>
+       <th><???
+               return ctx.vars._ && ctx.vars._.is_validated() ? 'Yes' : 'No <$$$ makevalid <button type="button">validate</button>$$$>' ???>
        </th> 
        <th> <$$$ newp <input type="password" placeholder="new password">$$$> <$$$ newpup <button type="button">Update</button>$$$></th>
      </tr>
-     <? function( ctx ) {
+     <?
          if( ctx.vars._.get_is_root()*1 == 1 ) {
              $( ctx.controls.toggle ).attr( 'checked', true );
          }
@@ -274,7 +291,7 @@ if we are our experiences then we are both sides of them.
                                          msg( ctx, pass ); $.yote.templates.refresh();
                                      }, function( err ) { msg( ctx, err ); } );
          } );
-     } ?>
+     ?>
    </script>
 
    <!------------------------------------------->
@@ -287,37 +304,47 @@ if we are our experiences then we are both sides of them.
    </script>
 
    <script type="text/template" class="yote_template_definition" template_name="Entry_Schedule">
+    <??? 
+       ctx.vars.scheduled_times = $.yote.wrap_list( { 
+           array : 'scheduled_times',
+           obj   : ctx.vars._,
+           ctx   : ctx
+       } );
+    ???>
+
      <table border=1><tr>  <th>Scheduled Time</th> <th>Delete</th> </tr>
-       <@ Cron_Schedule_Row _@scheduled_times 2 @>
+       <$$ listpaginate Cron_Schedule_Row scheduled_times $$>
      </table>
-     <$$ Paginator _@scheduled_times $$>
+     <$$ Paginator scheduled_times $$>
      <$$$ new_schedule_time <input type="datetime-local"> $$$>
      <$$$ new_schedule <button type="button">Schedule Time</button> $$$>
-     <? function( ctx ) {
+     <?
          $( ctx.controls.new_schedule_time ).click( function() {
              alert( $( ctx.controls.new_schedule_time ).val() );
             
          } );
-     } ?>
+     ?>
    </script>
+
+   <script type="text/template" class="yote_template_definition" template_name="checkbox"></script>
 
    <script type="text/template" class="yote_template_definition" template_name="Cron_Row">
      <tr> <td> <$$ edit _ name $$> </td>  <td> <$$ checkbox _ enabled $$> </td>  
        <td> <$$ edit _ notes $$> </td> <td> <$$ edit _ script $$> </td>  
-       <td> <?? function( ctx ) {
+       <td> <??
            var entry = ctx.vars._;
            if( ! entry ) return '';
            return entry.get( 'next_time' ) > 0 ? '<nobr>' +  $.yote.util.format_date( new Date( 60 * 1000 * entry.get( 'next_time' ) ), "h:m Y-M-D" ) + '</nobr>' : 'Not Scheduled';
-           } ??> </td>  <td> <$$ Entry_Repeat $$> </td>
+           ??> </td>  <td> <$$ Entry_Repeat $$> </td>
        <td> <$$ Entry_Schedule $$> </td>  <td> <$$$ del <button type="button">delete</button> $$$> </td>
      </tr>
-    <? function( ctx ) {
+    <?
         ctx.vars.cron.update_entry( ctx.vars._ );
         $( ctx.controls.del ).click( function() {
             ctx.vars.cron.remove_from( { name : 'entries', items : [ ctx.vars._ ] } );
             $.yote.templates.refresh();
         } );
-    } ?>    
+    ?>    
    </script>
 
    <script type="text/template" class="yote_template_definition" template_name="Cron_Table">
@@ -325,28 +352,32 @@ if we are our experiences then we are both sides of them.
    </script>
 
    <script type="text/template" class="yote_template_definition" template_name="Cron">
-     <??? function( ctx ) {
-         ctx.vars.cron = ctx._app_.cron();
-     } ???>
+     <???
+        ctx.vars.cron = ctx._app_.cron();
+        ctx.vars.cron_pag = $.yote.templates.wrap_list( {
+            array : ctx.vars.cron.get( 'entries' ).to_list(), 
+            size  : 5,
+            initial_start : 0,
+            ctx : ctx,
+        } );
+     ???>
      <A NAME="Cron">
        <H3>Crons</H3>
        <table border=1><tr>  <th>Name</th>     <th>Enabled</th>   <th>Notes</th>
            <th>Script</th>   <th>Next Run</th>  <th>Repeat</th>
            <th>Schedule</th> <th>Delete</th>
          </tr>
-         <@ Cron_Row cron@entries 5 @>
+         <$$ listpaginate Cron_Row cron_pag $$>
        </table>
-       <$$ Paginator cron@entries $$> <br>
+       <$$ Paginator cron_pag $$> <br>
 
        <$$$ newbutton <button type="button">Add Cron</button>$$$>
        <?
-           function( ctx ) {
                $( ctx.controls.newbutton ).click( function() {
                    var newc = ctx.vars.cron.new_with_same_permissions();
                    ctx.vars.cron.add_entry( newc );
                    $.yote.templates.refresh();
                } );
-           }
         ?>
    </script>
 
@@ -362,7 +393,7 @@ if we are our experiences then we are both sides of them.
        App Class <$$$ appclass <input type="text" value="Yote::AppRoot"> $$$><BR>
        <$$$ new_app_b <button type="BUTTON">Register App</BUTTON> $$$>
      </div>
-     <? function( ctx ) {
+     <?
      $.yote.util.button_actions( {
          button :   ctx.controls.new_app_b,
          texts  : [ ctx.controls.name ],
@@ -376,24 +407,22 @@ if we are our experiences then we are both sides of them.
          );
          } 
      } );
-    } ?>
+    ?>
    </script>
 
    <script type="text/template" class="yote_template_definition" template_name="App_Row">
      <tr>   <td><$ _hashkey_ $></td>     <td><$$ edit _ host_name $$></td>   <td><$$ edit _ host_u2rl $$></td>
-       <td><?? function(ctx) { return ctx.vars._.count('_account_roots'); } ??> </td>   
+       <td><?? return ctx.vars._.count('_account_roots'); ??> </td>   
        <td><$$ Email_Settings $$></td>  <td><$$ Attached_Objects $$></td>
        <td><$$$ reset_b <button type="button">Reset</button>$$$></td>
      </tr>
      <?
-        function( ctx ) {
         $( ctx.controls.reset_b ).click( function() {
             if( confirm( 'really purge app ' + ctx.hashkey ) ) {
             ctx.vars.root.purge_app( ctx.vars._ );
             $.yote.templates.refresh();
             }
         } )
-        }
      ?>
    </script>
 
@@ -402,42 +431,33 @@ if we are our experiences then we are both sides of them.
     <A NAME="App">
     <H3>Applications Installed</H3>
     <???
-    function( ctx ) { 
-        $.yote.debug = true;
-        var root = $.yote.fetch_root();
-        ctx.vars.root = root;
-        var app_count = root.count( '_apps' );
-        var pag = root.wrap_hash( { collection_name : '_apps', cache_key : 'foo', wrap_key : 'bar' }, app_count );
-        var app_hash = pag.to_hash();
-        var apps = {};
-        for( var k in app_hash ) {
-            if( app_hash[ k ] ) 
-                apps[ k ] = app_hash[ k ];
-        }
-        console.log( [ 'APPS', apps, pag, app_hash, app_count, root ] );
-        ctx.vars.apps = apps;
-        $.yote.debug = false;
-    } ???>
+        ctx.vars.apps = $.yote.wrap_hash( { 
+            hash  : '_apps',
+            obj   : ctx._app_,
+            ctx   : ctx,
+            size  : 3
+        } );
+    ???>
     <table border=1><tr>  <th>Name</th>     <th>Host</th>   <th>Host URL</th>
         <th>Number of Users</th>   <th>Email Settings</th> 
         <th>Attached Objects</th>  <th>Reset</th>
       </tr>
-      <% App_Row %apps 3 %>
+      <$$ hashpaginate App_Row apps $$>
     </table>
-    <$$ Paginator %apps $$> <br>
-    <#$$ SearchHash $$#>
-    <??? function( ctx ) {
+    <$$ Paginator apps $$> <br>
+    <$$ SearchHash apps keys $$>
+    <???
         var pc = $.yote.fetch_root().count( '_purged_apps' );
         if( pc > 0 ) {
             return pc + ' apps thate have been purged <$$$ purge_apps <button type="button">Flush all Purged Apps</button> $$$>';
 	    } 
 	    return '';
-    } ???>
+    ???>
     <$$ NewApp $$> <br>
     <$$$ flush_obj_cache <button type="button">Flush Object Cache</button>$$$> <BR>
     <$$$ flush_old_login <button type="button">Flush Old Login Tokens</button>$$$>
 
-    <? function(ctx) {
+    <?
 	    $( ctx.controls.purge_apps ).click(function(){
 	        ctx.vars.root.flush_purged_apps(
                 undefined,
@@ -459,7 +479,7 @@ if we are our experiences then we are both sides of them.
 		        function(err){ $( ctx.controls.messages ).empty().append( err ) }
 	        ); 
         } );
-    } ?>
+    ?>
     </script>
 
 
@@ -499,13 +519,12 @@ if we are our experiences then we are both sides of them.
   </script>
 
   <script type="text/template" class="yote_template_definition" template_name="MainBody">
-    <??? function( ctx ) {
+    <???
          return $.yote.has_root_permissions() ?
 	    '<$$ AdminBody $$>' :
 	    '<DIV id="errpanel" class="err">Must be logged in with a root account to view this page. ' + ( $.yote.is_logged_in() ? '<$$$ lo <a href="#">$$$>logout</a>' : '' ) + '</DIV>';
-        } 
     ???>
-    <? function( ctx ) { $( ctx.controls.lo ).click( function() { $.yote.logout() } ); } ?>
+    <? $( ctx.controls.lo ).click( function() { $.yote.logout() } ); ?>
   </script>
 
   </head>
