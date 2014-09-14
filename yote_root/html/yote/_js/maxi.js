@@ -9584,8 +9584,6 @@ $.yote = {
 	    }
     }, //fetch_initial
 
-    _subj_has_get_p : function() { return true; },
-
     get_by_id:function( id ) {
 	    return $.yote.objs[id+''] || $.yote.fetch_default_app().fetch(id).get(0);
     },
@@ -9875,21 +9873,15 @@ $.yote = {
         return i;
     },
 
-    wrap_list:function( args ) {
-        return $.yote.data_wrapper( args );
+    _wrap_list:function( obj, field, key ) {
+        return $.yote._data_wrapper( obj, field, key );
     }, //wrap_list
 
-    wrap_hash:function( args ) {
-        return $.yote.data_wrapper( args, true );
+    _wrap_hash:function( obj, field, key ) {
+        return $.yote._data_wrapper( obj, field, key, true );
     }, //wrap_hash
 
-    data_wrapper:function( args, is_hash ) {
-        var obj  = args.obj;
-        var field = is_hash ? args.hash : args.array;
-        
-
-        var size = args.size;
-        var key  = args.key || ( args.ctx ? args.ctx.template_path : undefined );
+    _data_wrapper:function( obj, field, key, is_hash ) {
         var node = is_hash ? $.yote._pag_hash_cache[ key ] : $.yote._pag_list_cache[ key ];
         if( ! key || (! node && ( (! obj && ! field ) ) ) ) {
             if( is_hash ) 
@@ -9901,12 +9893,12 @@ $.yote = {
         var server_paginate = field.match( /^_/ ) || full_size > 300;
 
         if( ! node ) {
-            var start = args.start || 0;
+            var start = 0;
             node = {
                 _server_paginate : server_paginate,
                 _start : start,
                 _data_size : full_size,
-                _page_size  : size,
+                _page_size  : 0,
                 _filter_function     : undefined,
                 _sort_function       : undefined,
                 _transform_function  : undefined,
@@ -9945,6 +9937,9 @@ $.yote = {
                     if( this._start < 0 ) {
                         this._start = 0;
                     }
+                },
+                set_size : function( newsize ) {
+                    this._page_size = Number(newsize);
                 },
                 to_list : function() {
                     var ret;
@@ -10934,19 +10929,25 @@ if (!JSON) {
  *
  * Version 0.103
  */
-if( ! $.yote ) { 
+if( ! $.yote ) {
     $.yote = {
         fetch_default_app: function() { return undefined; },
         fetch_account: function() { return undefined; },
-        _subj_has_get_p:function() { return false; },
-    }; 
+        _wrap_list:function() {
+            throw new Exception( 'yote system not present: cannot wrap yote list' );
+        }, //wrap_list
+
+        _wrap_hash:function() {
+            throw new Exception( 'yote system not present: cannot wrap yote hash' );
+        }, //wrap_hash
+    };
 }
 $.yote.templates = {
 
 
     _after_render_functions : [],
     _compiled_templates : {},
-    
+
     _ids : 0,
     _next_id:function() {
         return '__ytidx_'+this._ids++;
@@ -10973,31 +10974,32 @@ $.yote.templates = {
     _pag_list_cache : {},
     _pag_hash_cache : {},
 
-    wrap_list:function( args ) {
-        return $.yote.templates.data_wrapper( args );
-    }, //wrap_list
+    _wrap_list:function( array, key ) {
+        return $.yote.templates._data_wrapper( array, key );
+    }, //_wrap_list
 
-    wrap_hash:function( args ) {
-        return $.yote.templates.data_wrapper( args, true );
-    }, //wrap_hash
+    _wrap_hash:function( hash, key ) {
+        return $.yote.templates._data_wrapper( hash, key, true );
+    }, //_wrap_hash
 
-    data_wrapper:function( args, is_hash ) {
-        var arry = args.array;
-        var hash = args.hash;
-        var size = args.size;
-        var key  = args.key || ( args.ctx ? args.ctx.template_path : undefined );
+    _data_wrapper:function( struct, key, is_hash ) {
+        var arry = struct;
+        var hash = struct;
+
         var node = is_hash ? $.yote.templates._pag_hash_cache[ key ] : $.yote.templates._pag_list_cache[ key ];
+
         if( ! key || (! node && ( ! arry && ! hash ) ) ) {
-            if( is_hash ) 
+            if( is_hash )
                 throw new Exception( 'wrap hash called without ' + ( key ? 'hash' : 'key' ) );
             else
                 throw new Exception( 'wrap list called without ' + ( key ? 'list' : 'key' ) );
         }
         if( ! node ) {
-            var start = args.start || 0;
+            var start = 0;
             node = {
+                id : $.yote.templates._next_id(),
                 _start : start,
-                _page_size  : size,
+                _page_size  : 0,
                 _filter_function     : undefined,
                 _sort_function       : undefined,
                 _transform_function  : undefined,
@@ -11014,7 +11016,13 @@ $.yote.templates = {
                     return this._start > 0;
                 },
                 can_fast_forward:function(){
-                    return (this._start + this._page_size) < ( this._data_size - 1 );
+                    return (this._start + this._page_size) < this._data_size;
+                },
+                back:function(){
+                    this._start -= this._page_size;
+                    if( this._start < 0 ) {
+                        this._start = 0;
+                    }
                 },
                 forwards:function(){
                     this._start += this._page_size;
@@ -11031,6 +11039,9 @@ $.yote.templates = {
                         this._start = 0;
                     }
                 },
+                set_size : function( newsize ) {
+                    this._page_size = Number(newsize);
+                },
                 to_list : function() {
                     var ret
                     if( typeof this._filter_function !== 'undefined' ) {
@@ -11039,7 +11050,7 @@ $.yote.templates = {
                             if( this._filter_function( this._arry[ i ], i, this._arry ) ) {
                                 ret.push( this._arry[ i ] );
                             }
-                                
+
                         }
                     } else {
                         ret = this._arry.slice( 0 );
@@ -11048,7 +11059,7 @@ $.yote.templates = {
                         ret = ret.sort( this._sort_function );
                     }
                     if( typeof this._start !== 'undefined' || typeof this._page_size !== 'undefined' ) {
-                        if( typeof this._page_size !== 'undefined' ) 
+                        if( typeof this._page_size !== 'undefined' )
                             ret = ret.slice( this._start, this._start + this._page_size );
                         else
                             ret = ret.slice( this._start );
@@ -11064,10 +11075,11 @@ $.yote.templates = {
                             if( this._filter_function( k, this._hash[ k ] ) )
                                 new_ret.push( k );
                         }
-                    } 
+                        ret = new_ret;
+                    }
                     ret = ret.sort( this._sort_function );
                     if( typeof this._start !== 'undefined' || typeof this._page_size !== 'undefined' ) {
-                        if( typeof this._page_size !== 'undefined' ) 
+                        if( typeof this._page_size !== 'undefined' )
                             ret = ret.slice( this._start, this._start + this._page_size );
                         else
                             ret = ret.slice( this._start );
@@ -11075,7 +11087,7 @@ $.yote.templates = {
                     return ret;
                 },
                 to_hash : function() {
-                    var h = this._hash; 
+                    var h = this._hash;
                     var r = {};
                     var k = this.keys();
                     for( var i=0, len=k.length; i<len; i++ ) {
@@ -11088,7 +11100,8 @@ $.yote.templates = {
                 $.yote.templates._pag_hash_cache[ key ] = node;
             else
                 $.yote.templates._pag_list_cache[ key ] = node;
-        }
+        } //if needs a node
+
         if( arry ) {
             node._arry = arry;
             node._data_size = arry.length;
@@ -11098,16 +11111,16 @@ $.yote.templates = {
             node._data_size = Object.keys( hash ).length;
         }
         return node;
-    }, //data_wrapper
-        
+    }, //_data_wrapper
+
     register_template:function( key, value ) {
-	    $.yote.templates._compile_template( key, value );
+	$.yote.templates._compile_template( key, value );
     }, //register template
 
     _compile_template:function( key, value ) {
 	    // fun list = a list of ( priority, function ) couples
 	    var fun_list = $.yote.templates._parse_template( value, key );
-	    
+
 	    // sort the indexes of the fun list with the indexes of the highest priority functions coming first
 	    var idxs = [];
 	    for( var i=0, len=fun_list.length; i < len; i++ ) {
@@ -11131,7 +11144,7 @@ $.yote.templates = {
 		            compiled.push( [ idx, item, true, false ] );
 		        } else if( priority == 3 || priority == 0 ) { //building functions, so process results again
 		            compiled.push( [ idx, function( ctx ) {
-			            var ret = $.yote.templates.fill_template_direct( item( ctx ), ctx, key ); 
+			            var ret = $.yote.templates.fill_template_direct( item( ctx ), ctx, key );
 			            return ret;
 		            }, false, false ] );
 		        } else { // build with a function that returns
@@ -11174,7 +11187,7 @@ $.yote.templates = {
         var funparts = str.match( /^\s*function\s*\(([^\),]+)[^)]*\)\s*\{([\s\S]*)\}\s*$/ );
         if( funparts && funparts.length == 3 )
             return new Function( 'var ' + funparts[ 1 ] + ' = arguments[0];' + funparts[ 2 ] );
-        // assumed to be the function without 'function( ctx )' 
+        // assumed to be the function without 'function( ctx )'
         return new Function( 'var ctx = arguments[0];' + str );
     }, //_to_function
 
@@ -11196,13 +11209,13 @@ $.yote.templates = {
 	        var parts = $.yote.templates._template_parts( template_txt, '???', template_name );
             var A = $.yote.templates._parse_template( parts[ 0 ], template_name, 2 );
             var B = $.yote.templates._parse_template( parts[ 2 ], template_name, 1 );
-	        try { 
+	        try {
                 var f = $.yote.templates._to_function( parts[1] );
                 A.push( [ 0, f ] );
                 A.push.apply( A, B );
                 return A;
 	        }
-            
+
 	        catch( err ) {
 		        console.log( "Error in compiling '" + template_name + "' in function <??? " + parts[1] + " ???> : " + err);
                 A.push.apply( A, B );
@@ -11224,13 +11237,13 @@ $.yote.templates = {
 	        var parts = $.yote.templates._template_parts( template_txt, '??', template_name );
             var A = $.yote.templates._parse_template( parts[ 0 ], template_name, 4 );
             var B = $.yote.templates._parse_template( parts[ 2 ], template_name, 3 );
-	        try { 
+	        try {
 		        var f = $.yote.templates._to_function( parts[1] );
                 A.push( [ 3, f ] );
                 A.push.apply( A, B );
                 return A;
 	        }
-            
+
 	        catch( err ) {
 		        console.log( "Error in compiling '" + template_name + "' in function <?? " + parts[1] + " ??> : " + err);
                 A.push.apply( A, B );
@@ -11266,7 +11279,7 @@ $.yote.templates = {
 	        var parts = $.yote.templates._template_parts( template_txt, '?', template_name );
             var A = $.yote.templates._parse_template( parts[ 0 ], template_name, 8 );
             A.push.apply( A, $.yote.templates._parse_template( parts[ 2 ], template_name, 7 ) );
-	        try { 
+	        try {
 		        var fun = $.yote.templates._to_function( parts[1] );
 		        A.push( [ 8, fun ] ); //can be put on the end as this doesn't change the html rendered
 	        }
@@ -11275,7 +11288,7 @@ $.yote.templates = {
 	        }
 	        return A;
 	    } // <?
-	    
+
 	    if( typeof template_txt === 'string' )
             return [ [ 7, template_txt ] ];
 	    return [ ];
@@ -11299,13 +11312,13 @@ $.yote.templates = {
 		        console.log( "Error : template '" + templ_name + "' not found" );
 		        return;
 	        }
-	        try { 
+	        try {
 		        el.empty().append( $.yote.templates.fill_template( templ_name ) );
 	        } catch( Err ) {
 		        console.log( "Error filling template '" + templ_name + '" : ' + Err );
 	        }
 	    } );
-	    
+
 	    //  now that all templates have been rendered, run their after render functions
 	    for( var i=0, len=$.yote.templates._after_render_functions.length; i < len; i++ ) {
 	        $.yote.templates._after_render_functions[ i ]();
@@ -11315,7 +11328,7 @@ $.yote.templates = {
 	    $.yote.templates._after_render_functions = [];
     }, //init
 
-    context_scratch : {}, // all context objects have a reference to this called scratch, so ctx.scratch
+    scratch : {}, // all context objects have a reference to this called scratch, so ctx.scratch
 
     new_context:function() {
 	    return {
@@ -11323,16 +11336,19 @@ $.yote.templates = {
 	        controls : {},
 	        args : [], // args passed in to the template as it was built
             parent : undefined,
-	        scratch : $.yote.templates.context_scratch, // reference to common scratch area. 
+	        scratch : $.yote.templates.scratch, // reference to common scratch area.
 	        _app_ : $.yote.fetch_default_app(),
 	        _acct_ : $.yote.fetch_account(),
-	        get: function( key ) { return typeof this.vars[ key ] === 'undefined' ? 
-                                   ( key == '_app_' ? $.yote.fetch_default_app() : key == '_acct_' ? 
+	        get: function( key ) { return typeof this.vars[ key ] === 'undefined' ?
+                                   ( key == '_app_' ? $.yote.fetch_default_app() : key == '_acct_' ?
                                      $.yote.fetch_account() :
-                                     undefined ) 
+                                     undefined )
                                    : this.vars[ key ]; },
 	        id:$.yote.templates._next_id(),
             refresh : $.yote.templates.refresh,
+            parse : function( vari ) {
+                return $.yote.templates._parse_val( vari, this, true )
+            },
 	        clone : function() {
 		        var clone = {
 		            vars     : Object.clone( this.vars ),
@@ -11345,18 +11361,19 @@ $.yote.templates = {
 		        clone._app_ = this._app_;
 		        clone._acct_ = this._acct_;
 		        clone.parent = this;
+                clone.parse = this.parse;
 		        clone.get = this.get;
-		        clone.scratch = $.yote.templates.context_scratch;
+		        clone.scratch = $.yote.templates.scratch;
 		        return clone;
 	        } //clone
 	    };
     }, //new_context
 
     fill_template:function( template_name, old_context, args ) {
-	    var compilation = $.yote.templates._compiled_templates[ template_name ];	
-	    if( ! compilation ) { 
+	    var compilation = $.yote.templates._compiled_templates[ template_name ];
+	    if( ! compilation ) {
 	        console.log( "Error : Template '" + template_name + '" not found.' );
-	        return ''; 
+	        return '';
 	    }
 	    var context = old_context ? old_context.clone() : $.yote.templates.new_context();
 	    context.template_id = $.yote.templates._next_id();
@@ -11388,7 +11405,7 @@ $.yote.templates = {
 	                console.log( "Runtime Error filling template '" + template_name + " : " + err + ' in function : ' + tuple[1]);
 	            }
 		    }
-	    } 
+	    }
 
 	    return res.join('');
     }, //fill_template
@@ -11405,7 +11422,7 @@ $.yote.templates = {
 	    // function buliding template ( highest precidence )
 	    while( template.indexOf( '<???' ) > -1 ) {
 	        var parts = $.yote.templates._template_parts( template, '???', template_name );
-	        try { 
+	        try {
 		        var f = $.yote.templates._to_function( parts[1] );
                 var txt = f( context );
 		        template = parts[ 0 ] + ( typeof txt === 'undefined' ? '' : txt ) + parts[ 2 ];
@@ -11419,15 +11436,15 @@ $.yote.templates = {
 	    // variable and control definitions for template
 	    while( template.indexOf( '<$$$' ) > -1 ) {
 	        var parts = $.yote.templates._template_parts( template, '$$$', template_name );
-	        template = parts[ 0 ] + 
-		        $.yote.templates._register( parts[ 1 ], context ) 
+	        template = parts[ 0 ] +
+		        $.yote.templates._register( parts[ 1 ], context )
 		        + parts[ 2 ];
 	    } // $$$
 
 	    // function buliding template
 	    while( template.indexOf( '<??' ) > -1 ) {
 	        var parts = $.yote.templates._template_parts( template, '??', template_name );
-	        try { 
+	        try {
 		        var f = $.yote.templates._to_function( parts[1] );
                 var txt = f( context );
 		        template = parts[ 0 ] + ( typeof txt === 'undefined' ? '' : txt ) + parts[ 2 ];
@@ -11460,11 +11477,11 @@ $.yote.templates = {
 	    while( template.indexOf( '<?' ) > -1 ) {
 	        // functions to be run after rendering is done
 	        var parts = $.yote.templates._template_parts( template, '?', template_name );
-	        try { 
+	        try {
 		        var fun = $.yote.templates._to_function( parts[1] );
-		        $.yote.templates._after_render_functions.push( 
-		            (function( f, ctx ) { return function() { 
-			            try { 
+		        $.yote.templates._after_render_functions.push(
+		            (function( f, ctx ) { return function() {
+			            try {
 			                alert( 'need context bottled up...need to  have a template registry path --> template' );
 			                f( ctx );
 			            } catch( Err ) {
@@ -11480,7 +11497,7 @@ $.yote.templates = {
 
 	    return template;
     }, //fill_template_direct
-    
+
 
     // fill
     _template_parts:function( txt, sigil, template_name ) {
@@ -11490,13 +11507,13 @@ $.yote.templates = {
 	    if( end == -1 ) throw new Error( "Error, mismatched template start and end sigils (" + sigil + ") for template '" + template_name + "' : " + txt );
 	    var len   = sigil.length + 1;
 
-	    // recalculate the start if need be...this chunk should not have two 
-	    // starts in a row..actally just reverse the string and find the 
+	    // recalculate the start if need be...this chunk should not have two
+	    // starts in a row..actally just reverse the string and find the
 	    // first rev_sigel...so
 	    //   '<$$ <$$ foo bar $$>' ---> <$$ rab oof $$> $$>
 	    //                          end ^           ^ lenstring - indexof rev is start
 	    // however, the while loop will work as well
-	    
+
 	    while( txt.substring( start + len, end ).indexOf( '<' + sigil ) >= 0 ) {
             if( txt.substring( start + len, end ).indexOf( '<' + sigil ) < start ) {
 	            console.log( "Template error for '"+template_name+"' : unable to find close of <" + sigil + ' : ' + txt );
@@ -11513,7 +11530,7 @@ $.yote.templates = {
 		         txt.substring( start + len, end ).trim(),
 		         txt.substring( end+len ) ];
     }, //_template_parts
-    
+
     // pass in a value/variable (calling this vavar) name string, a context and a boolean.
     // if the boolean is false, then if the vavar name is not defined in the context, it is returned literally
     // so   _parse_val( "FOO", { context object with foo defined as "bar" }, true ) --> "bar"
@@ -11521,18 +11538,74 @@ $.yote.templates = {
     // in addition, the vavar contains period characters, those are treated as separators.
     //      _parse_val( "foo.bar.baz", { context object with foo object that has a bar object that has a baz field with the value of "yup" } ) --> "yup"
     _parse_val:function( value, context, no_literal ) {
-	    var tlist = value.trim().split(/[\.]/);
-	    var subj = context;
-	    var subj_has_get = true;
-	    for( var i=0, len=tlist.length; i < len; i++ ) {
-	        var part = tlist[ i ];
 
-            if( typeof subj === 'object' ) {
-		        subj = subj_has_get ? subj.get( part ) : subj[ part ];
-                subj_has_get = $.yote._subj_has_get_p();
-	        }
-	        if( typeof subj === 'undefined' ) return no_literal ? undefined : value;
-	    }
+        /*
+          Check to see if this has been designated as a list or hash or wrapped list or hash.
+         */
+        var is_list = false, is_hash = false, is_wrapped_list = false, is_wrapped_hash = false;
+        var orig_val = value;
+
+        if( value[ value.length - 1 ] == '@' ) {
+            if( value[ value.length - 2 ] == '@' ) {
+                is_wrapped_list = true;
+                value = value.substring( 0, value.length - 2 );
+            } else {
+                is_list = true;                
+                value = value.substring( 0, value.length - 1 );
+            }
+        }
+        else if( value[ value.length - 1 ] == '%' ) {
+            if( value[ value.length - 2 ] == '%' ) {
+                is_wrapped_hash = true;
+                value = value.substring( 0, value.length - 2 );
+            } else {
+                is_hash = true;
+                value = value.substring( 0, value.length - 1 );
+            }
+        }
+        
+	    var subj = context;
+        var start = 0;
+        var vari;
+        var prev_is_get = true; // the context is the first subj
+        var last_dot = value.lastIndexOf( '.' );
+        var last_pipe = value.lastIndexOf( '|' );
+        var last_sep = last_dot > last_pipe ? last_dot : last_pipe;
+        for( var i=0, len = value.length; i<len; i++ ) {
+            if( value[ i ] == '.' || value[ i ] == '|' ) {
+                vari = value.substring( start, i );
+                if( last_sep >= i ) {
+                    //not yet at last seperator
+                    subj = prev_is_get ? subj.get( vari ) : subj[ vari ];
+                    prev_is_get = value[ i ] == '|';
+                    start = i + 1;
+                }
+            }
+        }
+
+        vari = value.substring( start, value.length );
+        if( prev_is_get && last_sep >= 0 ) {
+            if( is_list || is_hash ) {
+                subj = subj.get( vari ).to_list();
+            } else if( is_hash ) {
+                subj = subj.get( vari ).to_hash();
+            } else if( is_wrapped_list ) {
+                subj = $.yote._wrap_list( subj, vari, context.template_path + '#' + orig_val );
+            } else if( is_wrapped_hash ) {
+                subj = $.yote._wrap_hash( subj, vari, context.template_path + '#' + orig_val );                
+            } else {
+                subj = subj.get( vari );
+            }
+        } else {
+            subj = last_sep >= 0 ? subj[ vari ] : subj.get( vari );
+            if( is_wrapped_list ) {
+                subj = $.yote.templates._wrap_list( subj, context.template_path + '#' + orig_val );
+            } else if( is_wrapped_hash ) {
+                subj = $.yote.templates._wrap_hash( subj, context.template_path + '#' + orig_val );
+            }
+        }
+	    if( typeof subj === 'undefined' ) return no_literal ? undefined : orig_val;
+
 	    return subj;
     }, //_parse_val
 
@@ -11568,7 +11641,7 @@ $.yote.templates = {
 
 
     fill_template_variable:function( vari, context, args ) {
-	    //   $.yote.templates._parse_val returns 
+	    //   $.yote.templates._parse_val returns
 	    var res = $.yote.templates._parse_val( vari, context, true );
 	    return typeof res === 'undefined' ? args[ 0 ] ? args[ 0 ] : '' : res;
     }, //fill_template_variable

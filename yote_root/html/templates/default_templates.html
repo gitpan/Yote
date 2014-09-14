@@ -1,3 +1,26 @@
+<!--
+
+  LICENSE AND COPYRIGHT
+ 
+  Copyright (C) 2014 Eric Wolf  ( coyocanid@gmail.com )
+  This module is free software; it can be used under the terms of the artistic license
+ 
+  ---------------------------------------------------------------------------------------------
+    
+   The following templates are included in this set :
+
+     listfill
+     listpaginate
+     hashfill
+     hashpaginate
+     Paginator
+
+     SearchHash
+     edit_hash_with_select_scalars
+     list_remove_button
+     
+-->
+
 <style>
 .editing {
     background-color: lightyellow;
@@ -20,9 +43,11 @@
 
     if( ctx.args.length > 1 ) {
         var template = ctx.args[ 0 ];
-        var pag_list = ctx.vars[ ctx.args[ 1 ] ].to_list();
-        var more     = ctx.args.length > 2 ? ctx.args.slice( 2 ) : [];
-        return pag_list.map( function ( item, idx ) {
+        var pag_list = ctx.parent.parse( ctx.args[ 1 ] );
+        var size     = ctx.args[ 2 ];
+        var more     = ctx.args.length > 3 ? ctx.args.slice( 3 ) : [];
+        pag_list.set_size( size );
+        return pag_list.to_list().map( function ( item, idx ) {
             return '<$$ _listfillpagrow ' + template + ' ' + ctx.args[ 1 ] + ' ' + idx + ' ' + more.join(' ') + ' $$>';
         } ).join('');
     }
@@ -34,12 +59,12 @@
 <script type="text/template" class="yote_template_definition" template_name="_listfillpagrow">
    <???
       var template = ctx.args[ 0 ]; // fillpagrow
-      var pag_list = ctx.vars[ ctx.args[ 1 ] ];
+      var pag_list = ctx.parent.parent.parse( ctx.args[ 1 ] );
       var list     = pag_list.to_list();
       var idx      = ctx.args[ 2 ];
       var more = ctx.args.length > 3 ? ctx.args.slice( 3 ) : [];
       ctx.vars._ = list[ idx ];
-      ctx.vars._index_ = 1*idx + pag_list._start;
+      ctx.vars._index_ = Number(idx) + pag_list._start;
       return '<$$ ' + template + ' ' + more.join( ' ' ) + ' $$>';
     ???>
 </script>
@@ -54,7 +79,7 @@
     <???
     if( ctx.args.length > 1 ) {
         var template = ctx.args[ 0 ];
-        var list = ctx.vars[ ctx.args[ 1 ] ];
+        var list = ctx.parse( ctx.args[ 1 ] );
         var more = ctx.args.length > 2 ? ctx.args.slice( 2 ) : [];
         return list.map( function ( item, idx ) {
             return '<$$ _listfillrow ' + template + ' ' + ctx.args[ 1 ] + ' ' + idx + ' ' + more.join(' ') + ' $$>';
@@ -68,7 +93,7 @@
 <script type="text/template" class="yote_template_definition" template_name="_listfillrow">
    <???
       var template = ctx.args[ 0 ];
-      var list     = ctx.vars[ ctx.args[ 1 ] ];
+      var list     = ctx.parse( ctx.args[ 1 ] );
       var idx      = ctx.args[ 2 ];
       var more = ctx.args.length > 3 ? ctx.args.slice( 3 ) : [];
       ctx.vars._ = list[ idx ];
@@ -88,8 +113,11 @@
 
     if( ctx.args.length > 1 ) {
         var template = ctx.args[ 0 ];
-        var pag_keys = ctx.vars[ ctx.args[ 1 ] ].keys();
-        var more     = ctx.args.length > 2 ? ctx.args.slice( 2 ) : [];
+        var pag_hash = ctx.parent.parse( ctx.args[ 1 ] );
+        var size     = ctx.args[ 2 ];
+        pag_hash.set_size( size );
+        var more     = ctx.args.length > 3 ? ctx.args.slice( 3 ) : [];
+        var pag_keys = pag_hash.keys();
         return pag_keys.map( function ( item, idx ) {
             return '<$$ _hashfillpagrow ' + template + ' ' + ctx.args[ 1 ] + ' ' + item + ' ' + more.join(' ') + ' $$>';
         } ).join('');
@@ -102,9 +130,10 @@
 <script type="text/template" class="yote_template_definition" template_name="_hashfillpagrow">
    <???
       var template = ctx.args[ 0 ]; // fillpagrow
-      var hash     = ctx.vars[ ctx.args[ 1 ] ].to_hash();
+      var hash_pag = ctx.parent.parent.parse( ctx.args[ 1 ] );
+      var hash     = hash_pag.to_hash();
       var key      = ctx.args[ 2 ];
-      var more = ctx.args.length > 3 ? ctx.args.slice( 3 ) : [];
+      var more     = ctx.args.length > 3 ? ctx.args.slice( 3 ) : [];
       ctx.vars._ = hash[ key ];
       ctx.vars._hashkey_ = key;
       return '<$$ ' + template + ' ' + more.join( ' ' ) + ' $$>';
@@ -122,9 +151,9 @@
     <???
     if( ctx.args.length > 1 ) {
         var template = ctx.args[ 0 ];
-        var hash = ctx.vars[ ctx.args[ 1 ] ];
+        var hash = ctx.parse( ctx.args[ 1 ] );
         var more = ctx.args.length > 2 ? ctx.args.slice( 2 ) : [];
-        var keys = Object.keys( hash );
+        var keys = Object.keys( hash ).sort();
         return keys.map( function ( item, idx ) {
             return '<$$ _hashfillrow ' + template + ' ' + ctx.args[ 1 ] + ' ' + keys[idx] + ' ' + more.join(' ') + ' $$>';
         } ).join('');
@@ -137,7 +166,7 @@
 <script type="text/template" class="yote_template_definition" template_name="_hashfillrow">
    <???
       var template = ctx.args[ 0 ];
-      var hash     = ctx.vars[ ctx.args[ 1 ] ];
+      var hash     = ctx.parse( ctx.args[ 1 ] );
       var key      = ctx.args[ 2 ];
       var more = ctx.args.length > 3 ? ctx.args.slice( 3 ) : [];
       ctx.vars._ = hash[ key ];
@@ -154,10 +183,10 @@
        editing object directly. #>
     <???
          if( ctx.args.length == 4 ) {
-             var list   = ctx.vars[ ctx.args[ 0 ] ];
-             ctx.vars.object = ctx.vars[ ctx.args[ 1 ] ];
+             var list = ctx.parse( ctx.args[ 0 ] );
+             ctx.vars.object = ctx.parse( ctx.args[ 1 ] );
              ctx.vars.hash = ctx.args[ 2 ];
-             ctx.vars.field = ctx.vars[ ctx.args[ 3 ] ];
+             ctx.vars.field = ctx.parse( ctx.args[ 3 ] );
              var curval = ctx.vars.object.hash_fetch( { name : ctx.vars.hash, key : ctx.vars.field } );
              // TODO - escap the value there
              return '<$$$ sel <select> $$$>' + list.map(function(it,idx) { return '<option ' + ( curval == it ? ' selected ' : '' ) + ' value="' + it + '">' + it + '</option>' } ).join('') + '</select>';
@@ -179,8 +208,7 @@
 <script type="text/template" class="yote_template_definition" template_name="escape_html">
   <???
       if( ctx.args.length*1 == 1 ) {
-          var val = ctx.vars[ ctx.args[ 0 ] ];
-          console.log( val );
+          var val = ctx.parse( ctx.args[ 0 ] );
           return val;
 	  }
       return 'xxxx';
@@ -226,62 +254,9 @@
      ?>
 </script>
 
-<script type="text/template" class="yote_template_definition" template_name="Logged_in">
-   Logged in as <$ _acct_.handle $><BR>
-   <$$$ logout <a href="#">Log Out</a> $$$>
-   <?
-     $( ctx.controls.logout ).click( function() {
-         $.yote.logout();
-         $.yote.reinit();
-         ctx.refresh();
-     } );
-    ?>
-</script>
-
-<script type="text/template" class="yote_template_definition" template_name="Login">
-   <$$$ messages <span><$ _app_.login_message "Please Log In" $></span> $$$><BR>
-   <$$$ handle <input placeholder="handle" type="text"> $$$>
-   <$$$ password <input placeholder="password" type="password"> $$$>
-   <$$$ login <button type="BUTTON">Log In</button> $$$>
-     <BR>
-   <$$$ forgot <a href="#">Forgot Account</a> $$$>
-   <$$$ create <a href="#">Create Account</a> $$$>
-   <?
-       $.yote.util.button_actions({
-           button :  ctx.controls.login,
-           texts  :  [ ctx.controls.handle, ctx.controls.password ],
-           action : function() {
-               $.yote.login( $( ctx.controls.handle ).val(),
-                             $( ctx.controls.password ).val(),
-                             function(msg) {
-                                 if( ctx.scratch.requires_admin && ! $.yote.has_root_permissions() ) {
-                                     $( ctx.controls.messages ).empty().append( "Error : root login required" );
-                                     $.yote.logout();
-                                     $.yote.need_reinit = true;
-                                 }
-                                 $.yote.reinit();
-                                 ctx.refresh();
-                             },
-                             function(err) {
-                                 $( ctx.controls.messages ).empty().append( err );
-                             } );
-           }
-           } );
-         $( ctx.controls.forgot ).click( function() {
-             ctx.scratch.forgot_login = true;
-             ctx.refresh();
-         } );
-         $( ctx.controls.create ).click( function() {
-             ctx.scratch.create_login = true;
-             ctx.refresh();
-         } );
-    ?>
-</script>
-
-
 <script type="text/template" class="yote_template_definition" template_name="Paginator">
  <???
-     var collection = ctx.parent.vars[ ctx.args[ 0 ] ];
+     var collection = ctx.parent.parse( ctx.args[ 0 ] );
      if( collection.can_rewind() || collection.can_fast_forward() ) {
          return '<$$$ paginate_to_beginning_button <button type="BUTTON">&laquo;</button> $$$>' +
       '<$$$ paginate_back_button <button type="BUTTON">&lsaquo;</button> $$$>' +
@@ -291,9 +266,10 @@
       return '';
   ???>
  <?
+
      if( ctx.args.length < 1 ) return;
 
-     var collection = ctx.parent.vars[ ctx.args[ 0 ] ];
+     var collection = ctx.parent.parse( ctx.args[ 0 ] );
 
      if( ! collection || ! collection.can_rewind ) { //test if it has that function
          console.log( 'warning : init_paginator called for something not a list or hash' );
@@ -307,12 +283,16 @@
      if( collection.can_rewind() ) {
          $( pag_begin_button_id ).attr( 'disabled', false );
          $(  pag_back_button_id ).attr( 'disabled', false );
-         $(  pag_begin_button_id ).click( function() { collection.first();
-                                                       $.yote.reinit();
-                                                       ctx.refresh(); } );
-         $(  pag_back_button_id ).click( function() { collection.back();
-                                                      $.yote.reinit();
-                                                      ctx.refresh(); } );
+         $(  pag_begin_button_id ).click( function() { 
+                           collection.first();
+                           $.yote.reinit();
+                           ctx.refresh(); 
+                           } );
+         $(  pag_back_button_id ).click( function() { 
+                           collection.back();
+                           $.yote.reinit();
+                           ctx.refresh(); 
+                           } );
      } else {
          $(  pag_begin_button_id ).attr( 'disabled', true );
          $(  pag_back_button_id ).attr( 'disabled', true );
@@ -346,7 +326,7 @@
           <$$$ go <button type="button">$$$>Search</button>
     <?
       if( ctx.args.length > 1 ) {
-          var data = ctx.vars[ ctx.args[ 0 ] ];
+          var data = ctx.parse( ctx.args[ 0 ] );
           var search_key = ctx.args[ 1 ] == 'keys';
           var search_fields = ctx.args.slice( 2 );
           if( data._last_val ) {
@@ -356,7 +336,6 @@
               button : ctx.controls.go,
               texts : [ ctx.controls.srchtxt ],
               action : function() {
-                  try { fsadfs() } catch(err ) {}
                   var val = $( ctx.controls.srchtxt ).val();
                   data._last_val = val;
                   if( search_key ) {
