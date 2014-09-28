@@ -4,12 +4,13 @@
  * Copyright (C) 2014 Eric Wolf   ( coyocanid@gmail.com )
  * This module is free software; it can be used under the terms of the artistic license
  *
- * Version 0.104
+ * Version 0.105
  */
 if( ! $.yote ) {
     $.yote = {
         fetch_default_app: function() { return undefined; },
         fetch_account: function() { return undefined; },
+        reinit:function() {},
         _wrap_list:function() {
             throw new Exception( 'yote system not present: cannot wrap yote list' );
         }, //wrap_list
@@ -124,7 +125,7 @@ $.yote.templates = {
                     if( typeof this._filter_function !== 'undefined' ) {
                         ret = [];
                         for( var i=0, len = this._arry.length; i<len; i++ ) {
-                            if( this._filter_function( this._arry[ i ], i, this._arry ) ) {
+                            if( this._filter_function( i, this._arry[ i ], this._arry ) ) {
                                 ret.push( this._arry[ i ] );
                             }
 
@@ -149,7 +150,7 @@ $.yote.templates = {
                         var new_ret = [];
                         for( var i=0, len = ret.length; i<len; i++ ) {
                             var k = ret[ i ];
-                            if( this._filter_function( k, this._hash[ k ] ) )
+                            if( this._filter_function( k, this._hash[ k ], this._hash ) )
                                 new_ret.push( k );
                         }
                         ret = new_ret;
@@ -191,10 +192,19 @@ $.yote.templates = {
     }, //_data_wrapper
 
     register_template:function( key, value ) {
-	$.yote.templates._compile_template( key, value );
+  	    $.yote.templates._compile_template( key, value );
     }, //register template
 
+    is_registered:function( key ) {
+        return typeof $.yote.templates._compiled_templates[ key.trim() ] !== 'undefined';
+    }, //is_registered
+
+    unregister_template:function( key ) {
+	    delete $.yote.templates._compiled_templates[ key.trim() ];
+    }, //unregister_template
+
     _compile_template:function( key, value ) {
+        key = key.trim();
 	    // fun list = a list of ( priority, function ) couples
 	    var fun_list = $.yote.templates._parse_template( value, key );
 
@@ -412,6 +422,7 @@ $.yote.templates = {
 	        vars : {},
 	        functions : {},
 	        controls : {},
+	        control_ids : {},
 	        args : [], // args passed in to the template as it was built
             parent : undefined,
 	        scratch : $.yote.templates.scratch, // reference to common scratch area.
@@ -433,6 +444,7 @@ $.yote.templates = {
 		            functions : Object.clone( this.functions ),
 		            id        : $.yote.templates._next_id(),
 		            controls  : Object.clone( this.controls ),
+		            control_ids  : Object.clone( this.control_ids ),
 		            args      : Object.clone( this.args ),
                     refresh   : this.refresh,
 		        }; //TODO : add hash key and index
@@ -617,7 +629,6 @@ $.yote.templates = {
     // in addition, the vavar contains period characters, those are treated as separators.
     //      _parse_val( "foo.bar.baz", { context object with foo object that has a bar object that has a baz field with the value of "yup" } ) --> "yup"
     _parse_val:function( value, context, no_literal ) {
-
         /*
           Check to see if this has been designated as a list or hash or wrapped list or hash.
          */
@@ -629,7 +640,7 @@ $.yote.templates = {
                 is_wrapped_list = true;
                 value = value.substring( 0, value.length - 2 );
             } else {
-                is_list = true;                
+                is_list = true;
                 value = value.substring( 0, value.length - 1 );
             }
         }
@@ -642,7 +653,7 @@ $.yote.templates = {
                 value = value.substring( 0, value.length - 1 );
             }
         }
-        
+
 	    var subj = context;
         var start = 0;
         var vari;
@@ -650,30 +661,42 @@ $.yote.templates = {
         var last_dot = value.lastIndexOf( '.' );
         var last_pipe = value.lastIndexOf( '|' );
         var last_sep = last_dot > last_pipe ? last_dot : last_pipe;
-        for( var i=0, len = value.length; i<len; i++ ) {
-            if( value[ i ] == '.' || value[ i ] == '|' ) {
-                vari = value.substring( start, i );
-                if( last_sep >= i ) {
-                    //not yet at last seperator
-                    subj = prev_is_get ? subj.get( vari ) : subj[ vari ];
-                    prev_is_get = value[ i ] == '|';
-                    start = i + 1;
+        if( last_sep > 0 ) {
+            for( var i=0, len = value.length; i<len; i++ ) {
+                if( value[ i ] == '.' || value[ i ] == '|' ) {
+                    vari = value.substring( start, i );
+                    if( last_sep >= i ) {
+                        //not yet at last seperator
+                        subj = prev_is_get ? subj.get( vari ) : subj[ vari ];
+                        prev_is_get = value[ i ] == '|';
+                        start = i + 1;
+                    }
                 }
             }
         }
 
-        vari = value.substring( start, value.length );
-        if( prev_is_get && last_sep >= 0 ) {
-            if( is_list || is_hash ) {
+        vari = last_sep == 0 ? value.substring( 1 ) : value.substring( start );
+        if( prev_is_get && last_sep > 0 ) {
+            if( is_list ) {
                 subj = subj.get( vari ).to_list();
             } else if( is_hash ) {
                 subj = subj.get( vari ).to_hash();
             } else if( is_wrapped_list ) {
+                subj = subj.class == 'ARRAY' ?
+                subj = $.yote.templates._wrap_list( subj.get( vari ).to_list(), context.template_path + '#' + orig_val ) :
                 subj = $.yote._wrap_list( subj, vari, context.template_path + '#' + orig_val );
             } else if( is_wrapped_hash ) {
-                subj = $.yote._wrap_hash( subj, vari, context.template_path + '#' + orig_val );                
+                subj = subj.class == 'HASH' ?
+                    $.yote.templates._wrap_hash( subj.get( vari ).to_hash(), context.template_path + '#' + orig_val ) :
+                    $.yote._wrap_hash( subj, vari, context.template_path + '#' + orig_val );
             } else {
                 subj = subj.get( vari );
+            }
+        } else if( last_pipe == 0 && ( is_list || is_hash )) {
+            if( is_list ) {
+                subj = subj.get( vari ).to_list();
+            } else if( is_hash ) {
+                subj = subj.get( vari ).to_hash();
             }
         } else {
             subj = last_sep >= 0 ? subj[ vari ] : subj.get( vari );
@@ -681,7 +704,7 @@ $.yote.templates = {
                 subj = $.yote.templates._wrap_list( subj, context.template_path + '#' + orig_val );
             } else if( is_wrapped_hash ) {
                 subj = $.yote.templates._wrap_hash( subj, context.template_path + '#' + orig_val );
-            }
+            } 
         }
 	    if( typeof subj === 'undefined' ) return no_literal ? undefined : orig_val;
 
@@ -712,6 +735,7 @@ $.yote.templates = {
 		        rest = rest.replace( /^\s*(<\s*[^\s\>]+)([ \>])/, '$1 id="' + ctrl_id + '" $2' );
         }
 	    context.controls[ varname ] = '#' + ctrl_id;
+	    context.control_ids[ varname ] = ctrl_id;
 	    return rest;
 
         return '';

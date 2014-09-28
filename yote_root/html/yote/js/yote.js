@@ -446,10 +446,11 @@ $.yote = {
             else
                 throw new Exception( 'wrap list called without ' + ( key ? 'list' : 'key' ) );
         }
-        var full_size = obj.count( { name : field } );
-        var server_paginate = field.match( /^_/ ) || full_size > 300;
 
         if( ! node ) {
+            var full_size = obj.count( { name : field } );
+            var server_paginate = field.match( /^_/ ) || full_size > 300;
+
             var start = 0;
             node = {
                 _server_paginate : server_paginate,
@@ -478,7 +479,7 @@ $.yote = {
                     return this._start > 0;
                 },
                 can_fast_forward:function(){
-                    return (this._start + this._page_size) < ( this._data_size - 1 );
+                    return (this._start + this._page_size) < this._data_size;
                 },
                 forwards:function(){
                     this._start += this._page_size;
@@ -569,6 +570,10 @@ $.yote = {
             } else {
                 $.yote._pag_list_cache[ key ] = node;
             }
+        } else if( node.server_paginate ) {
+            node._data_size = obj.count( { name : field } );
+        } else {
+            node._data_size = is_hash ? Object.count( node._obj.get( node._field ).to_hash() ) : node._obj.get( node._field ).to_list().length;
         }
         if( obj && field ) {
             node._obj = obj;

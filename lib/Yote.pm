@@ -10,7 +10,7 @@ use warnings;
 no warnings 'uninitialized';
 use vars qw($VERSION);
 
-$VERSION = '0.228';
+$VERSION = '0.230';
 
 use Carp;
 use Crypt::Passwd::XS;
@@ -168,25 +168,6 @@ sub encrypt_pass {
     return $handle ? Crypt::Passwd::XS::crypt( $pw, $handle ) : undef;
 } #encrypt_pass
 
-sub run {
-    my %config = @_;
-
-    _log( "Running" );
-
-    my $yote_root_dir = $config{ yote_root };
-
-    push( @INC, "$yote_root_dir/lib" );
-
-    my $s = Yote::WebAppServer->new;
-
-    my $start_time = localtime();
-    _log( "Starting Server at $start_time" );
-    my $args = Data::Dumper->Dump([\%config]);
-    _log( $args );
-
-    $s->start_server( %config );
-
-} #run
 
 ###################
 # Private Methods #
