@@ -1,359 +1,262 @@
+/*
+ * LICENSE AND COPYRIGHT
+ *
+ * Copyright (C) 2012 Eric Wolf
+ * This module is free software; it can be used under the terms of the artistic license
+ *
+ * Version 0.027
+ */
+if( ! $.yote ) { $.yote = {}; }
 $.yote.util = {
-    ids:0,
 
-    next_id:function() {
-        return 'yidx_'+this.ids++;
-    },
- 
-   stage_text_field:function(attachpoint,yoteobj,fieldname) {
-        var val = yoteobj.get(fieldname);
-        var idname = this.next_id();
-        attachpoint.append( '<input type="text" id="' + idname + '">' );
-        $( '#'+idname ).val( val );
-        $( '#'+idname ).keyup( (function (o,k,id,initial) {
-            return function(e) {
-                var newval = $(id).val();
-                o._stage(k,newval);
-                if( initial != newval || o._is_dirty(k)) {
-                    $(id).css('background-color','lightyellow' );
-                } else {
-                    $(id).css('background-color','white' );
-                }
-            }
-        } )(yoteobj,fieldname,'#'+idname,val) );
-        return $( '#' + idname );
-    }, //stage_text_field
+    // general useful utility functions go here.
 
-    stage_textarea:function(args) {
-        var attachpoint = args['attachpoint'];
-        var yoteobj   = args['yoteobj'];
-        var fieldname = args['fieldname'];
-        var cols      = args['cols'];
-        var rows      = args['rows'];
-        var as_list   = args['as_list'];
-
-        var idname    = this.next_id();
-        attachpoint.append( '<textarea cols="'+cols+'" rows="'+rows+'" id="' + idname + '"></textarea>' );
-        var val;
-        if( as_list == true ) {
-            var a = Array();
-            for( var i=0; i < yoteobj.length(); ++i ) {
-                a.push( yoteobj.get( i ) );
-            }
-            val = a.join( '\n' );
-            $( '#'+idname ).attr( 'value', val );
-        } else {
-            val = yoteobj.get(fieldname);
-            $( '#'+idname ).attr( 'value', val );
-        }
-        $( '#'+idname ).keyup( (function (o,k,id,initial) {
-            return function(e) {
-                var newval = $(id).attr('value');
-
-                if( initial != newval || o._is_dirty(k)) {
-                    $(id).css('background-color','lightyellow' );
-                } else {
-                    $(id).css('background-color','white' );
-                }
-
-                if( as_list == true ) {
-                    newval = newval.split( /\r\n|\r|\n/ );
-                    for( var nk in newval ) {
-                        o._stage( nk, newval[nk] );
-                    }
-                }
-                else {
-                    o._stage(k,newval);
-                }
-            }
-        } )(yoteobj,fieldname,'#'+idname,val) );
-        return $( '#' + idname );
-    }, //stage_textarea
-
-    /*
-      yote_obj/yote_fieldname 
-      - object and field to set an example from the list
-      list_fieldname - field in the list objects to get the item name for.
-    */
-    stage_object_select:function(args) {
-        var attachpoint    = args['attachpoint'];
-        var yote_obj       = args['yote_obj'];
-        var yote_fieldname = args['yote_fieldname'];
-        var yote_list      = args['yote_list'];
-        var list_fieldname = args['list_fieldname'];
-        var include_none   = args['include_none'];
-        var current        = yote_obj.get( yote_fieldname );
-
-        var current_id = typeof current === 'undefined' ? undefined : current.id;
-	var idname = this.next_id();
-        attachpoint.append( '<SELECT id="'+idname+'">' + (include_none == true ? '<option value="">None</option>' : '' ) + '</select>' );
-        for( var i=0; i<yote_list.length(); ++i ) {
-            var obj = yote_list.get( i );
-            var val = obj.get( list_fieldname );
-            $( '#' + idname ).append( '<option value="' + obj.id + '" ' 
-                                      + (obj.id==current_id ? 'selected' :'') + '>' + val + '</option>' );
-            $( '#' + idname ).click(
-                ( function(o,k,id,initial) {
-                    return function() {
-                        var newid = $(id).val();
-                        o._stage(k,undefined);
-                        if( initial != newid || o._is_dirty(k) ) {
-                            $(id).css('background-color','lightyellow' );
-                        } else {
-                            $(id).css('background-color','white' );
-                        }
-                    }
-                } )(yote_obj,yote_fieldname,'#'+idname,current_id)
-            );
-        }
-    }, //stage_object_select
-
-    build_select_txt:function( args ) {
-	var items = args[ 'items' ], text = args[ 'text' ], val = args[ 'val' ], id = args[ 'id' ];
-	var dflt = args[ 'default' ];
-	if( items.length() == 0 ) { return dflt; }
-	var buf = '<SELECT id="' + id + '" ' + args[ 'extra' ] + '>';
-	if( args[ 'include_none' ] ) { buf += '<OPTION value="">None</OPTION>'; }
-	for( var i=0; i < items.length(); i++ ) {
-	    var item = items.get( i );
-	    buf += '<OPTION value="' + val( item, i ) + '">' + text( item ) + '</OPTION>';
-	}
-	return buf + '</SELECT>';
-    }, //build_select_txt
-
-    make_select:function(attachpoint,list,list_fieldname) {
-	var idname = this.next_id();
-        attachpoint.append( '<select id="'+idname+'"></select>' );
-	for( var i in list ) {
-	    var item = list[i];
-	    $( '#'+idname ).append( '<option value='+item.id+'>'+item.get(list_fieldname)+'</option>' );
-	}
-	return $( '#' + idname );
-    },
-    make_table:function(extra) {
-	var xtr = extra ? extra : '';
-	return {
-	    html:'<table ' + xtr + '>',
-	    next_row_class:'class="even-row" ',
-	    add_header_row : function( arry, extra_row, extra_headers ) {
-		var xtr_row = extra_row ? extra_row : '';
-		var xtr_headers = extra_headers ? extra_headers : '';
-		this.html = this.html + '<tr ' + this.next_row_class + xtr_row + '>';
-		if( this.next_row_class == 'class="even-row" ' ) {
-		    this.next_row_class = 'class="odd-row" ';
-		} else {
-		    this.next_row_class = 'class="even-row" ';		    
-		}
-		var cls = 'class="even-col" ';
-		for( var i=0; i<arry.length; i++ ) {
-		    this.html = this.html + '<th ' + cls + xtr_headers + '>' + arry[i] + '</th>';
-		    if( cls == 'class="even-col" ' ) {
-			cls = 'class="odd-col" ';
-		    } else {
-			cls = 'class="even-col" ';
-		    }
-		}
-		this.html = this.html + '</tr>';
-		return this;
-	    },
-	    add_row : function( arry, extra_row, extra_headers ) {
-		var xtr_row = extra_row ? extra_row : '';
-		this.html = this.html + '<tr ' + this.next_row_class + xtr_row + '>';
-		if( this.next_row_class == 'class="even-row" ' ) {
-		    this.next_row_class = 'class="odd-row" ';
-		} else {
-		    this.next_row_class = 'class="even-row" ';		    
-		}
-
-		var cls = 'class="even-col" ';
-		for( var i=0; i<arry.length; i++ ) {
-		    if( extra_headers ) {
-			this.html = this.html + '<td ' + cls + extra_headers[i] + '>' + arry[i] + '</td>';
-		    } else {
-			this.html = this.html + '<td ' + cls + '>' + arry[i] + '</td>';
-		    }
-		    if( cls == 'class="even-col" ' ) {
-			cls = 'class="odd-col" ';
-		    } else {
-			cls = 'class="even-col" ';
-		    }
-		}
-		this.html = this.html + '</tr>';		
-		return this;
-	    },
-	    add_param_row : function( arry ) {
-		this.html = this.html + '<tr ' + this.next_row_class + '>';		
-		if( this.next_row_class == 'class="even-row" ' ) {
-		    this.next_row_class = 'class="odd-row" ';
-		} else {
-		    this.next_row_class = 'class="even-row" ';		    
-		}
-		if( arry.length > 0 ) {
-		    this.html = this.html + '<th class="even-col">' + arry[0] + '</th>';
-		}
-		var cls = 'class="odd-col" ';
-		for( var i=1; i<arry.length; i++ ) {
-		    this.html = this.html + '<td ' + cls + '>' +  arry[i] + '</td>';		    
-		    if( cls == 'class="even-col" ' ) {
-			cls = 'class="odd-col" ';
-		    } else {
-			cls = 'class="even-col" ';
-		    }
-		}
-		this.html = this.html + '</tr>';		
-		return this;
-	    },
-	    get_html : function() { return this.html + '</table>'; }
-	}
-    }, //make_table
-
-    make_paginatehash_table:function( arg ) {
-	return (function( args ){
-	    
-	    var ptab = {
-		obj       : args[ 'obj' ],
-		list_name : args[ 'list_name' ],
-		size      : args[ 'size' ] || 100,
-		col_names : args[ 'col_names' ],
-		title     : args[ 'title' ] || '',
-		col_funs  : args[ 'col_functions' ],
-		attach_point : args[ 'attach_point' ]
-	    };
-
-	    ptab[ 'show' ] = function( start_pos ) {
-		if( ptab[ 'attach_point' ] ) {
-		    $( ptab[ 'attach_point' ] ).empty().append( ptab.build_html( start_pos ) );
-		    $( '#forward_' + ptab.obj.id ).click(function(){
-			ptab.show( start_pos + ptab.size );
-		    });
-		    $( '#back_' + ptab.obj.id ).click(function(){
-			var x = start_pos - ptab.size;
-			ptab.show( x > 0 ? x : 0 );
-		    });
-
-		}
-	    };
-
-	    ptab[ 'build_html' ] = function(start_pos) {
-		var start = start_pos ? start_pos : 0;
-		var tab = $.yote.util.make_table();
-		if( ptab.col_names ) {
-		    tab.add_header_row( ptab.col_names );
-		}
-		var hash = ptab.obj[ 'paginate_hash' ]( [ ptab.list_name, ptab.size + 1, start ] );
-		var max = hash.length() < ptab.size ? hash.length() : ptab.size;
-		var keys = hash.keys();
-		for( var i=0; i < max ; i++ ) {
-		    var key = keys[ i ];
-		    var val = hash.get( key );
-		    if( ptab.col_funs ) {
-			var arry = [];
-			for( var j=0; j < ptab.col_funs.length; j++ ) {
-			    var fun = ptab.col_funs[ j ];
-			    arry.push( fun( key, val ) );
-			}
-			tab.add_row( arry );
-		    } 
-		    else {
-			tab.add_row( [ key, val ] );
-		    }
-		}
-		
-		var buf = ptab.title + tab.get_html();
-		
-		if( start > 0 ) {
-		    buf = buf + '<span id="back_' + ptab.obj.id + '" class="btn"><i class="icon-fast-backward"></i></span>';
-		    if( hash.length() > max ) {
-			buf = buf + '<span id="forward_' + ptab.obj.id + '" class="btn"><i class="icon-fast-forward"></i></span>';
-		    }
-		    else {
-			buf = buf + '<span class="btn"><i class="icon-fast-forward icon-white"></i></span>';
-		    }
-		} 
-		else {
-		    if( hash.length() > max ) {
-			buf = buf + '<span class="btn"><i class="icon-fast-backward icon-white"></i></span>';
-			buf = buf + '<span id="forward_' + ptab.obj.id + '" class="btn"><i class="icon-fast-forward"></i></span>';
-		    } else {
-			//nothing to do
-		    }
-		}
-		return buf;
-	    };
-	    
-	    ptab[ 'attach_to' ] = function( attach_point ) {
-		ptab[ 'attach_point' ] = attach_point;
-		ptab.show( 0 );
-	    };
-
-	    if( ptab[ 'attach_point' ] ) {
-		ptab.show( 0 );
+    url_params:function() {
+	    if( window.location.href.indexOf('?') == -1 ) {
+	        return {};
 	    }
+        var parts  = window.location.href.split('?');
+        var params = parts[1].split('&');
+        var ret = {};
+        for( var i=0; i<params.length; ++i ) {
+            var pair = params[i].split('=');
+	        ret[ pair[0] ] = pair[1];
+        }
+	    return ret;
+    }, //url_params
 
-	    return ptab;
-	})( arg );
-    }, //make_paginatehash_table
-    
+    format_date: function( date, format ) {
+	    if( format ) {
+	        var buf = '';
+	        for( var i=0; i<format.length; i++) {
+		        var chara = format.charAt( i );
+		        if( chara == 'Y' ) buf += date.getUTCFullYear();
+		        else if( chara == 'M' ) buf += (1 + date.getUTCMonth()) > 9 ? 1 + date.getUTCMonth() : '0' + ( 1 + date.getUTCMonth() );
+		        else if( chara == 'D' ) buf += date.getUTCDate()    > 9 ? date.getUTCDate()    : '0' + date.getUTCDate();
+		        else if( chara == 's' ) buf += date.getUTCSeconds() > 9 ? date.getUTCSeconds() : '0' + date.getUTCSeconds();
+		        else if( chara == 'h' ) buf += date.getUTCHours()   > 9 ? date.getUTCHours()   : '0' + date.getUTCHours();
+		        else if( chara == 'm' ) buf += date.getUTCMinutes() > 9 ? date.getUTCMinutes() : '0' + date.getUTCMinutes();
+		        else buf += chara;
+	        }
+	        return buf;
+	    }
+	    return date.toUTCString();
+    }, //format_date
+
+    //
+    // Makes sure all things that match the selector have the
+    // same width.
+    // 
+    match_widths: function( selector, buff ) {
+	    var max_width = 0;
+	    $( selector ).each( function() {
+	        var w = $( this ).width();
+	        max_width = max_width > w ? max_width : w;
+	    } );
+	    if( buff > 0 ) max_width += buff;
+	    $( selector ).each( function() {
+	        $( this ).width( max_width );
+	    } );
+    }, //match_widths
+
+    list_paginator : function( list ) {
+        return {
+            _list : list,
+            _pag_size : 0,
+            _start : 0,
+            real_size : function() { return list.length; },
+            pagination_size: function(val) { 
+                if( typeof val === 'undefined' ) return this._pag_size;
+                this._pag_size = val;
+                return this;
+            },
+            start: function( val ) {
+                if( typeof val === 'undefined' ) return this._start;
+                this._start = val;
+                return this;
+            }
+        };
+    }, //list paginator
 
     button_actions:function( args ) {
-	var but         = args[ 'button' ];
-	var action      = args[ 'action' ] || function(){};
-	var on_escape   = args[ 'on_escape' ] || function(){};
-	var texts       = args[ 'texts'  ] || [];
-	var req_texts   = args[ 'required' ];
-	var exempt      = args[ 'cleanup_exempt' ] || {};
-	var extra_check = args[ 'extra_check' ] || function() { return true; }
-
-	var check_ready = (function(rt,te,ec) { return function() {
-	    var t = rt || te;
-	    var ecval = ec();
-	    for( var i=0; i<t.length; ++i ) {
-		if( ! $( t[i] ).val().match( /\S/ ) ) {
-	    	    $( but ).attr( 'disabled', 'disabled' );
-		    return false;
-		}
+	    var cue = {};
+	    if( args.cleanup_exempt ) {
+	        for( var i=0; i < args.cleanup_exempt.length; i++ ) {
+		        cue[ args.cleanup_exempt[ i ] ] = true;
+	        }
 	    }
-	    $( but ).attr( 'disabled', ! ecval );
-	    return ecval;
-	} } )( req_texts, texts, extra_check ) // check_ready
+	    var ba = {
+	        but         : args.button,
+	        action      : args.action || function(){},
+	        on_escape   : args.on_escape || function(){},
+	        texts       : args.texts || [],
+	        t_values    : args.texts.map( function(it,idx){ return $( it ).val(); } ),
+	        req_texts   : args.required,
+	        req_indexes : args.required_by_index,
+	        req_fun     : args.required_by_function,
+	        exempt      : cue,
+	        extra_check : args.extra_check || function() { return true; },
 
-	for( var i=0; i<texts.length - 1; ++i ) {
-	    $( texts[i] ).keyup( function() { check_ready(); return true; } );
-	    $( texts[i] ).keypress( (function(box,oe) {
-		return function( e ) {
-		    if( e.which == 13 ) {
-			$( box ).focus();
-		    } else if( e.which == 27 ) {
-			oe();
-		    }		   
-		} } )( texts[i+1], on_escape ) );
-	}
+	        check_ready : function() {
+		        var me = this;
+		        var ecval = me.extra_check();
+		        var t = me.req_texts || me.texts;
+		        if( typeof me.req_fun === 'function' ) {
+		            if( me.req_fun( me.texts ) != true ) {
+			            $( me.but ).attr( 'disabled', 'disabled' );
+			            return false;
+		            }
+		        }
+		        else if( typeof me.req_indexes !== 'undefined' ) {
+		            for( var i=0; i<me.req_indexes.length; ++i ) {
+			            if( $( me.texts[ me.req_indexes[ i ] ] ).val() == me.t_values[ i ] ) {
+	    		            $( me.but ).attr( 'disabled', 'disabled' );
+			                return false;
+			            }
+		            }
+		        }
+		        else {
+		            for( var i=0; i<t.length; ++i ) {
+			            if( $( t[ i ] ).val() == me.t_values[ i ] ) {
+	    		            $( me.but ).attr( 'disabled', 'disabled' );
+			                return false;
+			            }
+		            }
+		        }
+		        $( me.but ).attr( 'disabled', ! ecval );
+		        return ecval;
+	        }, //check_ready
 
-	act = (function( c_r, a_f, txts ) { return function() {
-	    if( c_r() ) {
-		a_f();
-		for( var i=0; i<txts.length; ++i ) {
-		    if( ! exempt[ txts[i] ] ) {
-			$( txts[i] ).val( '' );
-		    }
-		}
+	        init:function() {
+		        var me = this;
+		        for( var i=0; i<me.texts.length - 1; ++i ) {
+		            if( $( me.texts[i] ).prop('type') == 'checkbox' ) {
+			            $( me.texts[i] ).click( function() { me.check_ready(); return true; } );
+		            }
+		            else {
+			            $( me.texts[i] ).keyup( function() { me.check_ready(); return true; } );
+			            $( me.texts[i] ).keypress( (function(box,oe) {
+			                return function( e ) {
+				                if( e.which == 13 ) {
+				                    $( box ).focus();
+				                } else if( e.which == 27 ) {
+				                    oe();
+				                }
+			                } } )( me.texts[i+1], me.on_escape ) );
+		            }
+		        }
+		        $( me.texts[me.texts.length - 1] ).keyup( function() { me.check_ready(); return true; } );
+		        $( me.texts[me.texts.length - 1] ).keypress( function( e ) {
+		            if( e.which == 13 ) {
+			            me.act();
+		            } else if( e.which == 27 ) {
+			            me.on_escape();
+		            }
+		        } );
+		        $( me.but ).click( function() { me.act() } );
+		        me.check_ready();
+	        }, //init
+
+	        act : function() {
+		        var me = this;
+		        if( me.check_ready() ) {
+		            me.action();
+		            for( var i=0; i<me.texts.length; ++i ) {
+			            if( ! me.exempt[ me.texts[i] ] ) {
+			                $( me.texts[i] ).val( '' );
+			            }
+		            }
+		            me.t_values    = me.texts.map( function(it,idx){ return $( it ).val(); } );
+		        }
+	        } //act
+	    } // ba
+
+	    ba.init();
+
+	    return ba;
+
+    }, //button_actions
+
+    make_table:function( classes ) {
+	    var xtr = classes ? 'class="' + classes.join( ' ' ) + '"' : '';
+	    return {
+	        html:'<table ' + xtr + '>',
+	        next_row_class:'even-row',
+	        add_header_row : function( arry, row_classes, header_classes ) {
+		        row_classes = row_classes ? row_classes : [];
+		        row_classes.push( this.next_row_class );
+		        header_classes = header_classes ? header_classes : [];
+
+		        this.html = this.html + '<tr class="' + row_classes.join( ' ' ) + '">';
+		        if( this.next_row_class == 'even-row' ) {
+		            this.next_row_class = 'odd-row';
+		        } else {
+		            this.next_row_class = 'even-row';
+		        }
+
+		        var cls = 'even-col';
+		        for( var i=0; i<arry.length; i++ ) {
+		            var colname = typeof arry[i] === 'function' ? arry[i]() : arry[i];
+		            this.html = this.html + '<th class="' + cls + ' ' + header_classes.join( ' ' ) + '">' + colname + '</th>';
+		            if( cls == 'even-col' ) {
+			            cls = 'odd-col';
+		            } else {
+			            cls = 'even-col';
+		            }
+		        }
+		        this.html = this.html + '</tr>';
+		        return this;
+	        },
+	        add_row : function( arry, row_classes, cell_classes ) {
+		        row_classes = row_classes ? row_classes : [];
+		        cell_classes = cell_classes ? cell_classes : [];
+
+		        this.html = this.html + '<tr class="' + this.next_row_class + ' ' + row_classes.join( ' ' ) + '">';
+		        if( this.next_row_class == 'even-row' ) {
+		            this.next_row_class = 'odd-row';
+		        } else {
+		            this.next_row_class = 'even-row';
+		        }
+
+		        var cls = 'even-col';
+		        for( var i=0; i<arry.length; i++ ) {
+		            this.html = this.html + '<td class="' + cls + ' ' + cell_classes.join( ' ' ) + '">' + arry[i] + '</td>';
+		            if( cls == 'even-col' ) {
+			            cls = 'odd-col';
+		            } else {
+			            cls = 'even-col';
+		            }
+		        }
+		        this.html = this.html + '</tr>';
+		        return this;
+	        },
+	        add_param_row : function( arry, row_classes, header_classes, cell_classes ) {
+		        row_classes = row_classes ? row_classes : [];
+		        cell_classes = cell_classes ? cell_classes : [];
+
+		        this.html = this.html + '<tr class="' + this.next_row_class + ' ' + row_classes.join(' ') +  '">';
+		        if( this.next_row_class == 'even-row' ) {
+		            this.next_row_class = 'odd-row';
+		        } else {
+		            this.next_row_class = 'even-row';
+		        }
+		        if( arry.length > 0 ) {
+		            this.html = this.html + '<th class="even-col ' + header_classes.join(' ') + '">' + arry[0] + '</th>';
+		        }
+		        var cls = 'odd-col';
+		        for( var i=1; i<arry.length; i++ ) {
+		            this.html = this.html + '<td class="' + cls + ' ' + cell_classes.join( ' ' ) + '">' +  arry[i] + '</td>';
+		            if( cls == 'even-col' ) {
+			            cls = 'odd-col';
+		            } else {
+			            cls = 'even-col';
+		            }
+		        }
+		        this.html = this.html + '</tr>';
+		        return this;
+	        },
+	        get_html : function() { return this.html + '</table>'; }
 	    }
-	} } ) ( check_ready, action, texts );
-
-	$( texts[texts.length - 1] ).keyup( function() { check_ready(); return true; } );
-	$( texts[texts.length - 1] ).keypress( (function(a,oe) { return function( e ) {
-	    if( e.which == 13 ) {
-		a();
-	    } else if( e.which == 27 ) {
-		eo();
-	    } } } )(act,on_escape) );
-
-	$( but ).click( act );
-
-	check_ready();
-
-	return check_ready;
-
-    }, // button_actions
+    }, //make_table
 
 }//$.yote.util

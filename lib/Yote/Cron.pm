@@ -1,116 +1,221 @@
 package Yote::Cron;
 
+#######################################################################################################
+# This module is not meant to be used directly. It is activated automatically as part of the service. #
+#######################################################################################################
+
+
 use strict;
 use warnings;
+no warnings 'uninitialized';
+
+use vars qw($VERSION);
+$VERSION = '0.015';
 
 use DateTime;
 
-use base 'Yote::Obj';
+use parent 'Yote::RootObj';
 
-#
-# This should be rewritten.
-# 
+##################
+# Public Methods #
+##################
 
-# ------------------------------------------------------------------------------------------
-#      * INITIALIZATION *
-# ------------------------------------------------------------------------------------------
+sub add_entry {
+    my( $self, $entry, $acct ) = @_;
+    # TODO - enforce unique name to entries
+    $self->add_to_entries( $entry );
+    $self->_update_entry( $entry );
+    return $entry;
+} #add_entry
 
+sub entries {
+    my $self = shift;
+    my $now_running = _time();
+    my $entries = $self->get_entries([]);
+    return [grep { $_->get_enabled() && $_->get_next_time() && $now_running >= $_->get_next_time() } @$entries ];
+} #entries
+
+
+sub mark_done {
+    my( $self, $entry, $acct ) = @_;
+    die "Access Error" unless $acct->is_root();
+    return $self->_mark_done( $entry );
+}
+
+
+# starts a cron thread. All this does is queues up a message in the engine to check the cron.
+sub start {
+    my $cfg = shift;
+    while( 1 ) {
+        my $sock = new IO::Socket::INET( "127.0.0.1:$cfg->{internal_port}" );
+        print $sock "CRON";
+        close $sock;
+        sleep 50;
+    }
+} #start
+
+sub prefetch {
+    my( $self, $data, $acct ) = @_;
+    if( $acct && $acct->is_root() ) {
+        return [ $self->get_entries(),
+                 ( map { $_, 
+                       @{$_->get_repeats([])}, 
+                       $_->get_repeats(),
+                       @{$_->get_scheduled_times([])},
+                       $_->get_scheduled_times() } 
+                 @{ $self->get_entries([]) } )
+            ];
+        
+    } 
+}
+
+sub check {
+    my $cron = shift;
+
+    my $cron_entries = $cron->entries();
+    # TODO : make sure nothing volatile is here
+    # ALSO TODO : for security sake, only allow this to call a yote method?
+    for my $entry (@$cron_entries) {
+        # TODO : Just queue up a cron in the execution engine
+        $cron->_mark_done( $entry );
+        my $script = $entry->get_script();
+        print STDERR "EVAL $script\n";
+        eval "$script";
+        print STDERR "Done EVAL\n";
+        if( $@ ) {
+            print STDERR "Error in Cron : $@ $!\n";
+        } 
+    } #each cron entry
+} #check
+
+sub update_entry {
+    my( $self, $entry, $acct ) = @_;
+    
+    return $self->_update_entry( $entry );
+} #update_entry
+
+###################
+# Private Methods #
+###################
+
+# cron entries will have the following fields :
+#  * script - what to run
+#  * repeats - a list of hashes with the following values : 
+#       * repeat_infinite - true if this will always be repeated
+#       * repeat_times - a number of times to repeat this; this decrements
+#       * repeat_interval - how many seconds to repeat this
+#  * scheduled_times - a list of epoc times this cron should be run
+#  * next_time - epoc time this should be run next
+#  * last_run - time this was last run
 
 sub _init {
     my $self = shift;
-    $self->set__crond( {} );
+
+    my $first_cron = new Yote::RootObj( {
+        name   => 'recycler',
+        enabled => 1,
+        script => 'use Data::Dumper; my $recycled = Yote::ObjProvider::recycle_objects(); print STDERR Data::Dumper->Dump(["Recycled $recycled Objects"]);',
+        repeats => [
+            new Yote::Obj( { repeat_interval => 50, repeat_infinite => 1, repeat_times => 0 } ),
+            ],
+            
+                                        } );
+    $self->add_entry( $first_cron );
+    my $second_cron = new Yote::RootObj( {
+        name   => 'Token Janitor',
+        enabled => 1,
+        script => 'use Data::Dumper; my $dumped = Yote::Root::fetch_root()->_clear_old_tokens(); print STDERR Data::Dumper->Dump(["Dumped $dumped old Tokens"]);',
+        repeats => [
+            new Yote::Obj( { repeat_interval => 30, repeat_infinite => 1, repeat_times => 0 } ),
+            ],
+            
+                                         } );
+    $self->add_entry( $second_cron );
+
 } #_init
 
-
-
-# ------------------------------------------------------------------------------------------
-#      * UTILITY Methods *
-# ------------------------------------------------------------------------------------------
+sub _mark_done {
+    my( $self, $entry ) = @_;
+    my $ran_at = _time();
+    my $next_time;
+    $entry->set_last_run( $ran_at );
+    my $repeats = $entry->get_repeats();
+    if( $repeats ) {
+        my( @repeats ) = @$repeats;
+        for( my $i=$#repeats; $i>=0; $i-- ) {
+            my $rep = $repeats[$i];
+            if( $rep->get_next_time() <= $ran_at ) {
+                if( $rep->get_repeat_infinite() ) {
+                    $rep->set_next_time( $rep->get_next_time() + $rep->get_repeat_interval() );
+                    $rep->set_next_time( $ran_at + $rep->get_repeat_interval() ) if $rep->get_next_time() <= $ran_at;
+                }
+                elsif( $rep->get_next_time() <= $ran_at ) {
+                    $rep->set_repeat_times( $rep->get_repeat_times() - 1 );
+                    if( $rep->get_repeat_times() > 0 ) {
+                        $rep->set_next_time( $ran_at + $rep->get_repeat_interval() );
+                    }
+                    else {
+                        splice @$repeats, $i, 1;
+                        $rep->set_next_time( 0 );
+                    }
+                }
+            }
+            $next_time = $rep->get_next_time() && $next_time >= $rep->get_next_time() ? $next_time :  $rep->get_next_time();
+        }
+    } #if repeats
+    my $times = $entry->get_scheduled_times();
+    if( $times ) {
+        my( @times ) = @$times;
+        for( my $i=$#times; $i>=0; $i-- ) {
+            my $sched = $times[$i];
+            if( $sched <= $ran_at ) {
+                splice @$times, $i, 1;
+            }
+            elsif( $sched > $ran_at ) {
+                $next_time = $sched < $next_time ? $sched : $next_time;
+            }
+        }
+    }
+    $entry->set_next_time( $next_time );
+    unless( $next_time ) {
+        $entry->set_enabled( 0 );
+    }
+} #_mark_done
 
 #
-# maintain a list of items that are pending.
+# Time is moved to its own sub in order to allow for modification for testing.
+# Returns time in minutes
 #
-sub _check {
-    my( $self ) = @_;
-    my $data = $self->get__crond();
-    $self->{now} ||= DateTime->now();
-    my( $min, $hr ) = ( $self->{now}->minute, $self->{now}->hour );
+sub _time {
+    return time/60;
+} #_time
 
-    $self->__activate( $data->{$min}{'*'} ); # every $min past an hour
-    $self->__activate( $data->{$min}{'+'} ); # every $min minutes
-    $self->__activate( $data->{$min}{$hr} ); # specific time
-    $self->__activate( $data->{'*'}{$hr}  ); # specific hour
-
-    return "";
-} #_check
-
-# ------------------------------------------------------------------------------------------
-#      * PUBLIC API Methods *
-# ------------------------------------------------------------------------------------------
-
-sub add {
-    my( $self, $data, $acct ) = @_;
-    die "Incorrect permissions" unless $acct->__is_root();
-    push( @{$self->get__crond()->{ $data->{minute} }{ $data->{hour} }}, [ $data->{obj}->{ID}, $data->{method} ] );
-    return "Added";
-}
-
-sub remove {
-    my( $self, $data, $acct ) = @_;
-    die "Incorrect permissions" unless $acct->__is_root();
-
-    my $crond = $self->get__crond();
-    if( $crond->{ $data->{minute} }{ $data->{hour} } ) {
-	my $pairs = $crond->{ $data->{minute} }{ $data->{hour} };
-	for( my $i=0; $i<@$pairs; ++$i ) {
-	    if( $pairs->[$i][0] == $data->{obj}->{ID} && $pairs->[$i][1] eq $data->{method} ) {
-		splice( @$pairs, $i, 1 );
-		return "Found and removed";
-	    }
-	}
+sub _update_entry {
+    my( $self, $entry ) = @_;
+    my $repeats = $entry->get_repeats();
+    my $added_on = _time();
+    my $next_time;
+    if( $repeats ) {
+        for my $rep (@$repeats) {
+            next unless $rep->get_repeat_infinite() || $rep->get_repeat_times();
+            $rep->set_next_time( $added_on + $rep->get_repeat_interval() );
+            $next_time ||= $rep->get_next_time();
+            $next_time = $rep->get_next_time() if $next_time > $rep->get_next_time();
+        }
+    } #if repeats
+    my $times = $entry->get_scheduled_times();
+    if( $times ) {
+        for( my $i=$#$times; $i >= 0; $i-- ) {
+            splice( @$times, $i, 1 ) unless $times->[$i] > $added_on;
+        }
+        for my $sched ( @$times ) {
+            $next_time ||= ( $added_on + $sched );
+            $next_time = $sched if $sched < $next_time;
+        }
     }
-    return "Not Found";
-} #remove
-
-sub show {
-    my( $self, $data, $acct ) = @_;
-    die "Incorrect permissions" unless $acct->__is_root();
-    my( @does );
-    my $crond = $self->get__crond();
-    for my $min ( keys %$crond ) {
-	for my $hr ( keys %{$crond->{$min}} ) {
-	    my $pairs = $crond->{$min}{$hr};
-	    for my $pair (@$pairs) {
-		push( @does, "$min $hr ".join( " ", @$pair ) );
-	    }
-	}
-    }
-    return \@does;
-} #show
-
-
-# ------------------------------------------------------------------------------------------
-#      * Private Methods *
-# ------------------------------------------------------------------------------------------
-
-#builds the next items that are in the next 10 mins of the current time.
-sub __build_cron_list {
-    
-} #__build_cron_list
-
-sub __activate {
-    my( $self, $items ) = @_;
-    ### CRON activate with $items
-    if( $items && @$items ) {
-	for my $item (@$items) {
-	    my( $obj_id, $method ) = @$item;
-	    my $obj = Yote::ObjProvider::fetch( $obj_id );
-	    eval {
-		$obj->$method();
-	    };
-	}
-    }
-} #__activate
+    $entry->set_next_time( $next_time );
+    return $entry;
+} #_update_entry
 
 
 1;
@@ -123,8 +228,8 @@ Yote::Cron
 
 =head1 SYNOPSIS
 
-The Yote::Cron, while it works as design, has a poor enough design that I'm yanking it from 
-production.
+Yote::Cron is a subsystem in Yote that functions like a cron, allowing scripts to be run inside Yote. Rather than use
+config files, this uses Yote objects to control the cron jobs. A cron editor is part of the Yote admin page.
 
 =head1 DESCRIPTION
 
@@ -138,33 +243,45 @@ The Yote::Cron's public methods can only be called by an account with the __is_r
 
 =over 4
 
-=item add
+=item add_entry( $entry )
 
-Takes a hash that has hour, minute, obj, method.
+Ads an entry to this list. Takes a Yote::Obj that has the following data structure :
 
-=item remove
+ * name - name of script to run
+ * enabled - if true, this cron is active
+ * script - what to run
+ * repeats - a list of hashes with the following values : 
+      * repeat_infinite - true if this will always be repeated
+      * repeat_times - a number of times to repeat this; this decrements
+      * repeat_interval - how many seconds to repeat this
+ * scheduled times - a list of epoc times this cron should be run
+ * next_time - epoc time this should be run next (volatile, should not be set by user)
+ * last_run - time this was last run (volatile, should not be set by user)
 
-Removes the entry the corresopnds with the input, which is a hash ref containing the fields minute, hour, obj, method
 
-=item show
+=item entries()
 
-Returns a list of all cron entries as strings in the format "min hour obj-id menthodname"
+Returns a list of the entries that should be run at the time this was called.
 
-=back
+=item mark_done( $entry )
 
-=head1 UTIL METHODS
+Marks this entry as done. This causes any repeat_times to decrement, and removes appropriate scheduled times.
 
-=over 4
+=item start( $entry )
 
-=item _check
+Starts main loop for cron.
 
-Performs the cron check, running the method given on the object.
+=item update_entry( $entry )
+
+This recalculates the next time this entry will be run.
 
 =back
 
 =head1 AUTHOR
 
 Eric Wolf
+coyocanid@gmail.com
+http://madyote.com
 
 =head1 LICENSE AND COPYRIGHT
 

@@ -1,24 +1,46 @@
 package Yote::Account;
 
+###########################################################################
+# Each user has one account per App. Each user has one system wide login. #
+###########################################################################
+
 use strict;
 use warnings;
 
-use base 'Yote::Messenger';
+use vars qw($VERSION);
+$VERSION = '0.05';
 
-#
-# This is actually a no-op, but has the effect of giving the client any objects that have changed since the clients last call.
-#
-sub sync_all {}
+use parent 'Yote::Obj';
+
+use Yote;
+use Yote::UserObj;
 
 sub upload_avatar {
     my( $self, $data, $acct ) = @_;
     my $login = $acct->get_login();
-    if( $login->get__password() eq Yote::ObjProvider::encrypt_pass( $data->{p}, $login ) ) {
+    if( $login->get__password() eq Yote::encrypt_pass( $data->{p}, $login->get_handle() ) ) {
 	$self->set_avatar( $data->{avatar_file} );
 	return "set avatar";
     }
     die "incorrect password";
+} #upload_avatar
+
+sub is_root {
+    my $self = shift;
+    return $self->get_login()->get__is_root();
+} #is_root
+
+sub is_master_root {
+    my $self = shift;
+    return $self->get_login()->get__is_master_root();    
 }
+
+sub new_user_obj {
+    my( $self, $data, $acct ) = @_;
+    my $ret = new Yote::UserObj( ref( $data ) ? $data : undef );
+    $ret->set___creator( $acct );
+    return $ret;
+} #new_user_obj
 
 1;
 
@@ -30,12 +52,8 @@ Yote::Account
 
 =head1 DESCRIPTION 
 
-This module is essentially meant to be used as is or extended.
-Yote::Account is a base class for account objects. A user has different account object for each different app. 
-The distinction between a Login and an account is that a user has exactly one system-wide Yote::Login but
-a different Yote::Account object per application.
-
 The Yote::Account object is a container intended to store any data that is relevant to a user for a particular app.
+A single user will have one account per app, but only one systemwide login.
 
 =head1 PUBLIC API METHODS
 
@@ -45,11 +63,25 @@ The Yote::Account object is a container intended to store any data that is relev
 
 This is called with a file uploaded POST where the file input name is 'avatar_file'.
 
+=item is_root
+
+Called to reveal if the login behind this account is a root login.
+
+=item is_master_root
+
+Returns trus if the account is the original root account
+
+=item new_user_obj( optional_data_hash )
+
+Returns a new user yote object, initialized with the optional has reference.
+
 =back
 
 =head1 AUTHOR
 
 Eric Wolf
+coyocanid@gmail.com
+http://madyote.com
 
 =head1 LICENSE AND COPYRIGHT
 

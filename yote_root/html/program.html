@@ -1,21 +1,18 @@
 <!DOCTYPE html>
 <html>
+  <!-- TODO: rewrite this with templates and new info -->
   <head>
     <title>Yote</title>
-    <script src="/yote/js/jquery-latest.js"></script>
-    <script src="/yote/js/jquery.cookie.js"></script>
-    <script src="/yote/js/jquery.base64.min.js"></script>
-    <script src="/yote/js/json2.js"></script>
+    <script src="/yote/js"></script>
 
-    <script src="/yote/js/yote.js"></script>
     <link href="/yote.css" rel="stylesheet" type="text/css" media="all" />
+
+    <META NAME="Author" CONTENT="Eric Wolf, coyocanid@gmail.com">
+
     <script>
     $().ready(function(){
     var $window = $(window);
 	$.yote.init();
-	var page_counter = $.yote.fetch_app('Yote::Util::Counter');
-	var count = page_counter.increment( 'Program Page' );
-	$('#counter').empty().append( count );
     });
     </script>
   </head>
@@ -23,7 +20,9 @@
   <BODY data-spy="scroll" data-target="#navcol" >
     <DIV class="navbar navbar-fixed-top navbar-inverse">
       <DIV class="navbar-inner">
-	<A class="brand"><img src="yotelogo.png"></A>
+	<A href="/index.html" style="display:block">
+	  <img height="70px" width="151px" src="yotelogo.png">
+	</A>
 	<UL class="nav">
 	  <LI><a href="index.html">About</a></LI>
 	  <LI class="active"><A href="install.html">Install</A></LI>
@@ -51,7 +50,6 @@
     </SECTION>
     
     <footer>
-      This page has been viewed <span id="counter"></span> times.
     </footer>
     
     <script src="/js/local.js"></script>

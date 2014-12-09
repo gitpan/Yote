@@ -1,21 +1,38 @@
 package Yote::Login;
 
+###########################################################################
+# A user gets one system wide login, and a separate account for each app. #
+###########################################################################
+
 use strict;
 use warnings;
 
-use base 'Yote::Obj';
+use vars qw($VERSION);
+$VERSION = '0.04';
 
+use parent 'Yote::Obj';
 
-sub reset_email {
-    my( $self, $data, $account ) = @_;
-    my $email = $data->{email};
-    my $pw = $data->{pw};
+use Yote;
 
-    die "Incorrect Password" unless $self->get__password() eq Yote::ObjProvider::encrypt_pass( $pw, $self );
+sub _load {
+    my $self = shift;
+    $self->set_is_root( $self->get__is_root() );
+}
 
-    $self->set_email( $email );
-    return "Updated email";
-} #reset_email
+sub is_root {
+    my $self = shift;
+    return $self->get__is_root();
+} #is_root
+
+sub is_master_root {
+    my $self = shift;
+    return $self->get__is_master_root();    
+}
+
+sub is_validated {
+    my $self = shift;
+    return $self->get__is_validated();
+}
 
 #
 # Can either be reset by logged in account, or by a recovery link.
@@ -31,22 +48,13 @@ sub reset_password {
 
     die "Passwords do not match" unless $newpass eq $newpass_verify;
 
-    die "Old Password is incorrect" unless $self->get__password() eq Yote::ObjProvider::encrypt_pass( $oldpass, $self );
+    die "Old Password is incorrect" unless $self->get__password() eq Yote::encrypt_pass( $oldpass, $self->get_handle() );
 
-    $self->set__password( Yote::ObjProvider::encrypt_pass($newpass, $self) );
+    $self->set__password( Yote::encrypt_pass($newpass, $self->get_handle()) );
     return "Password Reset";
 
 } #reset_password
 
-sub is_root {
-    my $self = shift;
-    return $self->get__is_root();
-} #is_root
-
-#
-# This is actually a no-op, but has the effect of giving the client any objects that have changed since the clients last call.
-#
-sub sync_all {}
 
 sub upload_avatar {
     my( $self, $data ) = @_;
@@ -75,17 +83,24 @@ container objects that store state data for the users.
 
 =over 4
 
-=item reset_email
+=item is_master_root
 
-Resets the email for this login taking a hash reference as an argument with the keys 'email' for the email,
-'pw' for password. Returns 'Updated email'.
+Returns true if the account is the original root account
+
+=item is_root
+
+Returns true if the account has root privileges.
+
+=item is_validated
+
+Returns true if the account has validated.
 
 =item reset_password
 
 Resets the password for this login taking a hash reference as an argument with the keys 'op' for old password, 
 'p' for password and 'p2' for password verification. Returns 'Password Reset'.
 
-=item UploadAvatar
+=item upload_avatar
 
 Create a Yote::FileHelper object representing the avatar image. 
 The file control name is 'avatar' that uploads the avatar image.
@@ -96,9 +111,37 @@ Returns a Yote::FileHelper object representing the avatar image.
 
 =back
 
+=head1 PUBLIC DATA FIELDS
+
+=over 4
+
+=item email
+
+=item handle
+
+=back
+
+=head1 PRIVATE DATA FIELDS
+
+=over 4
+
+=item __created_ip
+
+=item __is_master_root
+
+=item __is_root
+
+=item __time_created
+
+=item _password
+
+=back
+
 =head1 AUTHOR
 
 Eric Wolf
+coyocanid@gmail.com
+http://madyote.com
 
 =head1 LICENSE AND COPYRIGHT
 

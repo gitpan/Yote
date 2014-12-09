@@ -6,14 +6,16 @@ package Yote::Test::TestAppNeedsLogin;
 
 use strict;
 
+use warnings;
+
 use Yote::Obj;
 use Yote::Test::TestAppNoLogin;
 
-use base 'Yote::AppRoot';
+use parent 'Yote::AppRoot';
 
 use vars qw($VERSION);
 
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 sub _init {
     my $self = shift;
@@ -21,6 +23,13 @@ sub _init {
     $self->get_yote_obj()->set_name( "INITY" );
     $self->set_auto_listy( [ "A", "B", "C" ] );
     $self->set_auto_hashy( { "foo" => "bar", "baz" => "baf" } );
+    $self->set_Text( 'inity' );
+    $self->set_zap( "zappy" );
+}
+
+sub purge_app {
+    my $self = shift;
+    $self->_init();
 }
 
 sub _allows {
@@ -60,6 +69,7 @@ sub give_obj {
     my( $self, $data, $acct ) = @_;
     die "Need account" unless $acct;
     $self->set_obj( $data );
+#    print STDERR "[$$] give_obj for id $self->{ID} ( dirty ? " .Yote::ObjProvider::__is_dirty(  $self->{ID} )."\n";
     return '';
 }
 
@@ -70,12 +80,14 @@ sub nologin_obj {
 }
 
 sub list {
-    my $self = shift;
+    my( $self, $dummy, $acct ) = @_;
+    die "Need account" unless $acct;
     return $self->get_auto_listy();
 }
 
 sub hash {
-    my $self = shift;
+    my( $self, $dummy, $acct ) = @_;
+    die "Need account" unless $acct;
     return $self->get_auto_hashy();
 }
 
@@ -88,8 +100,16 @@ sub array {
 }
 
 
+sub update {
+    my( $self, $data, $acct ) = @_;
+    die "Need account" unless $acct;
+    if( $data->{Text} ) {
+	$self->set_Text( $data->{Text} );
+    }
+}
+
 # @TODO - should not have a sub starting with get_. refactor test
-sub get_hash {
+sub SDFfetch_hash {
     my( $self, $data, $acct_root, $acct ) = @_;
     die "Need account" unless $acct;
     return { hash => "is something like", wid => $self->get_yote_obj() };
@@ -120,3 +140,55 @@ sub medium_time {
 1;
 
 __END__
+
+
+=head1 PUBLIC METHODS
+
+=over 4
+
+=item scalar
+
+=item make_obj
+
+=item obj_text
+
+=item give_obj
+
+=item nologin_obj
+
+=item list
+
+=item hash
+
+=item array
+
+=item get_hash
+
+=item reset
+
+=item long_time
+
+=item short_time
+
+=item medium_time
+
+=item purge_app
+
+=item update
+
+=item SDFfetch_hash
+
+=back
+
+=head1 AUTHOR
+
+Eric Wolf
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (C) 2011 Eric Wolf
+
+This module is free software; it can be used under the same terms as perl
+itself.
+
+=cut

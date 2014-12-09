@@ -4,33 +4,18 @@ use strict;
 use warnings;
 no warnings 'uninitialized';
 
-use forks;
-use forks::shared;
-
-use IO::Handle;
-use IO::Socket;
-
-use Logger::Simple;
-use MIME::Base64;
-use JSON;
 use Data::Dumper;
-
-use Yote::AppRoot;
-use Yote::ObjManager;
-use Yote::FileHelper;
-use Yote::ObjProvider;
+use File::Slurp;
+use File::stat;
+use MIME::Base64;
+use IO::Handle;
+use JavaScript::Minifier;
+use JSON;
+use POSIX qw(strftime);
 
 use vars qw($VERSION);
 
-$VERSION = '0.081';
-
-
-my( %prid2result, $singleton );
-share( %prid2result );
-
-use Thread::Queue;
-
-my $cmd_queue = Thread::Queue->new();
+$VERSION = '0.24';
 
 
 # ------------------------------------------------------------------------------------------
@@ -38,70 +23,142 @@ my $cmd_queue = Thread::Queue->new();
 # ------------------------------------------------------------------------------------------
 
 sub new {
-    my $pkg = shift;
+    my( $pkg, $args ) = @_;
     my $class = ref( $pkg ) || $pkg;
-    $singleton = bless {}, $class;
-    return $singleton;
+    return bless { args => $args }, $class;
 }
-
-#
-# Sets up Initial database server and tables.
-#
-sub init_server {
-    my( $self, @args ) = @_;
-   Yote::ObjProvider::init_datastore( @args );
-} #init_server
 
 # ------------------------------------------------------------------------------------------
 #      * PUBLIC METHODS *
 # ------------------------------------------------------------------------------------------
 
-
-sub do404 {
-    my $self = shift;
-    print "HTTP/1.0 404 NOT FOUND\015\012Content-Type: text/html\n\nERROR : 404\n";
+# TODO : logging
+sub accesslog {
+    my( $msg ) = @_;
+    my $t = strftime "%Y-%m-%d %H:%M:%S", gmtime;
+    print $Yote::WebAppServer::ACCESS "$t : $msg\n";
 }
+
 
 sub errlog {
     my( $msg ) = @_;
-    return accesslog( $msg );
+    my $t = strftime "%Y-%m-%d %H:%M:%S", gmtime;
+#    print $Yote::WebAppServer::ERR "$t : $msg\n";
 }
 
-sub accesslog {
+sub iolog {
     my( $msg ) = @_;
-    if( $Yote::WebAppServer::ACCESS_LOG ) {
-	$Yote::WebAppServer::ACCESS_LOG->write( $msg );
-    } else {
-	print STDERR Data::Dumper->Dump([$msg]);
-    }
+    my $t = strftime "%Y-%m-%d %H:%M:%S", gmtime;
+#    print $Yote::WebAppServer::IO "$t : $msg\n";
 }
 
-#
-# Called when a request is made. This does an initial parsing and
-# sends a data structure to _process_command.
-#
-# Commands are sent with a single HTTP request parameter : m for message.
-#
-#
-# This ads a command to the list of commands. If
-#
-#sub process_request {
-sub process_http_request {
-    my( $self, $soc ) = @_;
+sub start {
+    my $self = shift;
 
-    my $req = <$soc>;
+    # make sure the filehelper knows where the data directory is
+    $self->{args}{webroot} = $self->{ args }{ yote_root } . '/html';
+    $self->{args}{data_dir} = $self->{ args }{ yote_root } . '/data';
+    $Yote::WebAppServer::LOG_DIR       = $self->{args}{yote_root} . '/log';
+    $Yote::WebAppServer::FILE_DIR      = $self->{args}{data_dir} . '/holding';
+    $Yote::WebAppServer::WEB_DIR       = $self->{args}{webroot};
+    $Yote::WebAppServer::UPLOAD_DIR    = $self->{args}{webroot}. '/uploads';
+    mkdir( $Yote::WebAppServer::FILE_DIR );
+    mkdir( $Yote::WebAppServer::WEB_DIR );
+    mkdir( $Yote::WebAppServer::UPLOAD_DIR );
+    mkdir( $Yote::WebAppServer::LOG_DIR );
 
-    while( my $hdr = <$soc> ) {
-	$hdr =~ s/\s*$//s;
-	my( $key, $val ) = split /:\s*/, $hdr;
-	$ENV{ "HTTP_" . uc( $key ) } = $val;
-	last unless $hdr =~ /\S/;
+    open( $Yote::WebAppServer::IO,      '>>', "$Yote::WebAppServer::LOG_DIR/io.log" )
+        && $Yote::WebAppServer::IO->autoflush;
+    open( $Yote::WebAppServer::ACCESS,  '>>', "$Yote::WebAppServer::LOG_DIR/access.log" )
+        && $Yote::WebAppServer::ACCESS->autoflush;
+    open( $Yote::WebAppServer::ERR,     '>>', "$Yote::WebAppServer::LOG_DIR/error.log" )
+        && $Yote::WebAppServer::ERR->autoflush;
+
+    # open listener socket
+    $self->{ web_socket } = $self->{ args }{ web_socket };
+
+    # TODO : handle signals in the server itself, it will know how to handle wrap up
+    $SIG{ TERM } = $SIG{ INT } = $SIG{ PIPE } = sub { 
+        print STDERR "$0 $$ got signal. killing worker threads\n";   
+        for my $cpid ( keys %{ $self->{ server_threads } } ) {
+            kill 'SIGINT', $cpid;            
+        }
+        print STDERR "stopped all worker threads\n";   
+        exit; 
+    };
+    $self->{ server_threads } = {};
+
+    # launch server processes
+    for( 1 .. $self->{args}{threads} ) {
+        $self->_start_server_thread;
+    } #creating threads
+
+    # waitpid to keep correct number of processes
+    while( (my $cpid = waitpid( -1, 0 )) > 0 ) {
+        if( $cpid > 0 ) {
+            $self->_start_server_thread;
+        }
     }
 
-    my $content_length = $ENV{CONTENT_LENGTH};
-    if( $content_length > 5_000_000 ) { #make this into a configurable field
-	$self->do404();
-	return;
+} #start
+
+sub _start_server_thread {
+    my $self = shift;
+    my $cpid = fork;
+
+    if( $cpid ) { #parent
+        $self->{ server_threads }{ $cpid } = 1;
+    } 
+    elsif( defined $cpid ) { #child
+        $0 = 'yote appserver';
+
+        $SIG{ TERM } = $SIG{ INT } = $SIG{ PIPE } = sub { 
+            print STDERR "stopping worker thread $$\n";        
+            exit; 
+        };
+
+        print STDERR "STARTING Server Thread $$";
+        $self->serve;
+        exit;
+    }
+    else {
+        # TODO - report thread starting error
+    }
+} #_start_server_thread
+
+#
+# Accept and process incoming requests
+#
+sub serve {
+    my $self = shift;
+    while( my $fh = $self->{ web_socket }->accept ) {
+        $ENV{ REMOTE_ADDR } = $fh->peerhost;
+        $self->_process_http_request( $fh );
+        $fh->close;
+    } #process connection
+} #serve
+
+sub _process_http_request {
+    my( $self, $socket ) = @_;
+    my $req = <$socket>;
+
+    delete $ENV{'HTTP_CONTENT-LENGTH'};
+    while( my $hdr = <$socket> ) {
+        $hdr =~ s/\s*$//s;
+        last unless $hdr =~ /\S/;
+        my( $key, $val ) = ( $hdr =~ /^([^:]+):(.*)/ );
+        $ENV{ "HTTP_" . uc( $key ) } = $val;
+    }
+    my $content_length = $ENV{'HTTP_CONTENT-LENGTH'};
+    if( $content_length > 5_000_000 ) { #TODO : make this into a configurable field
+        $self->_do404( $socket );
+        return;
+    }
+
+    # read certain length from socket ( as many bytes as content length
+    my $data;
+    if( $content_length && ! eof $socket) {
+        my $read = read $socket, $data, $content_length;
     }
 
     #
@@ -119,392 +176,291 @@ sub process_http_request {
     #   * oi - object id to invoke command on
     #   * t  - login token for verification
     #   * gt - app (non-login) guest token for verification
-    #   * w  - if true, waits for command to be processed before returning
     #
 
     my( $verb, $uri, $proto ) = split( /\s+/, $req );
+    my $rest;
+    ( $uri, $rest ) = ( $uri =~ /([^&?#]+)([&?#]?.*)/ );
 
     $uri ||= '/index.html';
 
     $ENV{PATH_INFO} = $uri;
     $ENV{REQUEST_METHOD} = $verb;
 
-    accesslog( "GOT URI '$uri'" );
-
-
     ### ******* $uri **********
 
     my( @path ) = grep { $_ ne '' && $_ ne '..' } split( /\//, $uri );
+    my( @return_headers );
     if( $path[0] eq '_' || $path[0] eq '_u' ) { # _ is normal yote io, _u is upload file
+        iolog( "\n$uri" );
+        errlog( $uri );
+        my $path_start = shift @path;
 
-	my $path_start = shift @path;
-	my( $vars, $return_header );
+        my( $guest_token, $token, $action, $obj_id, $app_id );
 
-	my( $data, $wait, $guest_token, $token, $action, $obj_id, $app_id );
-
-	if( $path_start eq '_' ) {
-	    ( $app_id, $obj_id, $action, $token, $guest_token, $wait, $data ) = @path;
-	    $app_id ||= Yote::ObjProvider::first_id();
-	    $return_header = "Content-Type: text/json\n\n";
-	}
-	else {
-	    my $vars = Yote::FileHelper::__ingest( $soc );
-	    $data        = $vars->{d};
-	    $token       = $vars->{t};
-	    $guest_token = $vars->{gt};
-	    $wait        = $vars->{w};
-	    $action      = pop( @path );
-	    $obj_id      = pop( @path );
-	    $app_id      = pop( @path ) || Yote::ObjProvider::first_id();
-	    $return_header = "Content-Type: text/html\n\n";
-	}
-
-
-	accesslog( "$path_start/$app_id/$obj_id/$action/ uri from [ $ENV{REMOTE_ADDR} ][ $ENV{HTTP_REFERER} ]" );
-
-        my $command = {
-            a  => $action,
-            ai => $app_id,
-            d  => $data,
-	    e  => {%ENV},
-            oi => $obj_id,
-            t  => $token,
-	    gt => $guest_token,
-            w  => $wait,
-        };
-
-        my $procid = $$;
-
-        #
-        # Queue up the command for processing in a separate thread.
-        #
-	$cmd_queue->enqueue( [$command, $procid ] );
-
-        #
-        # If the connection is waiting for an answer, give it
-        #
-        if( $wait ) {
-	    my $result;
-            while( 1 ) {
-                lock( %prid2result );
-                $result = $prid2result{$procid};
-		if( defined( $result ) ) {
-		    delete $prid2result{$procid};
-		    last;
-		}
-		else {
-		    cond_wait( %prid2result );
-		}
-		sleep 0.001;
-            }
-	    print $soc "HTTP/1.0 200 OK\015\012";
-	    print $soc $return_header;
-            print $soc "$result";
+        push( @return_headers, "Content-Type: text/json; charset=utf-8");
+        push( @return_headers, "Server: Yote" );
+        if( $path_start eq '_' ) {
+            ( $app_id, $obj_id, $action, $token, $guest_token ) = @path;
         }
-        else {  #not waiting for an answer, but give an acknowledgement
-	    print $soc "HTTP/1.0 200 OK\015\012";
-	    print $soc "Content-Type: text/json\n\n";
-            print $soc "{\"msg\":\"Added command\"}";
+        else { # an upload
+            # TODO - verify this
+            my $vars = Yote::FileHelper::__ingest( _parse_headers( $socket ) );
+            $data        = $vars->{d};
+            $token       = $vars->{t};
+            $guest_token = $vars->{gt};
+            $action      = pop( @path );
+            $obj_id      = pop( @path );
+            $app_id      = pop( @path );
         }
+
+        # TODO : convert data to json and send that back and forth to the engine
+        my $result = $self->_run_command( 
+            {
+                a  => $action,
+                ai => $app_id,
+                d  => MIME::Base64::decode( $data ),
+                e  => {%ENV},
+                oi => $obj_id,
+                t  => $token,
+                gt => $guest_token,
+            } );
+        print $socket "HTTP/1.0 200 OK\015\012";
+        push( @return_headers, "Content-Type: text/json; charset=utf-8" );
+        push( @return_headers,  "Access-Control-Allow-Origin: *" );
+        push( @return_headers,  "Access-Control-Allow-Headers: accept, content-type, cookie, origin, connection, cache-control " );
+        print $socket join( "\n", @return_headers )."\n\n";
+        utf8::encode( $result );
+        print $socket "$result";
+        
     } #if a command on an object
 
-    else { #serve up a web page
-	accesslog( "$uri from [ $ENV{REMOTE_ADDR} ]" );
-	my $root = $self->{args}{webroot};
-	my $dest = '/' . join('/',@path);
-	if( -d "$root/$dest" && ! -f "$root/$dest" ) {
-	    print $soc "HTTP/1.0 301 REDIRECT\015\012";
-	    if($dest &&  $dest ne '/' ) {
-		print $soc "Location: $dest/index.html\n\n";
-	    } else {
-		print $soc "Location: /index.html\n\n";
-	    }
-	} elsif( open( IN, "<$root/$dest" ) ) {
-	    print $soc "HTTP/1.0 200 OK\015\012";
-	    if( $dest =~ /\.js$/i ) {
-		print $soc "Content-Type: text/javascript\n\n";
-	    }
-	    elsif( $dest =~ /\.css$/i ) {
-		print $soc "Content-Type: text/css\n\n";
-	    }
-	    elsif( $dest =~ /\.(jpg|gif|png|jpeg)$/i ) {
-		print $soc "Content-Type: image/$1\n\n";
-	    }
-	    else {
-		print $soc "Content-Type: text/html\n\n";
-	    }
-            while(<IN>) {
-                print $soc $_;
+    else {
+        #
+        # Serve up a web page. TODO : replace this with a library specialized in this.
+        #
+
+        my $root = $self->{args}{webroot};
+        my $dest = '/' . join('/',@path);
+
+        #
+        # If the requested page matches a directory,
+        # change the destination to index.html or, in the
+        # case of a javascript directory, have it return
+        # the _js/mini.js instead.
+        #
+        my $may_minify       = $dest =~ m~(.*)/js/?$~i;
+        my $may_minify_debug = $dest =~ m~(.*)/JS/?$~;
+        if( ( -d "$root/$dest" && ! -f "$root/$dest" ) || ( $may_minify_debug && ( -d $root . lc( "/$dest" ) && ! -f $root . lc( "/$dest" ) ) ) ) {
+            #
+            # Check for javascript directory to minify and
+            # return a consolidated javascript file
+            #                                                                                                                                   
+                             
+            if( $may_minify ) {
+                $dest = _minify_dir( $root, lc($dest), $1, $may_minify_debug );
             }
-            close( IN );
-	    accesslog( "200 : $dest");
-	} else {
-	    accesslog( "404 NOT FOUND : $@,$! $root/$dest");
-	    $self->do404();
-	}
-	return;
+            else {
+                if( -e "$root/$dest/index.html" ) {
+                    if( $dest eq '' || $dest eq '/' ) {
+                        print $socket "HTTP/1.1 301 FOUND\015\012";
+                        print $socket "Location: /index.html\n\n";
+                        return;
+                    }
+                    print $socket "HTTP/1.1 301 FOUND\015\012";
+                    print $socket "Location: $dest/index.html\n\n";
+                    return;
+                }
+            }
+        } 
+
+        #
+        # Read in the headers
+        #
+        if( open( my $IN, '<', "$root/$dest" ) ) {
+            accesslog( "$uri from [ $ENV{ REMOTE_ADDR } ][ $ENV{ HTTP_REFERER } ]" );
+
+            print $socket "HTTP/1.0 200 OK\015\012";
+            my $is_html = 0;
+            if( $dest =~ /\.js$/i ) {
+                push( @return_headers, "Content-Type: text/javascript" );
+            }
+            elsif( $dest =~ /\.css$/i ) {
+                push( @return_headers, "Content-Type: text/css" );
+            }
+            elsif( $dest =~ /\.(jpg|gif|png|jpeg)$/i ) {
+                push( @return_headers, "Content-Type: image/$1" );
+            }
+            elsif( $dest =~ /\.(tar|gz|zip|bz2)$/i ) {
+                push( @return_headers, "Content-Type: image/$1" );
+            }
+            else {
+                push( @return_headers, "Content-Type: text/html" );
+                $is_html = 1;
+            }
+            push( @return_headers, "Server: Yote" );
+            print $socket join( "\n", @return_headers )."\n\n";
+
+            my $size = -s "<$root/$dest";
+            push( @return_headers, "Content-length: $size" );
+            push( @return_headers,  "Access-Control-Allow-Origin: *" );
+            push( @return_headers,  "Access-Control-Allow-Headers: accept, content-type, cookie, origin, connection, cache-control " );
+
+            my $buf;
+            while( read( $IN,$buf, 8 * 2**10 ) ) {		
+                print $socket $buf;
+            }
+            close( $IN );
+        } else {
+            accesslog( "404 not found : $uri from [ $ENV{ REMOTE_ADDR } ][ $ENV{ HTTP_REFERER } ]" );
+            errlog( "404 NOT FOUND ($$) : $@,$! [$root/$dest]");
+            $self->_do404( $socket );
+        }
     } #serve html
 
-} #process_request
+    return;
+} #_process_http_request
 
+sub _run_command {
+    my( $self, $cmd ) = @_;
 
-sub shutdown {
-    my $self = shift;
-    accesslog( "Shutting down yote server" );
-    Yote::ObjProvider::start_transaction();
-    Yote::ObjProvider::stow_all();
-    Yote::ObjProvider::commit_transaction();
-    accesslog(  "Killing threads" );
-    $self->_stop_threads();
-    accesslog( "Shut down server thread" );
-} #shutdown
+    #open socket to engine and communicate with it
+    my $sock = new IO::Socket::INET( "127.0.0.1:$self->{args}{internal_port}" );
 
-sub start_server {
-    my( $self, @args ) = @_;
-    my $args = scalar(@args) == 1 ? $args[0] : { @args };
-    $self->{args} = $args;
-    $self->{args}{webroot} ||= '/usr/local/yote/html';
-    $self->{args}{upload}  ||= '/usr/local/yote/html/upload';
-    $self->{args}{log_dir} ||= '/var/log/yote';
-    $self->{args}{port}    ||= 80;
+    my $json_cmd = to_json( $cmd );
+    print $sock "$json_cmd\n\n";
 
-    Yote::ObjProvider::init( %$args );
+    my $res = <$sock>;
 
-    # fork out for three starting threads
-    #   - one a multi forking server (parent class)
-    #   - one for a cron daemon inside of Yote. (PENDING)
-    #   - and the parent thread an event loop.
+    $sock->close;
 
-    my $root = Yote::YoteRoot::fetch_root();
+    return $res;
 
-    # @TODO - finish the cron and uncomment this
-    # cron thread
-    #my $cron = $root->get__crond();
-    #my $cron_thread = threads->new( sub { $self->_crond( $cron->{ID} ); } );
-    #$self->{cron_thread} = $cron_thread;
-
-    # make sure the filehelper knows where the data directory is
-    $Yote::WebAppServer::YOTE_ROOT_DIR = $self->{args}{root_dir};
-    $Yote::WebAppServer::LOG_DIR       = $self->{args}{log_dir};
-    $Yote::WebAppServer::DATA_DIR      = $self->{args}{data_dir};
-    $Yote::WebAppServer::FILE_DIR      = $self->{args}{data_dir} . '/holding';
-    $Yote::WebAppServer::WEB_DIR       = $self->{args}{webroot};
-    $Yote::WebAppServer::UPLOAD_DIR    = $self->{args}{webroot}. '/uploads';
-    mkdir( $Yote::WebAppServer::DATA_DIR );
-    mkdir( $Yote::WebAppServer::FILE_DIR );
-    mkdir( $Yote::WebAppServer::WEB_DIR );
-    mkdir( $Yote::WebAppServer::UPLOAD_DIR );
-    mkdir( $Yote::WebAppServer::LOG_DIR );
-    $Yote::WebAppServer::ACCESS_LOG = Logger::Simple->new( LOG => "$Yote::WebAppServer::LOG_DIR/access.log" );
-
-    # update @INC library list
-    my $paths = $root->get__application_lib_directories([]);
-    push @INC, @$paths;
-
-    $self->{lsn} = new IO::Socket::INET(Listen => 10, LocalPort => $self->{args}{port}) or die $@;
-
-    $self->{threadcount} = 5;
-
-    $self->{threads} = [];
-
-    for( 1 .. $self->{threadcount} ) {
-	$self->_start_server_thread;
-    } #creating 5 threads
-
-    $self->{watchdog_thread} = threads->new(
-	sub {
-	    while( 1 ) {
-		sleep( 5 );
-		$self->{threads} = [ grep { $_->is_running } @{$self->{threads}}];
-		while( @{$self->{threads}} < $self->{threadcount} ) {
-		    $self->_start_server_thread;
-		}
-	    }
-	} );
-
-    _poll_commands();
-
-    _stop_threads();
-
-   Yote::ObjProvider::disconnect();
-
-} #start_server
-
-
+} #_run_command
 
 # ------------------------------------------------------------------------------------------
 #      * PRIVATE METHODS *
 # ------------------------------------------------------------------------------------------
 
-sub _stop_threads {
-    my $self = shift;
-    $self->{watchdog_thread}->kill if $self->{watchdog_thread} && $self->{watchdog_thread}->is_running;
-    for my $thread (@{$self->{threads}}) {
-	$thread->kill if $thread && $thread->is_running;
-    }
+
+sub _do404 {
+    my( $self, $socket ) = @_;
+    print $socket "HTTP/1.0 404 NOT FOUND\015\012Content-Type: text/html\n\nERROR : 404\n";
 }
 
-sub _start_server_thread {
-    my $self = shift;
-    push( @{ $self->{threads} },
-	  threads->new(
-	      sub {
-		  unless( $self->{lsn} ) {
-		      threads->exit();
-		  }
-		  while( my $fh = $self->{lsn}->accept ) {
-		      $ENV{ REMOTE_ADDR } = $fh->peerhost;
-		      $self->process_http_request( $fh );
-		      $fh->close();
-		  } #main loop
-	      } ) #new thread
-	);
-} #_start_server_thread
 
-
-sub _crond {
-    my( $self, $cron_id ) = @_;
-
-    while( 1 ) {
-	sleep( 60 );
-	{
-	    $cmd_queue->enqueue( [ {
-		a  => 'check',
-		ai => 1,
-		d  => 'eyJkIjoxfQ==',
-		e  => {%ENV},
-		oi => $cron_id,
-		t  => undef,
-		w  => 0,
-				   }, $$]
-		);
-	}
-    } #infinite loop
-
-} #_crond
 
 #
-# Run by a thread that constantly polls for commands.
+# 
 #
-sub _poll_commands {
+sub _parse_headers {
+    my $socket = shift;
+    my $content_length = $ENV{CONTENT_LENGTH} || $ENV{'HTTP_CONTENT-LENGTH'} || $ENV{HTTP_CONTENT_LENGTH};
+    my( $finding_headers, $finding_content, %content_data, %post_data, %file_helpers, $fn, $content_type );
+    my $boundary_header = $ENV{HTTP_CONTENT_TYPE} || $ENV{'HTTP_CONTENT-TYPE'} || $ENV{CONTENT_TYPE};
+    if( $boundary_header =~ /boundary=(.*)/ ) {
+        my $boundary = $1;
+        my $counter = 0;
+        # find boundary parts
+        while($counter < $content_length) {
+            $_ = <$socket>;
+            if( /$boundary/s ) {
+                last if $1;
+                $finding_headers = 1;
+                $finding_content = 0;
+                if( $content_data{ name } && !$content_data{ filename } ) {
+                    $post_data{ $content_data{ name } } =~ s/[\n\r]*$//;
+                }
+                %content_data = ();
+                undef $fn;
+            }
+            elsif( $finding_headers ) {
+                if( /^\s*$/s ) {  # got a blank line, so end of headers
+                    $finding_headers = 0;
+                    $finding_content = 1;
+                    if( $content_data{ name } && $content_data{ filename } ) {
+                        my $name = $content_data{ name };
+                        
+                        $fn = File::Temp->new( UNLINK => 0, DIR => $Yote::WebAppServer::FILE_DIR );
+                        $file_helpers{ $name } = {
+                            filename     => $fn->filename,
+                            content_type => $content_type,
+                        }
+                    }
+                } else {
+                    my( $hdr, $val ) = split( /:/, $_ );
+                    if( lc($hdr) eq 'content-disposition' ) {
+                        my( $hdr_type, @parts ) = split( /\s*;\s*/, $val );
+                        $content_data{ $hdr } = $hdr_type;
+                        for my $part (@parts) {
+                            my( $k, $d, $v ) = ( $part =~ /([^=]*)=(['"])?(.*)\2\s*$/s );
+                            $content_data{ $k } = $v;
+                        }
+                    } elsif( lc( $hdr ) eq 'content-type' && $val =~ /^([^;]*)/ ) {
+                        $content_type = $1;
+                    }
+                }
+            }
+            elsif( $finding_content ) {
+                if( $fn ) {
+                    print $fn $_;
+                } else {
+                    $post_data{ $content_data{ name } } .= $_;
+                }
+            } else {
 
-    while(1) {
-	_process_command( $cmd_queue->dequeue() );
-	Yote::ObjProvider::start_transaction();
-	Yote::ObjProvider::stow_all();
-	Yote::ObjProvider::commit_transaction();
-    } #endlees loop
+            }
+            $counter += length( $_ );
 
-} #_poll_commands
+        } #while
+    } #if has a boundary content type
+    return ( \%post_data, \%file_helpers );
+} #_parse_headers
 
-sub _process_command {
-    my( $req ) = @_;
-    my( $command, $procid ) = @$req;
-    my $wait = $command->{w};
+sub _minify_dir {
+    my( $root, $source_dir, $source_root, $is_debug ) = @_;
+    #
+    # Check if there are files in the directory that are newer than the minified file
+    # of if the minified file does not exist
+    #
+    my $minidir = "$source_root/_js";
+    my $minifile = "$root/$minidir/mini.js";
+    my $debugfile = "$root/$minidir/maxi.js";
+    
+    if( ! -d "$root/$minidir" ) {
+        mkdir( "$root/$minidir" ); 
+    }
 
-    my $resp;
+    opendir( my $SOURCEDIR, $root . lc( "/$source_dir" ) );
+    my( @js_files, $latest_time );
+    while( my $fn = readdir $SOURCEDIR ) {
+        if( $fn =~ /\.js$/ ) {
+            my $file = "$root/$source_dir/$fn";
+            push @js_files, $file;
+            my $lastmod = stat($file)->mtime;
 
-    eval {
-        my $obj_id = $command->{oi};
-        my $app_id = $command->{ai};
-
-        my $app         = Yote::ObjProvider::fetch( $app_id ) || Yote::YoteRoot::fetch_root();
-
-        my $data        = _translate_data( from_json( MIME::Base64::decode( $command->{d} ) )->{d} );
-        my $login       = $app->token_login( $command->{t}, undef, $command->{e} );
-	my $guest_token = $command->{gt};
-	$command->{e}{GUEST_TOKEN} = $guest_token;
-
-	# security check
-	unless( Yote::ObjManager::allows_access( $obj_id, $app, $login, $guest_token ) ) {
-	    accesslog( "INVALID ACCCESS ATTEMPT for $obj_id from $command->{e}{ REMOTE_ADDR }" );
-	    die "Access Error";
-	}
-
-        my $app_object = Yote::ObjProvider::fetch( $obj_id ) || $app;
-        my $action     = $command->{a};
-        my $account;
-        if( $login ) {
-            $account = $app->__get_account( $login );
+            $latest_time ||= $lastmod;
+            $latest_time = $latest_time < $lastmod ? $lastmod : $latest_time;
         }
-
-        my $ret = $app_object->$action( $data, $account, $command->{e} );
-
-	my $dirty_delta = Yote::ObjManager::fetch_dirty( $login, $guest_token );
-	my( $dirty_data );
-	if( @$dirty_delta ) {
-	    $dirty_data = {};
-	    for my $d_id ( @$dirty_delta ) {
-		my $dobj = Yote::ObjProvider::fetch( $d_id );
-		if( ref( $dobj ) eq 'ARRAY' ) {
-		    $dirty_data->{$d_id} = { map { $_ => Yote::ObjProvider::xform_in( $dobj->[$_] ) } (0..$#$dobj) };
-		} elsif( ref( $dobj ) eq 'HASH' ) {
-		    $dirty_data->{$d_id} = { map { $_ => Yote::ObjProvider::xform_in( $dobj->{ $_ } ) } keys %$dobj };
-		} else {
-		    $dirty_data->{$d_id} = { map { $_ => $dobj->{DATA}{$_} } grep { $_ !~ /^_/ } keys %{$dobj->{DATA}} };
-		}
-		for my $val (values %{ $dirty_data->{$d_id} } ) {
-		    if( index( $val, 'v' ) != 0 ) {
-			Yote::ObjManager::register_object( $val, $login ? $login->{ID} : $guest_token );
-		    }
-		}
-	    }
-	} #if there was a dirty delta
-        $resp = $dirty_data ? { r => $app_object->__obj_to_response( $ret, $login, $guest_token ), d => $dirty_data } : { r => $app_object->__obj_to_response( $ret, $login, $guest_token ) };
-    };
-    if( $@ ) {
-	my $err = $@;
-	$err =~ s/at \/\S+\.pm.*//s;
-        accesslog( "ERROR : $@" );
-        $resp = { err => $err, r => '' };
     }
+    my $minitime = -e $minifile ? stat($minifile)->mtime : 0;
 
-    $resp = to_json( $resp );
-
-    ### SEND BACK $resp
-    accesslog( "SEND BACK : $resp" );
-
-    #
-    # Send return value back to the caller if its waiting for it.
-    #
-    if( $wait ) {
-	lock( %prid2result );
-	$prid2result{$procid} = $resp;
-        cond_signal( %prid2result );
+    if( ! -f $minifile || $minitime < $latest_time ) {
+        my $mini_buf = '';
+        my $debug_buf = '';
+        # make sure base jquery comes first, followed by other jquery
+        # make sure that yote comes before yote.util
+        for my $f (sort { ( $a =~ /jquery(-[0-9.]*)?(\.min)?\.js$/ || ($a =~ /jquery/ && $b !~ /jquery/ ) || $b =~ /yote.template/ ) ? -1 : 1
+                   } @js_files) {
+            my $js = read_file( $f );
+            $mini_buf .= $f =~ /\.min\.js$/ ? $js : JavaScript::Minifier::minify(input => $js);
+            $debug_buf .= "$js\n";
+        }
+        write_file( $minifile, $mini_buf );
+        write_file( $debugfile, $debug_buf );
     }
-
-
-} #_process_command
-
-#
-# Translates from vValue and reference_id to values and references
-#
-sub _translate_data {
-    my( $val ) = @_;
-
-    if( ref( $val ) eq 'HASH' ) { #from javacript object, or hash. no fields starting with underscores accepted
-        return { map {  $_ => _translate_data( $val->{$_} ) } grep { index( $_, '_' ) != 0 } keys %$val };
-    }
-    elsif( ref( $val ) eq 'ARRAY' ) { #from javacript object, or hash. no fields starting with underscores accepted
-        return [ map {  _translate_data( $_ ) } @$val ];
-    }
-    return undef unless $val;
-    if( index($val,'v') == 0 ) {
-	return substr( $val, 1 );
-    }
-    elsif( index($val,'u') == 0 ) {  #file upload contains an encoded hash
-	my $filestruct   = from_json( substr( $val, 1 ) );
-
-	my $filehelper = new Yote::FileHelper();
-	$filehelper->set_content_type( $filestruct->{content_type} );
-	$filehelper->__accept( $filestruct->{filename} );
-
-	return $filehelper;
-    }
-    else {
-	return Yote::ObjProvider::fetch( $val );
-    }
-} #_translate_data
+    return $is_debug ? "$minidir/maxi.js" : "$minidir/mini.js";
+} #_minify_dir
 
 1;
 
@@ -512,50 +468,52 @@ __END__
 
 =head1 NAME
 
-Yote::WebAppServer - is a library used for creating prototype applications for the web.
-
-=head1 SYNOPSIS
-
-use Yote::WebAppServer;
-
-my $server = new Yote::WebAppServer();
-
-$server->start_server();
+Yote::WebAppServer - This is the app server engine that provides server threads and all javascript perl IO.
 
 =head1 DESCRIPTION
 
 This starts an appslication server running on a specified port and hooked up to a specified datastore.
 Additional parameters are passed to the datastore.
 
-The server set up uses Net::Server::Fork receiving and sending messages on multiple threads. These threads queue up the messages for a single threaded event loop to make things thread safe. Incomming requests can either wait for their message to be processed or return immediately.
-
 =head1 PUBLIC METHODS
 
 =over 4
 
-=item do404
+=item accesslog( msg )
 
-Return a 404 not found page and exit.
+Write the message to the access log
 
-=item process_http_request( )
+=item errlog( msg )
 
-This implements Net::Server::HTTP and is called automatically for each incomming request.
+Write the message to the error log
 
-=item shutdown( )
+=item iolog( msg )
 
-Shuts down the yote server, saving all unsaved items.
+Writes to an IO log for client server communications
 
-=item start_server( )
+=item lock_object( obj_id )
+
+Locks the given object id for use by this process only until it is unlocked.
+
+=item new
+
+Returns a new WebAppServer.
+
+=item serve
+
+=item start
+
+=item unlock_objects( @list_of_obj_ids )
+
+Unlocks the objects referenced by the ids passed in. 
 
 =back
-
-=head1 BUGS
-
-There are likely bugs to be discovered. This is alpha software.
 
 =head1 AUTHOR
 
 Eric Wolf
+coyocanid@gmail.com
+http://madyote.com
 
 =head1 LICENSE AND COPYRIGHT
 
